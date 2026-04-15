@@ -71,15 +71,31 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // 3. Rate limit per user.
-  const rl = rateLimit(`review:${user.id}`, { limit: 10, windowMs: 60_000 });
-  if (!rl.allowed) {
+  // 3. Rate limit per user. Two buckets: minute-window blocks burst abuse,
+  //    day-window blocks slow cost-bleed against the paid Anthropic API.
+  const rlMin = rateLimit(`review:min:${user.id}`, { limit: 10, windowMs: 60_000 });
+  if (!rlMin.allowed) {
     return NextResponse.json(
       { error: "Too many requests" },
       {
         status: 429,
         headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+          "Retry-After": String(Math.ceil((rlMin.resetAt - Date.now()) / 1000)),
+        },
+      }
+    );
+  }
+  const rlDay = rateLimit(`review:day:${user.id}`, {
+    limit: 50,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!rlDay.allowed) {
+    return NextResponse.json(
+      { error: "Daily limit reached" },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rlDay.resetAt - Date.now()) / 1000)),
         },
       }
     );
@@ -289,6 +305,7 @@ export async function POST(req: Request) {
   }
 
   // 8. UPDATE derived row with the AI reflection.
+  let saveWarning = false;
   if (aiOutput) {
     const { error: updateErr } = await supabase
       .from("review_entries")
@@ -302,6 +319,10 @@ export async function POST(req: Request) {
       .eq("review_entry_id", reviewEntryId);
     if (updateErr) {
       console.error("review: derived update failed", updateErr.code);
+      // Client still shows the aiOutput in memory, but the DB row is
+      // is_complete=false with null reflection. Flag it so the client knows
+      // the save is partial and the insights pipeline can re-derive later.
+      saveWarning = true;
     }
   }
 
@@ -309,6 +330,7 @@ export async function POST(req: Request) {
     success: true,
     aiOutput,
     rawRecordId,
+    saveWarning,
     aiFailureKind: aiOutput ? undefined : lastFailureKind,
     message: aiOutput
       ? undefined
