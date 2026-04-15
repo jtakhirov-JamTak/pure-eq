@@ -471,6 +471,94 @@ export type Database = {
           },
         ]
       }
+      review_entries: {
+        Row: {
+          ai_reflection_json: Json | null
+          ai_reflection_version: number | null
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          hardest_moment_feeling: string | null
+          is_complete: boolean
+          observed_in_them: string | null
+          person_id: string | null
+          raw_record_id: string | null
+          review_entry_id: string
+          their_experience: string | null
+          thread_id: string | null
+          unresolved_and_next: string | null
+          user_id: string
+          validated_assumptions: string | null
+          what_happened: string | null
+          what_helped: string | null
+          what_hurt: string | null
+        }
+        Insert: {
+          ai_reflection_json?: Json | null
+          ai_reflection_version?: number | null
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          hardest_moment_feeling?: string | null
+          is_complete?: boolean
+          observed_in_them?: string | null
+          person_id?: string | null
+          raw_record_id?: string | null
+          review_entry_id?: string
+          their_experience?: string | null
+          thread_id?: string | null
+          unresolved_and_next?: string | null
+          user_id: string
+          validated_assumptions?: string | null
+          what_happened?: string | null
+          what_helped?: string | null
+          what_hurt?: string | null
+        }
+        Update: {
+          ai_reflection_json?: Json | null
+          ai_reflection_version?: number | null
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          hardest_moment_feeling?: string | null
+          is_complete?: boolean
+          observed_in_them?: string | null
+          person_id?: string | null
+          raw_record_id?: string | null
+          review_entry_id?: string
+          their_experience?: string | null
+          thread_id?: string | null
+          unresolved_and_next?: string | null
+          user_id?: string
+          validated_assumptions?: string | null
+          what_happened?: string | null
+          what_helped?: string | null
+          what_hurt?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "review_entries_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "review_entries_raw_record_id_fkey"
+            columns: ["raw_record_id"]
+            isOneToOne: false
+            referencedRelation: "raw_records"
+            referencedColumns: ["raw_record_id"]
+          },
+          {
+            foreignKeyName: "review_entries_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_threads"
+            referencedColumns: ["thread_id"]
+          },
+        ]
+      }
       trigger_entries: {
         Row: {
           ai_response_json: Json | null

@@ -76,6 +76,7 @@ export function buildReviewPrompt(params: {
   whatHelped: string;
   whatHurt: string;
   validatedAssumptions: string;
+  unresolvedAndNext: string;
 }) {
   return {
     prompt_version: PROMPT_VERSION,
@@ -100,6 +101,7 @@ Their experience hypothesis: ${params.theirExperience}
 What helped: ${params.whatHelped}
 What hurt: ${params.whatHurt}
 Validated assumptions: ${params.validatedAssumptions}
+Unresolved and next move: ${params.unresolvedAndNext}
 """
 
 Generate coaching feedback as the JSON object specified above.`,

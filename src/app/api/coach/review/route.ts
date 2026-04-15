@@ -3,16 +3,16 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createPrepareSchema } from "@/lib/validation";
+import { createReviewSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
-import { prepareOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
-import { buildPreparePrompt } from "@/lib/ai/prompts";
+import { reviewOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
+import { buildReviewPrompt } from "@/lib/ai/prompts";
 import type { ProfileType } from "@/types";
 
 export const runtime = "nodejs";
 
-const MAX_RETRIES = 1; // one retry, not two — schema mismatches don't self-heal
-const AI_PLAN_VERSION = 1;
+const MAX_RETRIES = 1;
+const AI_REFLECTION_VERSION = 1;
 const ANTHROPIC_TIMEOUT_MS = 30_000;
 
 const PROFILE_VALUES: ProfileType[] = [
@@ -24,11 +24,11 @@ const PROFILE_VALUES: ProfileType[] = [
   "intense",
 ];
 
-const requestSchema = createPrepareSchema.extend({
+const requestSchema = createReviewSchema.extend({
   idempotencyKey: z.string().uuid(),
 });
 
-type PrepareAiOutput = z.infer<typeof prepareOutputSchema>;
+type ReviewAiOutput = z.infer<typeof reviewOutputSchema>;
 
 function checkOrigin(req: Request): boolean {
   const origin = req.headers.get("origin");
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   }
 
   // 3. Rate limit per user.
-  const rl = rateLimit(`prepare:${user.id}`, { limit: 10, windowMs: 60_000 });
+  const rl = rateLimit(`review:${user.id}`, { limit: 10, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json(
       { error: "Too many requests" },
@@ -86,8 +86,7 @@ export async function POST(req: Request) {
   }
 
   // 4. Fetch the latest Profile Snapshot. Hub routes unfinished users through
-  //    onboarding — if we get here without a profile, that's a real integrity
-  //    break, fail loudly rather than silently personalizing with a default.
+  //    onboarding — if we get here without a profile, fail loudly.
   const { data: profileRow, error: profileErr } = await supabase
     .from("user_profiles")
     .select("primary_profile")
@@ -96,7 +95,7 @@ export async function POST(req: Request) {
     .limit(1)
     .maybeSingle();
   if (profileErr) {
-    console.error("prepare: profile lookup failed", profileErr.code);
+    console.error("review: profile lookup failed", profileErr.code);
     return NextResponse.json({ error: "Could not load profile" }, { status: 500 });
   }
   if (!profileRow) {
@@ -107,15 +106,12 @@ export async function POST(req: Request) {
   }
   const rawProfile = profileRow.primary_profile;
   if (!(PROFILE_VALUES as string[]).includes(rawProfile)) {
-    console.error("prepare: unknown profile value");
+    console.error("review: unknown profile value");
     return NextResponse.json({ error: "Profile invalid" }, { status: 500 });
   }
   const userProfile = rawProfile as ProfileType;
 
-  // 5. Idempotency. The client sends a UUID once per submission attempt;
-  //    on retry (network flake, strict-mode double-mount, user-initiated
-  //    retry), the same key reuses any rows already written so we never
-  //    create duplicate raw_records for a single logical submission.
+  // 5. Idempotency.
   const { data: existingRaw, error: existingErr } = await supabase
     .from("raw_records")
     .select("raw_record_id")
@@ -123,7 +119,7 @@ export async function POST(req: Request) {
     .eq("source_session_id", idempotencyKey)
     .maybeSingle();
   if (existingErr) {
-    console.error("prepare: idempotency check failed", existingErr.code);
+    console.error("review: idempotency check failed", existingErr.code);
     return NextResponse.json({ error: "Could not save entry" }, { status: 500 });
   }
 
@@ -135,20 +131,19 @@ export async function POST(req: Request) {
       .from("raw_records")
       .insert({
         user_id: user.id,
-        record_type: "prepare",
-        module_type: "prepare",
+        record_type: "review",
+        module_type: "review",
         source_session_id: idempotencyKey,
         payload_json: {
           fields: {
-            personName: input.personName,
-            relationship: input.relationship,
-            situation: input.situation,
-            desiredOutcome: input.desiredOutcome,
-            primaryEmotion: input.primaryEmotion,
-            defaultPattern: input.defaultPattern,
-            otherPersonHypothesis: input.otherPersonHypothesis,
-            realityCheckQuestion: input.realityCheckQuestion,
-            triggerPlan: input.triggerPlan,
+            whatHappened: input.whatHappened,
+            hardestMomentFeeling: input.hardestMomentFeeling,
+            observedInThem: input.observedInThem,
+            theirExperience: input.theirExperience,
+            whatHelped: input.whatHelped,
+            whatHurt: input.whatHurt,
+            validatedAssumptions: input.validatedAssumptions ?? null,
+            unresolvedAndNext: input.unresolvedAndNext,
           },
           profile_used: userProfile,
         },
@@ -162,7 +157,7 @@ export async function POST(req: Request) {
       .single();
 
     if (rawErr || !rawInserted) {
-      console.error("prepare: raw_records insert failed", rawErr?.code);
+      console.error("review: raw_records insert failed", rawErr?.code);
       return NextResponse.json(
         { error: "Could not save entry" },
         { status: 500 }
@@ -171,53 +166,52 @@ export async function POST(req: Request) {
     rawRecordId = rawInserted.raw_record_id;
   }
 
-  // 6. Derived row FIRST with null plan. Both source-of-truth and derived
-  //    row exist BEFORE we spend any AI budget. If Claude later fails, the
-  //    entry is still saved and the user can retry coaching from the same
-  //    row. If this insert fails, we clean up the raw row.
+  // 6. Derived row FIRST with null reflection.
   const { data: existingDerived, error: derivedLookupErr } = await supabase
-    .from("prepare_entries")
-    .select("prepare_entry_id, ai_plan_json")
+    .from("review_entries")
+    .select("review_entry_id, ai_reflection_json")
     .eq("user_id", user.id)
     .eq("raw_record_id", rawRecordId)
     .maybeSingle();
   if (derivedLookupErr) {
-    console.error(
-      "prepare: derived lookup failed",
-      derivedLookupErr.code
-    );
+    console.error("review: derived lookup failed", derivedLookupErr.code);
     return NextResponse.json(
-      { error: "Could not save prepare entry" },
+      { error: "Could not save review entry" },
       { status: 500 }
     );
   }
 
-  let prepareEntryId: string;
+  let reviewEntryId: string;
   if (existingDerived) {
-    prepareEntryId = existingDerived.prepare_entry_id;
+    reviewEntryId = existingDerived.review_entry_id;
   } else {
     const { data: derivedInserted, error: derivedErr } = await supabase
-      .from("prepare_entries")
+      .from("review_entries")
       .insert({
         user_id: user.id,
         raw_record_id: rawRecordId,
-        situation_text: input.situation,
-        desired_outcome: input.desiredOutcome,
-        primary_value: input.primaryEmotion,
-        ai_plan_json: null,
-        ai_plan_version: null,
+        what_happened: input.whatHappened,
+        hardest_moment_feeling: input.hardestMomentFeeling,
+        observed_in_them: input.observedInThem,
+        their_experience: input.theirExperience,
+        what_helped: input.whatHelped,
+        what_hurt: input.whatHurt,
+        validated_assumptions: input.validatedAssumptions ?? null,
+        unresolved_and_next: input.unresolvedAndNext,
+        ai_reflection_json: null,
+        ai_reflection_version: null,
         is_complete: false,
         person_id: input.personId ?? null,
         thread_id: input.threadId ?? null,
       })
-      .select("prepare_entry_id")
+      .select("review_entry_id")
       .single();
 
     if (derivedErr || !derivedInserted) {
-      console.error("prepare: prepare_entries insert failed", derivedErr?.code);
+      console.error("review: review_entries insert failed", derivedErr?.code);
       // Only clean up the raw row if WE inserted it in this request. If it
-      // was reused from a prior attempt, the user already owns it — deleting
-      // would nuke a row we're about to retry against.
+      // was reused from a prior attempt (existingRaw truthy), the user
+      // already owns it — deleting would nuke a row we're about to retry.
       if (!existingRaw) {
         await supabase
           .from("raw_records")
@@ -226,31 +220,28 @@ export async function POST(req: Request) {
           .eq("raw_record_id", rawRecordId);
       }
       return NextResponse.json(
-        { error: "Could not save prepare entry" },
+        { error: "Could not save review entry" },
         { status: 500 }
       );
     }
-    prepareEntryId = derivedInserted.prepare_entry_id;
+    reviewEntryId = derivedInserted.review_entry_id;
   }
 
-  // 7. Call Claude. One retry for transient JSON/schema glitches. Timeout
-  //    prevents a stuck socket from hanging the route past Vercel's 504.
-  //    Client instance is lifted out of the loop.
-  const prompt = buildPreparePrompt({
+  // 7. Call Claude.
+  const prompt = buildReviewPrompt({
     profile: userProfile,
-    personName: input.personName,
-    relationship: input.relationship,
-    situation: input.situation,
-    desiredOutcome: input.desiredOutcome,
-    primaryEmotion: input.primaryEmotion,
-    defaultPattern: input.defaultPattern,
-    otherPersonHypothesis: input.otherPersonHypothesis,
-    realityCheckQuestion: input.realityCheckQuestion,
-    triggerPlan: input.triggerPlan,
+    whatHappened: input.whatHappened,
+    hardestMomentFeeling: input.hardestMomentFeeling,
+    observedInThem: input.observedInThem,
+    theirExperience: input.theirExperience,
+    whatHelped: input.whatHelped,
+    whatHurt: input.whatHurt,
+    validatedAssumptions: input.validatedAssumptions ?? "",
+    unresolvedAndNext: input.unresolvedAndNext,
   });
 
   const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
-  let aiOutput: PrepareAiOutput | null = null;
+  let aiOutput: ReviewAiOutput | null = null;
   let lastFailureKind = "none";
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -273,7 +264,7 @@ export async function POST(req: Request) {
         lastFailureKind = "json_parse";
         throw new Error("bad json");
       }
-      const validated = prepareOutputSchema.safeParse(jsonOutput);
+      const validated = reviewOutputSchema.safeParse(jsonOutput);
       if (!validated.success) {
         lastFailureKind = "schema_mismatch";
         throw new Error("schema mismatch");
@@ -288,10 +279,8 @@ export async function POST(req: Request) {
       lastFailureKind = "none";
       break;
     } catch {
-      // Log only the kind of failure. Anthropic error messages can embed
-      // prompt snippets — we deliberately don't propagate them.
       console.error(
-        `prepare: AI attempt ${attempt + 1} failed kind=${lastFailureKind}`
+        `review: AI attempt ${attempt + 1} failed kind=${lastFailureKind}`
       );
       if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, 400));
@@ -299,23 +288,20 @@ export async function POST(req: Request) {
     }
   }
 
-  // 8. UPDATE derived row with the AI plan (or leave it null if Claude
-  //    failed — user can retry coaching from the same raw row).
+  // 8. UPDATE derived row with the AI reflection.
   if (aiOutput) {
     const { error: updateErr } = await supabase
-      .from("prepare_entries")
+      .from("review_entries")
       .update({
-        ai_plan_json: aiOutput,
-        ai_plan_version: AI_PLAN_VERSION,
+        ai_reflection_json: aiOutput,
+        ai_reflection_version: AI_REFLECTION_VERSION,
         is_complete: true,
         completed_at: new Date().toISOString(),
       })
       .eq("user_id", user.id)
-      .eq("prepare_entry_id", prepareEntryId);
+      .eq("review_entry_id", reviewEntryId);
     if (updateErr) {
-      console.error("prepare: derived update failed", updateErr.code);
-      // Entry still saved; client-returned aiOutput is authoritative for
-      // display. Next insight pipeline pass will re-read from DB.
+      console.error("review: derived update failed", updateErr.code);
     }
   }
 
