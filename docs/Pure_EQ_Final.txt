@@ -1,0 +1,2101 @@
+# Pure EQ — Source of Truth
+
+---
+
+**Document classification key**
+
+Every section in this document is labeled with one of three classifications:
+
+- **[PRODUCT LAW]** — Non-negotiable product rules. These define what the product is, how it behaves, and what it must never do. Engineers must not override these without product owner sign-off.
+- **[DEFAULT POLICY]** — Configurable defaults. These are the best current assumptions, but they are expected to change based on real usage data. Engineers should implement them as adjustable parameters, not hardcoded values.
+- **[IMPLEMENTATION GUIDANCE]** — Engineering recommendations. These describe how to build, what schemas to use, and how to handle runtime behavior. Engineers may adapt these to fit technical constraints as long as the product laws they serve are preserved.
+
+---
+
+## 1. Product Overview [PRODUCT LAW]
+
+**Product name**
+
+Pure EQ
+
+**Product purpose**
+
+Pure EQ helps users handle hard conversations better by improving self-awareness, emotional regulation, empathic accuracy, and next-move judgment.
+
+**Core promise**
+
+The product helps users understand how they naturally communicate, how they tend to break down under stress, and what to do next before, during, and after difficult interactions.
+
+**Primary user problem**
+
+Users often struggle in hard conversations because they:
+
+- react before getting clear
+- misread the other person
+- over-explain, withdraw, fix, or escalate under stress
+- do not know how to prepare, reflect, repair, or regulate in a structured way
+
+**Product approach**
+
+Pure EQ addresses this through three product areas:
+
+- **Coach** — guided communication workflows
+- **Tools** — in-the-moment emotional regulation and trigger logging
+- **Insights** — patterns, profile, and long-term learning
+
+**Core design principles**
+
+- facts first
+- self-awareness second
+- other-person hypothesis with evidence third
+- best next move last
+- keep the user moving, not over-processing
+- reduce shame and increase clarity
+- make every interaction produce useful data for later insight
+- voice and text equally available: both input modes must be visible and accessible on every free text field. The product does not default to one over the other. The user decides how they want to input based on their context.
+
+## 2. Information Architecture [PRODUCT LAW]
+
+**Primary tabs**
+
+- **Coach**
+- **Tools**
+- **Insights**
+
+**Top-right account menu**
+
+Name or avatar in the top right with a dropdown containing:
+
+- **Account**
+- **Data**
+- **Log Out**
+
+**Coach modules**
+
+- **Prepare**
+- **Review**
+- **Repair**
+
+**Tools modules**
+
+- **I'm Overwhelmed**
+- **I'm Triggered**
+
+**Insights**
+
+The user's **Communication Profile** lives in **Insights**. Insights data architecture and AI insight requirements are defined in the Insights Data Architecture section of this document.
+
+## 3. Onboarding [PRODUCT LAW]
+
+**Goal**
+
+Help the user quickly understand their communication style, see where they tend to break down under stress, and receive one useful action before the paywall.
+
+**Final onboarding sequence**
+
+1. Landing page
+2. 9-question Communication Profile
+3. Profile result
+4. One recommended starting mode
+5. One free useful guided output
+6. Paywall
+7. App access
+
+**Step 0 — Landing page**
+
+Very simple:
+
+- what the app does
+- "Get your communication profile in 90 seconds"
+- CTA: **Start**
+
+**Step 1 — Communication Profile**
+
+**9 questions total**
+
+- Questions 1–8 = profile scoring
+- All 9 questions contribute to routing
+- Question 9 = aspiration / routing only
+- multiple choice only
+- 5 answer choices each
+- no typing
+
+This structure gives:
+
+- 2 strength questions
+- 6 behavioral pattern questions
+- 1 aspiration question
+
+This makes the profile more balanced, objective, and useful.
+
+**Final 9 Questions**
+
+**Question 1**
+
+**When conversations go well, what feels most natural to you?**
+
+A. Saying what matters clearly and directly
+B. Thinking carefully before I speak
+C. Helping the other person feel comfortable and understood
+D. Staying calm, measured, and in control
+E. Bringing honest energy and emotional presence into the conversation
+
+**Mapping**
+
+- A = Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Intense
+
+**Question 2**
+
+**What do people tend to appreciate most about how you communicate?**
+
+A. I'm straightforward and easy to understand
+B. I'm thoughtful and do not react too quickly
+C. I'm warm, supportive, and considerate
+D. I stay steady and do not make things bigger than they are
+E. I notice what others are feeling, even when they do not say it directly
+
+**Mapping**
+
+- A = Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Perceptive
+
+**Question 3**
+
+**When someone is upset with you, what is your first instinct?**
+
+A. Clear things up directly
+B. Slow down and understand what is really going on
+C. Reassure them and reduce the tension
+D. Pull back so I do not make it worse
+E. Read between the lines and figure out what they really mean
+
+**Mapping**
+
+- A = Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Perceptive
+
+**Question 4**
+
+**In hard conversations, what becomes hardest for you?**
+
+A. Staying calm once emotions rise
+B. Saying what I really mean without overthinking
+C. Not taking responsibility for fixing everything
+D. Not shutting down or pulling back
+E. Not assuming I already know what the other person means
+
+**Mapping**
+
+- A = Intense
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Perceptive
+
+**Question 5**
+
+**What usually goes wrong first when tension rises?**
+
+A. I push my point too hard
+B. I hesitate, over-process, or wait too long
+C. I focus too much on smoothing things over
+D. I go quiet, withdraw, or avoid the real issue
+E. I start interpreting instead of checking
+
+**Mapping**
+
+- A = Intense, with optional +1 secondary to Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Perceptive
+
+**Question 6**
+
+**When you feel misunderstood, what do you most tend to do?**
+
+A. Push harder to explain my point
+B. Replay everything in my head and second-guess myself
+C. Try to make the conversation feel better fast
+D. Pull back and say less
+E. React strongly or feel emotionally overwhelmed
+
+**Mapping**
+
+- A = Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Intense
+
+**Question 7**
+
+**When the other person gets more intense, what do you do?**
+
+A. Stand my ground
+B. Go quiet and think
+C. Try to bring the temperature down
+D. Stay calm, don't react
+E. Match their energy
+
+**Mapping**
+
+- A = Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Intense
+
+**Question 8**
+
+**After a conversation goes badly, what do you do first?**
+
+A. Go back and address it
+B. Replay it in my head
+C. Check if they're okay
+D. Give it space
+E. Try to read where they're at before I do anything
+
+**Mapping**
+
+- A = Direct
+- B = Reflective
+- C = Warm
+- D = Measured
+- E = Perceptive
+
+**Question 9**
+
+**What do you most want to improve right now?**
+
+A. Staying calm
+B. Understanding people better
+C. Repairing conflict
+D. Setting boundaries
+E. Speaking up sooner
+
+Use this for routing and personalization only, not profile scoring.
+
+**Final profile set**
+
+- **Direct**
+- **Reflective**
+- **Warm**
+- **Measured**
+- **Perceptive**
+- **Intense**
+
+Each profile should be framed as:
+
+- a natural communication strength
+- a predictable under-stress pattern
+
+**Scoring logic**
+
+**Core rule**
+
+- Questions 1–8 decide the profile
+- each answer gives 2 points to one primary profile
+- some answers can also give 1 secondary point where useful
+- Question 9 does not affect profile identity scoring
+
+**Result logic**
+
+- Primary profile = highest score
+- Secondary profile = second-highest score
+
+**Tie-break logic**
+
+If there is a tie for the top result:
+
+1. Use Question 8 first
+2. Then use Question 7
+3. Then use Question 6
+4. Then use Question 5
+5. Then use Question 4
+
+Do not use Question 9 to break profile ties. Question 9 is aspiration, not identity.
+
+**Routing logic**
+
+- All 9 questions contribute to routing
+- Questions 1–8 determine the user's Communication Profile
+- Question 9 captures what the user most wants to improve right now
+- Routing uses all 9 questions together to determine:
+    - best starting tab
+    - best starting module
+    - first guided action
+
+**Result screen**
+
+Show:
+
+- Your Communication Profile
+- avatar or visual identity
+- your communication strength
+- your under-stress pattern
+- what will help most in this app
+
+**Example**
+
+**Your Communication Profile: Reflective**
+
+You tend to slow down, think carefully, and try to understand before reacting.
+
+**At your best:** You bring perspective, thoughtfulness, and restraint.
+**Under stress:** You can overthink, delay, or say less than you mean.
+**Best place to start:** Prepare
+
+**Best starting mode**
+
+Show only one recommendation. Examples:
+
+- Start with Prepare
+- Start with Review
+- Start with Repair
+
+**One immediate action**
+
+Give the user one free guided action before the paywall:
+
+- "Try a 60-second Prepare"
+- "Review your last tense conversation"
+- "Draft a repair message"
+- "Use a reset tool before your next conversation"
+
+This should produce one real AI output.
+
+**Paywall**
+
+Present pricing as:
+
+- **7-day starter access for $0.99**
+- **then $9.99/month**
+- **cancel anytime in 1 click**
+
+If the user declines:
+
+- send them back to landing
+- save their profile
+- let them restart easily later
+
+## 4. Coach Tab [PRODUCT LAW]
+
+**Purpose**
+
+Coach helps the user prepare for hard conversations, review what happened afterward, and attempt repair when needed.
+
+**Core training loop**
+
+Every Coach mode should follow this order:
+
+1. What happened / what is happening?
+2. What am I feeling?
+3. What do I think is happening for them — and why?
+4. What is the best next move?
+
+**Requirements**
+
+- Voice and text input must both be visible and equally accessible on every free text field. The UI must not privilege one mode over the other. The user chooses based on their context.
+- User input should be auto-parsed into structured form where possible
+- Date and time should auto-populate when each module is completed
+- Data should be saved in a format that supports future AI Insights
+
+**Voice input UX [PRODUCT LAW]**
+
+- Every free text field must display a microphone icon inside the text input box, similar to ChatGPT's input field. The user taps the mic to speak or taps the text area to type. Both options are always visible in the same component — not in separate screens, modals, or menus.
+- Voice capture must begin on a single tap of the mic icon — no multi-step activation
+- While recording, the mic icon must change state (e.g., pulsing, color change) to indicate active capture
+- Tapping the mic again stops recording
+- The transcription appears in the same text field where typed text would go. The user can edit it before submitting.
+- If voice capture fails (no microphone access, background noise too high, or transcription confidence below threshold), show a clear prompt to use text input — do not show an error modal
+
+**Voice transcription requirements [IMPLEMENTATION GUIDANCE]**
+
+- Voice transcription must handle emotional, fragmented, and non-linear speech without requiring the user to speak in structured sentences. Browser-native Web Speech API is not acceptable for production — it is Chrome-only, has no offline reliability, and performs poorly with emotional speech.
+- **[DEFAULT POLICY]** Recommended starting implementation: OpenAI's Whisper API. This may be swapped for Deepgram, AssemblyAI, or another provider if it better meets latency, cost, or accuracy requirements.
+- **[DEFAULT POLICY]** Target latency from stop-speaking to visible transcription: under 2 seconds. This is a tuning target, not a hard ceiling.
+
+### Prepare
+
+**Goal:** Train self-awareness, perspective-taking, trigger anticipation, and curiosity before action.
+
+**Prepare questions**
+
+1. **Who is this with?**
+   Person name or label, plus relationship. Relationship options: partner / friend / family / manager / direct report / coworker / client / other
+
+2. **What is this conversation about?**
+   Prompt: "Describe the situation in facts only. What needs to be discussed?"
+
+3. **What outcome do you want from this conversation?**
+   Prompt: "What do you want by the end? What would 'good enough' look like?"
+
+4. **What is the main emotion you are most likely to feel going in?**
+   Prompt: "Name 1 emotion and why."
+
+5. **When you feel that way, what do you usually do that gets in the way?**
+   Prompt: "What is your likely default pattern here?"
+
+6. **What do you think may be going on for them — and what makes you think that?**
+   Prompt: "What is your best guess about what may be happening for them, and what evidence do you actually have?"
+
+7. **What question can you ask to test your read instead of assuming?**
+
+8. **If you get triggered, what will you do instead?**
+   Prompt: "Complete this: If I notice myself feeling [blank], then I will [blank]."
+
+**Prepare AI output**
+
+AI should return:
+
+- likely blind spot
+- one reality-check question
+- one thing not to do
+
+AI should not just produce advice. It should show:
+
+- what the user's read gets right
+- what they may be missing
+- best next move
+
+### Review
+
+**Goal:** Train empathic accuracy, accountability, and learning from the actual interaction.
+
+**Review questions**
+
+1. **What happened?**
+   Prompt: "Describe what happened in facts only. What was said or done?"
+
+2. **What did you feel during the hardest moment?**
+   Prompt: "What did you feel in the moment and why?"
+
+3. **What did you observe in them?**
+   Prompt: "What did you notice in their words, tone, body language, or timing?"
+
+4. **What do you think they may have been feeling, protecting, or needing — and what evidence supports that?**
+   Prompt: "What is your best guess, and what makes you think that?"
+
+5. **What did you do that likely helped?**
+   Prompt: "What did you say or do that probably moved things in a better direction?"
+
+6. **What did you do that may have hurt, confused, or escalated things?**
+   Prompt: "What did you say or do that may have caused friction?"
+
+7. **Did you check your assumptions or validate their experience?**
+   Prompt: "Did you ask a reality-check question or say something validating? If yes, what?"
+
+8. **What still feels unresolved, and what do you want next?**
+
+Choices:
+
+- I'm good with the outcome
+- I need a follow-up conversation
+- I need to set a boundary
+- I want to let it settle
+- I want to repair
+- Something landed badly
+
+**Review AI output**
+
+AI should return:
+
+- how the user likely came across
+- where they may be projecting
+- one alternative explanation
+- one pattern tag
+
+Pattern tags may include:
+
+- defended intent too early
+- mind-read under stress
+- moved to solutions too fast
+- avoided direct ask
+- flooded / shut down
+- got sharp when threatened
+
+### Repair
+
+**Goal:** Help the user attempt repair after something landed badly or a rupture needs attention.
+
+Repair is a follow-up tool, not part of every review. It should trigger when:
+
+- I want to repair
+- Something landed badly
+
+**Repair questions**
+
+1. **What needs repair most right now?**
+
+2. **What part is yours to own?**
+   Prompt: "What are you responsible for here?"
+
+3. **What do you think they most need first from you?**
+
+4. **What outcome do you want from this repair attempt?**
+
+Choices:
+
+- acknowledge impact
+- apologize
+- reset expectations
+- set a boundary
+
+5. **What channel and timing makes the most sense?**
+
+Channel options:
+
+- text
+- call
+- in person
+- no action
+
+Timing options:
+
+- now
+- later today
+- tomorrow
+- after they respond
+
+**Repair AI output**
+
+AI should generate:
+
+- best repair strategy
+- one thing not to say
+- recommended timing
+- next safest move if they respond poorly
+
+Repair strategies may include:
+
+- acknowledge
+- apologize
+- clarify
+- ask to reopen
+- pause and wait
+- boundary-first
+
+AI should not default to apology every time. Sometimes the right move is:
+
+- clarify
+- reopen
+- pause
+- set a boundary
+
+### Outcome Tracking
+
+Outcome tracking happens at 3 levels.
+
+**A. Immediate interaction outcome**
+
+Captured right after Review.
+
+Required fields:
+
+1. Did this move things forward?
+   - yes / partly / no / unclear
+
+2. Did they seem more understood by the end?
+   - more / same / less / unclear
+
+3. Did you use your prepare plan?
+   - yes / partly / no / no prepare
+
+**B. Repair outcome**
+
+Captured only if Repair was used.
+
+Required fields:
+
+1. Did you attempt repair?
+   - yes / planned / no
+
+2. How was it received?
+   - positive / mixed / negative / no response / too early to tell
+
+3. Did understanding improve after repair?
+   - yes / partly / no / unclear
+
+4. Is another follow-up needed?
+   - yes / maybe / no
+
+**C. Thread resolution**
+
+Thread status lives at the issue/thread level, not the review level.
+
+A thread can include:
+
+- Prepare
+- Interaction
+- Review
+- Repair
+- Follow-up
+- Final resolution
+
+Thread status options:
+
+- open
+- stabilizing
+- resolved
+- paused
+- worsened
+- ended / let go
+
+Final learning field: **What did you learn to do earlier or differently next time?**
+
+## 5. Tools Tab [PRODUCT LAW]
+
+**Purpose**
+
+Tools helps the user regulate emotional overload in the moment and capture real-time trigger patterns for later insight.
+
+**Modules**
+
+- **I'm Overwhelmed**
+- **I'm Triggered**
+
+### I'm Overwhelmed
+
+**Product role**
+
+A fast nervous-system reset for acute emotional overload.
+
+**Flow**
+
+**Intro**
+
+**How this works**
+
+This is a short regulation exercise to help you calm your body and reduce the grip of intense emotion.
+
+You will move through 5 steps:
+
+- **Feel** — notice where the emotion shows up in your body
+- **Label** — name what you feel
+- **Validate** — remind yourself your reaction makes sense
+- **Regulate** — slow your breathing
+- **Move** — take one small action to shift your state
+
+Naming emotions can reduce emotional reactivity. This is not therapy. It is a regulation tool.
+
+CTA: **Start**
+
+**Step 1 — Feel**
+
+Close your eyes. Notice where this feeling shows up in your body — throat, chest, stomach, jaw, shoulders, face. Do not push it away. Just observe it.
+
+- 31-second timer auto-starts
+- Optional selectable body locations: throat / chest / stomach / jaw / shoulders / face / other
+
+**Step 2 — Label**
+
+Complete this sentence:
+
+**I feel [blank] because [blank].**
+
+- free text box
+- voice and text input both available
+
+**Step 3 — Validate**
+
+Slowly say to yourself 3 times:
+
+**It makes sense to feel this way right now.**
+
+- tap: **Done**
+
+**Step 4 — Regulate**
+
+Take slow breaths:
+
+- in through your nose for 4
+- hold for 4
+- out through your mouth for 6
+- 61-second timer auto-starts
+
+**Step 5 — Move**
+
+Take one small action to shift your state.
+
+Examples: walk / stretch / drink water / tidy up / step outside
+
+- 121-second timer auto-starts
+- when timer finishes, show notification: **Done**
+
+**Step 6 — Close**
+
+**How do you feel now?**
+
+Choices: Calmer / Lighter / Hopeful / Relieved / Energized / Same
+
+**Completion pop-up**
+
+**Exercise complete**
+Your regulation entry has been saved.
+
+- auto-close in 3 seconds
+- return to Tools tab
+
+**Additional requirement**
+
+Add a before-and-after overwhelm rating:
+
+- **How overwhelmed do you feel right now?** — 1–5 scale
+- **How overwhelmed do you feel now?** — 1–5 scale
+
+This is required so Insights can later measure change, not just final mood.
+
+### I'm Triggered
+
+**Product role**
+
+A real-time trigger log to capture event, interpretation, emotion, urge, behavior, outcome, and learning.
+
+**Flow**
+
+**Intro**
+
+**How this works**
+
+Use this tool to log a trigger in real time so you can understand your pattern, calm down, and see the situation more clearly.
+
+This entry will also be used to generate coaching insights over time.
+
+CTA: **Start**
+
+**Step 1 — Trigger**
+
+**What happened?** Focus on the facts only.
+
+- free text box
+- voice and text input both available
+
+**Step 2 — Interpretation**
+
+**What story did you tell yourself about what happened?** Be honest.
+
+- free text box
+- voice and text input both available
+
+**Step 3 — Emotion**
+
+**What did you feel?**
+
+- emotion text field
+- intensity: 1–10
+
+**Step 4 — Urge**
+
+**What did you want to do?**
+
+- urge text field
+- intensity: 1–10
+
+**Step 5 — Behavior**
+
+**What did you actually do?**
+
+- free text box
+- voice and text input both available
+
+**Step 6 — Outcome**
+
+**What happened as a result?**
+
+- free text box
+- voice and text input both available
+
+**Step 7 — Reflection**
+
+**Are you calm now? What did you learn?**
+
+- free text box
+- voice and text input both available
+
+**Step 8 — Close**
+
+**How do you feel now?**
+
+Choices: Calmer / Lighter / Hopeful / Relieved / Energized / Same
+
+**Completion pop-up**
+
+**Exercise complete**
+Your trigger log has been saved.
+
+- auto-close in 3 seconds
+- return to Tools tab
+
+**Tool-saving rules**
+
+- save draft after each completed step
+- mark completed_at only after the final Close step
+- do not wait until the end to save all data
+
+**Product logic**
+
+- **I'm Overwhelmed** = help me regulate now
+- **I'm Triggered** = help me understand what happened and my pattern
+
+## 6. Insights Tab [PRODUCT LAW]
+
+**Decided item**
+
+The user's **Communication Profile** lives in **Insights**.
+
+**Purpose**
+
+Insights helps the user:
+
+- understand recurring communication patterns
+- see what tends to happen under stress
+- learn from Prepare / Review / Repair / Tools usage over time
+- identify what is improving and what still repeats
+
+The full Insights data architecture, evidence model, and AI output requirements are defined in the Insights Data Architecture section of this document. The data model and schema requirements below should be read as a summary; the architecture section is authoritative.
+
+## 7. Data Model / Core Objects [IMPLEMENTATION GUIDANCE]
+
+**Data principles**
+
+- user input should not be stored as one giant unstructured blob
+- the product should save data in a format that supports future AI Insights
+- structured data should be captured where useful
+- partial tool sessions should be saved progressively
+- completion timestamps should only be marked when a flow is actually completed
+
+**Core objects implied by the product**
+
+- Communication Profile
+- Conversation Thread
+- Prepare entry
+- Review entry
+- Repair entry
+- Tool session
+- Overwhelmed entry
+- Trigger entry
+- Outcome tracking record
+- Insight summary
+
+The authoritative schema definitions, field lists, and layer architecture are in the Insights Data Architecture section of this document.
+
+## 8. Decision Log [PRODUCT LAW]
+
+**Decided**
+
+- product name: Pure EQ
+- tabs: Coach / Tools / Insights
+- top-right menu: Account / Data / Log Out
+- Coach modules: Prepare / Review / Repair
+- Tools modules: I'm Overwhelmed / I'm Triggered
+- Communication Profile lives in Insights
+- onboarding uses 9 total questions
+- Questions 1–8 score the profile
+- Question 9 is aspiration / routing only
+- data model follows 4-layer architecture defined in Insights Data Architecture section
+
+---
+
+# Insights Data Architecture
+
+## 1. Purpose [PRODUCT LAW]
+
+The Insights data architecture must support:
+
+- cross-session pattern tracking
+- person-specific learning over time
+- future insight modules beyond v1
+
+The system must be designed so that **v1 ships only basic, evidence-backed AI insights**, while the foundation remains scalable for later additions such as monthly reports, richer trend modules, and deeper person-specific intelligence.
+
+## 2. Core product laws [PRODUCT LAW]
+
+### 2.1 Insight credibility law
+
+The system must prefer **no insight** over a weak or fake insight.
+
+No recurring behavioral insight may be shown unless it clears minimum evidence requirements across:
+
+- evidence count
+- distinct days
+- event diversity
+- insight-specific signal fit
+
+### 2.2 Language law
+
+All AI-generated user-facing insights must be:
+
+- mechanistic
+- behavior-based
+- simple and clear
+
+The system must not use therapy language, identity diagnosis, or deep psychological claims.
+
+### 2.3 Architecture law
+
+The schema must be built around **four layers**:
+
+1. Raw Records
+2. Canonical Objects
+3. Pattern Observations
+4. Derived Insight Objects
+
+The system must not be built around UI tabs or cards.
+
+## 3. V1 product scope [PRODUCT LAW]
+
+### 3.1 V1 surfaced insight modules
+
+Only these four insight surfaces should appear in v1:
+
+- Profile
+- Recurring blind spots
+- How you tend to land
+- People / relationship memory
+
+### 3.2 V1 AI scope
+
+V1 AI insights must remain basic. They should be:
+
+- short
+- conservative
+- evidence-backed
+
+### 3.3 Delay from v1 UI
+
+Do not surface in v1:
+
+- monthly communication reports
+- deep communication narratives
+- cross-relationship comparison dashboards
+- heavy trend storytelling
+- excessive profile evolution visuals
+
+The engine matters more than presentation.
+
+## 4. Layer 1 — Raw Records [IMPLEMENTATION GUIDANCE]
+
+### 4.1 Purpose
+
+Raw Records are the source-of-truth layer. They preserve original evidence so parsing, extraction, and insight logic can improve later without losing source data.
+
+### 4.2 Required raw sources
+
+Every meaningful completed action must create a Raw Record, including:
+
+- onboarding profile result
+- Prepare
+- Review
+- Repair
+- Trigger Log
+- Overwhelmed
+- Outcome Tracking
+- user edits to person context or pinned relationship notes
+
+### 4.3 Required fields
+
+Each Raw Record must support:
+
+raw_record_id, user_id, record_type, module_type, source_session_id, person_id nullable, thread_id nullable, payload_json, schema_version, created_at, completed_at nullable, is_complete, deleted_at nullable
+
+### 4.4 Rules
+
+- Raw Records must be append-safe.
+- Completed source truth must not be silently overwritten.
+- Incomplete drafts may update until completion.
+- After completion, later edits must be stored as a new record, revision record, or audit-linked change.
+- Raw free text may be stored, but only inside a structured payload envelope.
+- The system must never store the product history as one giant unstructured blob.
+
+### 4.5 Counting rule
+
+Only completed records may count toward recurring insight evidence unless explicitly defined otherwise.
+
+## 5. AI parsing and field normalization [IMPLEMENTATION GUIDANCE]
+
+### 5.1 Purpose
+
+When a user enters free text in Prepare, Review, or Repair, AI may normalize that answer into structured fields based on:
+
+- the question being asked
+- the expected answer style
+- the downstream analytics need
+
+### 5.2 Parsing law
+
+AI normalization is an **interpretation layer**, not source truth.
+
+The system must always preserve:
+
+- original raw response
+- parsed structured output
+- parse confidence and ambiguity markers
+
+### 5.3 Required parsed answer fields
+
+For any normalized free-text answer, the system must support:
+
+raw_text, parsed_primary_value nullable, parsed_candidates nullable, parsed_reason nullable, parse_confidence, ambiguity_flag, needs_user_confirmation, parser_version, parsed_at
+
+### 5.4 Rules
+
+- Clean answers may be parsed directly.
+- Mixed or vague answers must be parsed conservatively.
+- The parser may store primary and secondary candidates.
+- The parser must be allowed to mark low confidence or ambiguity.
+- The parser must not collapse rich emotional text into a falsely precise single label without preserving the raw answer.
+
+Example: if the user gives a messy emotional answer, the system may infer the closest structured fit, but must preserve the original wording and uncertainty.
+
+### 5.5 Voice input parsing requirements [PRODUCT LAW]
+
+Because voice is a primary input mode, the parser will frequently receive speech-to-text transcriptions rather than typed text. This creates specific challenges that must be handled:
+
+- Transcribed speech will contain filler words, false starts, self-corrections, and non-linear phrasing. The parser must handle these without treating them as ambiguity or low confidence.
+- The parser must distinguish between transcription errors (wrong word captured) and genuine user meaning. When uncertain, preserve the raw transcription and flag for review rather than guessing.
+- Emotional speech is often fragmented, repetitive, and grammatically irregular. The parser must not penalize emotional intensity by marking it as low-quality input.
+- The system must store both the raw transcription and any cleaned/normalized version. The raw transcription is source truth.
+- input_mode (voice or text) must be stored as a field on every parsed answer so downstream analysis can account for input-mode differences.
+- Voice parsing quality is a top build priority. If the parser cannot reliably extract structured meaning from spoken emotional language, the entire product experience degrades — every Coach module, every Tool entry, and every downstream insight depends on this layer working well.
+
+## 6. Layer 2 — Canonical Objects [IMPLEMENTATION GUIDANCE]
+
+### 6.1 Purpose
+
+Canonical Objects are the durable business entities the product learns across time.
+
+### 6.2 Required canonical objects for v1
+
+**A. User Profile Snapshot**
+
+Represents the onboarding baseline.
+
+Required fields:
+profile_snapshot_id, user_id, primary_profile, secondary_profile nullable, scoring_version, routing_output, created_at
+
+Rules:
+
+- this is baseline orientation, not behavioral trend
+- if scoring logic changes, create a new snapshot version
+
+**B. Person**
+
+Represents a distinct person the user interacts with.
+
+Required fields:
+person_id, user_id, display_name, relationship_domain, relationship_subtype nullable, is_active, created_at, updated_at
+
+Rules:
+
+- Person must exist independently of any single interaction
+- duplicate matching should be reduced, but not over-aggressively merged
+
+**C. Conversation Thread**
+
+Represents one topic or issue across time.
+
+Required fields:
+thread_id, user_id, person_id nullable, title nullable, thread_type nullable, status, started_at, last_activity_at, resolved_at nullable
+
+Rules:
+
+- a thread may span multiple modules
+- a thread is not the same as a person
+- multiple threads may exist with the same person
+
+**D. Relationship Memory Lite**
+
+Represents durable relationship context, not AI summary truth.
+
+Required fields:
+relationship_memory_id, user_id, person_id, user_written_context nullable, pinned_notes nullable, last_interaction_at nullable, updated_at
+
+Rules:
+
+- keep this object narrow
+- store user-entered context and stable metadata only
+- do not use this object as the home for all AI-generated summaries
+
+### 6.3 Conditional canonical object
+
+**Interaction Entry**
+
+This is **optional in v1**.
+
+Implement it only if it materially improves:
+
+- query simplicity
+- normalization across modules
+- joining multiple raw records into one interaction unit
+
+If it does not solve a real v1 need, do not add it.
+
+## 7. Layer 3 — Pattern Observations [IMPLEMENTATION GUIDANCE]
+
+### 7.1 Purpose
+
+Pattern Observations are the mechanistic bridge between source data and final insight objects.
+
+Required flow:
+
+**Raw Record → Canonical linkage → Pattern Observation → Derived Insight Object**
+
+### 7.2 Definition
+
+A Pattern Observation is a structured behavior signal extracted from one completed entry or a small linked cluster of evidence.
+
+### 7.3 Required fields
+
+Each Pattern Observation must support:
+
+pattern_observation_id, user_id, person_id nullable, thread_id nullable, source_raw_record_id, source_interaction_entry_id nullable, observation_type, observation_tag, direction, confidence_score, observed_at, extractor_version, supporting_evidence_json nullable
+
+### 7.4 Taxonomy rule
+
+V1 must use a **closed observation taxonomy**. Production must not allow the AI to invent new tags at runtime.
+
+### 7.5 Required v1 observation families
+
+Use a controlled set across:
+
+- communication move
+- stress response
+- trigger pattern
+- repair behavior
+- outcome-linked behavior
+
+### 7.6 Example v1 tags
+
+Examples may include:
+
+- defended_intent_early
+- assumed_meaning_without_checking
+- delayed_direct_ask
+- withdrew_under_tension
+- over_explained_when_misunderstood
+- moved_to_solution_too_fast
+- validation_present
+- repair_attempt_helped
+- repair_attempt_missed_ownership
+- escalated_after_trigger
+- recurring_trigger_criticism
+- recurring_trigger_pressure
+- prepare_plan_not_used
+
+## 8. Layer 4 — Derived Insight Objects [IMPLEMENTATION GUIDANCE]
+
+### 8.1 Purpose
+
+Derived Insight Objects are computed summaries built from repeated Pattern Observations and linked evidence.
+
+They exist for display and reuse. They are not source truth.
+
+### 8.2 Required fields
+
+Each Derived Insight Object must support:
+
+derived_insight_id, user_id, insight_type, person_id nullable, time_window_type, period_start, period_end, summary_text, confidence_level, evidence_count, distinct_days, event_types_used, supporting_pattern_ids, generator_version, generated_at, expires_at nullable
+
+### 8.3 Rules
+
+- every insight must be recomputable
+- every insight must store evidence basis
+- every insight must be time-bounded
+- stale insights must be replaceable by recomputation
+
+## 9. Evidence model [PRODUCT LAW]
+
+### 9.1 General rule
+
+No recurring insight may be shown unless it clears thresholds for:
+
+- evidence count
+- distinct days
+- event diversity
+- insight-family-specific signal fit
+
+### 9.2 Evidence states
+
+Every recurring insight family must support:
+
+- Not enough evidence
+- Emerging pattern
+- Established pattern
+
+The system must prefer **no insight** over weak insight.
+
+### 9.3 Threshold policy rule [DEFAULT POLICY]
+
+The **logic** of thresholds is product law.
+The **exact numeric thresholds** are configurable policy defaults.
+
+That means:
+
+- thresholds must exist by insight family
+- thresholds should be adjustable after live usage
+- exact numbers should not be treated as permanently correct before real data exists
+
+### 9.4 Qualifying evidence
+
+Only completed entries may count toward recurring insights.
+
+Qualifying entry types:
+
+- Prepare
+- Review
+- Repair
+- Trigger Log
+- Overwhelmed
+- Outcome Tracking
+
+Non-qualifying on their own:
+
+- onboarding profile answers
+- incomplete drafts
+- standalone note fragments
+- manually written summaries without linked evidence
+
+## 10. Signal-fit model [DEFAULT POLICY]
+
+### 10.1 Rule
+
+Entry types do not have one universal signal rank.
+
+Signal strength depends on the insight family.
+
+### 10.2 Trigger mechanics
+
+For trigger-pattern insights, signal fit is generally:
+
+- high: Trigger Log, Review
+- medium: Prepare, Overwhelmed
+- lower but still useful: Repair, Outcome depending on content
+
+### 10.3 Person-specific tension patterns
+
+For person-specific learning, signal fit is generally:
+
+- high: Review, Repair, Outcome Tracking
+- medium-high: Trigger Log
+- medium: Prepare
+- lower: Overwhelmed unless clearly linked
+
+### 10.4 How you tend to land
+
+For broader interpersonal-impact summaries, signal fit is generally:
+
+- high: Review, Outcome Tracking
+- medium-high: Repair
+- medium: Trigger Log, Prepare
+- lower: Overwhelmed
+
+A broad communication-impact insight must not be generated from low-context emotional entries alone.
+
+## 11. Recommended default thresholds [DEFAULT POLICY]
+
+These are **default policy values**, not fixed permanent law.
+
+### 11.0 High-fit entry definition
+
+A **high-fit entry** is an entry whose type is rated "high" in the signal-fit table (Section 10) for the specific insight family being evaluated.
+
+Examples:
+
+- When evaluating **recurring blind spots**, Trigger Log and Review entries are high-fit (per Section 10.2). An Overwhelmed entry is not high-fit for this family.
+- When evaluating **person-specific tension patterns**, Review, Repair, and Outcome Tracking entries are high-fit (per Section 10.3). A Prepare entry is not high-fit for this family.
+- When evaluating **how you tend to land**, Review and Outcome Tracking entries are high-fit (per Section 10.4).
+
+A single entry can be high-fit for one insight family and low-fit for another. High-fit is not a universal quality score — it depends on which insight is being generated.
+
+### 11.0.1 Dynamic update model
+
+Insights do not regenerate on every new entry. They regenerate at fixed batch intervals defined per insight family. This controls API cost, prevents unstable insight text, and creates a natural sense of progression for the user.
+
+When an insight exists, it must display a freshness label:
+
+- **"Based on your first 6 entries. Next update at 12."**
+- **"Based on 12 entries. Next update at 18."**
+
+This sets user expectations and prevents them from assuming the insight is a live assessment.
+
+Between batch windows, threshold checks (counting entries, distinct days, event types) may run on every new entry to determine whether a new tier has been reached. But insight text regeneration only happens at the batch intervals defined below.
+
+### 11.0.2 Re-engagement nudge
+
+If a user has completed enough entries to qualify for an emerging insight but all entries fall on fewer than the required distinct days, the system should surface a nudge:
+
+- **"You have [count] entries, but they're all from the same stretch. One more entry on a different day and we can start identifying patterns."**
+
+This nudge should appear on the Insights tab when the entry count threshold is met but the distinct-days threshold is not. It should not appear more than once per week.
+
+### 11.1 Recurring blind spots
+
+**Emerging**
+
+- 6 completed qualifying entries
+- 3+ distinct days
+- 3+ event types
+- 2+ high-fit entries
+
+**Dynamic update cadence:** every 6 qualifying entries.
+
+- 6 completed — Emerging
+- 12 completed — Emerging v2
+- 18 completed — Established
+- 24 completed — Established v2
+- and so on in increments of 6
+
+**Established**
+
+- 18 completed qualifying entries
+- 9+ distinct days
+- 3+ event types
+- 6+ high-fit entries
+
+### 11.2 How you tend to land
+
+**Emerging**
+
+- 6 completed qualifying entries
+- 3+ distinct days
+- 3+ event types
+- 3+ high-fit entries
+- 2+ Review or Outcome entries
+
+**Dynamic update cadence:** every 6 qualifying entries.
+
+- 6 completed — Emerging
+- 12 completed — Emerging v2
+- 18 completed — Established
+- 24 completed — Established v2
+- and so on in increments of 6
+
+**Established**
+
+- 18 completed qualifying entries
+- 9+ distinct days
+- 3+ event types
+- 7+ high-fit entries
+- 3+ Review or Outcome entries
+
+### 11.3 People / relationship memory
+
+**Emerging**
+
+- 3 completed qualifying entries linked to same person
+- 2+ distinct days
+- 2+ Review entries
+- 1+ Repair or Outcome entry
+
+**Dynamic update cadence:** every 3 qualifying entries linked to same person.
+
+- 3 completed — Emerging
+- 6 completed — Emerging v2
+- 9 completed — Established
+- 12 completed — Established v2
+- and so on in increments of 3
+
+**Established**
+
+- 9 completed qualifying entries linked to same person
+- 6+ distinct days
+- 6+ Review entries
+- 3+ Repair or Outcome entries
+
+### 11.4 Monthly communication reports
+
+Not surfaced in v1 UI, but supported later.
+
+**Emerging**
+
+- 12 completed qualifying entries in month
+- 3+ event types
+- 2+ high-fit entries
+- 1+ Repair entries
+
+**Dynamic update cadence:** every 12 qualifying entries.
+
+- 12 completed — Emerging
+- 24 completed — Established
+- 36 completed — Established v2
+- and so on in increments of 12
+
+**Established**
+
+- 24 completed qualifying entries in month
+- 3+ event types
+- 6+ high-fit entries
+- 3+ Repair entries
+
+If below threshold, the system may only show:
+**limited evidence this month**
+
+## 12. Recency, counter-evidence, and freshness [PRODUCT LAW]
+
+### 12.1 Recency rule
+
+Recent evidence must matter more than old evidence.
+
+The architecture must support:
+
+- 30-day windows
+- 90-day windows
+- lifetime windows
+
+### 12.2 Counter-evidence rule
+
+The system must support not only repeated evidence, but also evidence that a pattern is weakening, changing, or no longer dominant.
+
+If recent evidence contradicts older patterns, the system must not present the older pattern as currently dominant without qualification.
+
+### 12.3 Insight status support
+
+Derived insights must be able to distinguish between:
+
+- historically repeated pattern
+- currently active pattern
+- improving pattern
+- unclear pattern
+
+This is required so the product can communicate trajectory, not just existence. A user who has been working on a pattern and improving must not see the same static label they saw at the start.
+
+### 12.4 Freshness rule [IMPLEMENTATION GUIDANCE]
+
+Each derived summary must support a basic freshness model through:
+
+- generated_at
+- version fields
+- the ability to recompute
+
+A full regeneration engine is **not required in v1**, but the schema must not block it later.
+
+## 13. Person and thread linking [PRODUCT LAW]
+
+### 13.1 Person linking
+
+The system must support linking entries to a stable Person.
+
+Rules:
+
+- person linking should happen at entry creation when possible
+- users must be able to reuse an existing person
+- unknown person is allowed and explicit
+- later reassignment must be supported
+
+### 13.2 Thread linking
+
+The system must support linking multiple entries to one topic thread.
+
+Rules:
+
+- a thread may span Prepare, Review, Repair, Trigger, and Outcome
+- thread status must live at the thread level
+- thread history must remain queryable across time
+
+## 14. Relationship Memory boundary [PRODUCT LAW]
+
+### 14.1 Rule
+
+Relationship Memory Lite and person-specific Derived Insights must remain separate.
+
+**Relationship Memory Lite stores:**
+
+- durable user-entered context
+- pinned notes
+- stable relationship metadata
+
+**Person-specific Derived Insights store:**
+
+- system-generated summaries
+- what tends to work
+- what tends to go wrong
+- repeated tension patterns
+- evidence-backed confidence
+
+This boundary must stay sharp.
+AI summaries are derived and replaceable. They are not canonical truth.
+
+## 15. User-facing AI output requirements [PRODUCT LAW]
+
+### 15.1 Tone
+
+All v1 surfaced insights must be:
+
+- simple
+- short
+- clear
+- non-clinical
+- behavior-based
+
+### 15.2 Allowed phrasing
+
+Allowed styles include:
+
+- You tend to...
+- A repeated pattern is...
+- This seems more likely when...
+- With this person, what tends to work is...
+- What often goes wrong first is...
+
+### 15.3 Banned phrasing
+
+The system must not say:
+
+- You are someone who...
+- Deep down...
+- You fear...
+- Your wound is...
+- Your trauma response is...
+- Subconsciously...
+- This means you have...
+
+### 15.4 Output simplicity rule
+
+Each surfaced insight should usually contain:
+
+- one main pattern
+- one short explanation
+- one practical implication
+
+The internal engine may be complex. The output must stay simple.
+
+## 16. AI output engineering requirements [IMPLEMENTATION GUIDANCE]
+
+### 16.1 Purpose
+
+Every AI-generated output in the product — Coach responses, parsed fields, pattern observations, and derived insights — must be governed by explicit engineering constraints, not left to model default behavior.
+
+### 16.2 Prompt architecture
+
+Each AI output type must have a defined prompt template that includes:
+
+- the user's Communication Profile and relevant context
+- the specific question or module being answered
+- the exact output schema expected (field names, types, and constraints)
+- the tone and phrasing rules from Section 15
+- the banned phrasing list injected as a hard negative constraint
+- a maximum output length ceiling per field
+
+Prompt templates must be version-controlled. Changes to prompt templates must be logged with a prompt_version identifier that is stored alongside any AI output the template produced.
+
+### 16.3 Output schema enforcement
+
+Every AI call must request structured output in a defined schema.
+
+For Coach outputs (Prepare, Review, Repair), the AI must return a JSON object with fixed keys. Free-form prose is not acceptable as the primary response format.
+
+Example Prepare output schema:
+
+- likely_blind_spot: string, max 120 characters
+- reality_check_question: string, max 150 characters
+- thing_not_to_do: string, max 120 characters
+- user_read_accuracy: string, max 150 characters
+- what_user_may_be_missing: string, max 150 characters
+- best_next_move: string, max 120 characters
+
+If the model returns output that does not conform to the expected schema, the system must reject and retry up to 2 times before falling back to a graceful failure state.
+
+### 16.4 Model selection and latency [DEFAULT POLICY]
+
+V1 must define:
+
+- which model is used for each AI task (parsing, Coach output, observation extraction, insight generation)
+- a target latency budget per task type
+- whether the task runs synchronously (user waits) or asynchronously (background)
+
+Recommended defaults:
+
+- Coach outputs (Prepare, Review, Repair): synchronous, target under 4 seconds, user sees loading indicator
+- Field parsing and normalization: asynchronous, runs after step completion, target under 6 seconds
+- Pattern Observation extraction: asynchronous batch, runs after record completion, target under 10 seconds
+- Derived Insight generation: asynchronous batch, may run on schedule or trigger, target under 15 seconds
+
+Model choice must be a configurable parameter, not hardcoded.
+
+### 16.5 Fallback and failure behavior
+
+Every AI output must have a defined failure path.
+
+**Coach output failure:**
+If the AI fails to return valid output after retries, show:
+"We could not generate coaching feedback right now. Your entry has been saved and will still contribute to your insights."
+Do not show a blank screen. Do not show raw model output. Do not block the user from completing the flow.
+
+**Parsing failure:**
+If AI normalization fails, the system must store the raw text with a parse_status of "failed" and continue. The raw text must still be usable for manual review and future re-parsing. A failed parse must never block record creation.
+
+**Observation extraction failure:**
+If extraction fails, the Raw Record must remain intact. The system must log the failure and allow re-extraction later. No Pattern Observations should be created from a failed extraction — silence is better than garbage.
+
+**Derived Insight generation failure:**
+If generation fails, the previously displayed insight (if any) remains visible with its original generated_at timestamp. The system must not replace a valid insight with an error state. Log failure and retry on the next scheduled run.
+
+### 16.6 Output validation rules
+
+Before displaying any AI output to the user, the system must validate:
+
+- output conforms to the expected schema
+- no banned phrases from Section 15.3 appear in the output
+- output does not exceed maximum character limits per field
+- if the output references a person, the person_id exists in the user's data
+- if the output references a pattern tag, the tag exists in the controlled taxonomy
+
+Any output that fails validation must be rejected and retried or fallback-handled per Section 16.5.
+
+### 16.7 Prompt injection defense
+
+User free-text input must be treated as untrusted data in all AI calls.
+
+- user input must be clearly delimited from system instructions in all prompts
+- the system must not allow user text to modify output schema, bypass phrasing rules, or alter system behavior
+- if user text contains instruction-like content, the parser must process it as emotional content, not as a command
+
+## 17. Error states and empty states [IMPLEMENTATION GUIDANCE]
+
+### 17.1 Purpose
+
+The product must define what users see when data is absent, incomplete, or unavailable. For most new users, empty and insufficient-data states will be the dominant experience for weeks. These states must be intentionally designed, not afterthoughts.
+
+**Classification note for this section:** The behavioral rules in each subsection (e.g., "do not show fake insights," "do not block the user from navigating away") are product law. The specific copy strings (e.g., "Generating your coaching feedback...") and timing values (e.g., "maximum visible wait of 6 seconds") are default policy — they should be implemented as configurable values that will be refined after user testing.
+
+### 17.2 Onboarding empty states [PRODUCT LAW / DEFAULT POLICY]
+
+**Profile result screen — edge cases:**
+
+- If all 8 scoring questions tie across 3+ profiles even after tie-break logic: show the top two profiles as a combined result ("Your style blends Direct and Reflective"). Do not show an error. Do not force a single winner from noise.
+- If the user exits onboarding mid-quiz: save completed answers. When they return, resume from the last unanswered question. Do not restart.
+
+**Profile mismatch:**
+
+After seeing their result, the user must have a visible option: **"This doesn't feel right"**
+
+If tapped:
+
+- show the two runner-up profiles as alternatives
+- let the user select a different primary profile
+- store the override as a separate profile_snapshot with override_source = "user_selected"
+- the original quiz-derived profile must remain queryable for analytics
+
+**Profile override analytics rule:**
+
+The user-selected override controls routing, display, and personalization. However, the original quiz-derived profile must remain the default baseline for pattern analysis and insight generation. The insight engine must not treat a self-selected profile as equivalent to an observed-behavior profile.
+
+**[DEFAULT POLICY]** As a monitoring heuristic, if the override rate exceeds roughly 25% of users in production, the onboarding quiz should be re-evaluated. A high override rate is a signal that the quiz is not working, not that users know their profile better than the instrument. The exact threshold should be adjusted based on real usage data.
+
+### 17.3 Coach empty states [PRODUCT LAW / DEFAULT POLICY]
+
+**First-time Coach tab:**
+
+If the user has never completed a Coach module, show:
+
+- a short explanation of what Coach does
+- one recommended starting module based on onboarding routing
+- example: "You haven't used Coach yet. Based on your profile, try starting with Prepare."
+
+**First-time module entry (Prepare, Review, Repair):**
+
+Show the module intro and first question immediately. Do not add an intermediate "are you sure?" screen. Minimize friction to first entry.
+
+**AI output not yet available:**
+
+If the user completes a Coach flow but AI output generation is still processing:
+
+- show: "Generating your coaching feedback..."
+- show a loading indicator with a maximum visible wait of 6 seconds
+- if output is still not ready after 6 seconds, show: "Your entry has been saved. Coaching feedback will appear here shortly." and let the user navigate away
+- when output is ready, surface it as an unread notification or inline update
+
+### 17.4 Tools empty states [PRODUCT LAW / DEFAULT POLICY]
+
+**First-time Tools tab:**
+
+If the user has never used a tool, show:
+
+- "Use these when you need help in the moment."
+- Both tool buttons visible and tappable immediately
+
+**Abandoned tool session:**
+
+If the user exits a tool flow before completing:
+
+- save all completed steps as a draft
+- on return to the same tool, offer: "You have an unfinished session from [date]. Resume or start new?"
+- if the user starts a new session, archive the draft but do not delete it
+
+### 17.5 Insights empty states [PRODUCT LAW / DEFAULT POLICY]
+
+**First-time Insights tab — zero entries:**
+
+Show:
+
+- the user's Communication Profile (always available after onboarding)
+- for all other insight modules, show: "Not enough data yet"
+- include a short explanation: "Insights are generated from your Coach and Tools entries over time. The more you use the app, the more patterns we can identify."
+- do not show empty cards, blank charts, or placeholder graphics
+
+**Insights tab — below threshold:**
+
+If the user has some entries but has not reached emerging-pattern thresholds:
+
+- show the Communication Profile
+- for each insight module below threshold, show entry count and what's needed: "You have [current count] entries. Your first pattern analysis will generate at 6."
+- if the entry count is met but distinct-days is not, show the re-engagement nudge (see Section 11.0.2)
+- do not show fake or aspirational insights to fill space
+- do not show a progress bar (implies a guaranteed reward at 100%)
+- a simple text status is sufficient
+
+**Insights tab — mixed state:**
+
+If some insight modules have reached threshold and others have not:
+
+- show the available insights normally
+- show "Not enough data yet" for the rest
+- do not hide modules that are not yet ready — the user should see what exists and what is building
+
+### 17.6 Person and thread empty states [PRODUCT LAW / DEFAULT POLICY]
+
+**Person with no linked entries:**
+
+If a Person exists but has zero linked entries (e.g., created during Prepare but never completed):
+
+- show the person's name and relationship
+- show: "No completed entries yet"
+- do not show Relationship Memory Lite or Derived Insights for this person
+
+**Thread with only a Prepare entry:**
+
+If a thread has only a Prepare and no subsequent Review, Repair, or Outcome:
+
+- show: "Prepare completed. How did the conversation go?" with a CTA to start Review
+- do not show thread status as "resolved" or "stabilizing" — it is "open"
+
+### 17.7 AI parser failure — user-visible handling [IMPLEMENTATION GUIDANCE]
+
+If AI parsing fails on a free-text field and the user is still in the flow:
+
+- do not surface the failure to the user during the flow
+- allow the flow to continue normally
+- store the raw text
+- attempt re-parsing in the background
+- if re-parsing also fails, flag the record for manual review by the insight engine (which should treat it as low-confidence)
+
+If AI parsing fails and the user has already completed the flow:
+
+- do not retroactively change what the user sees
+- mark the parsed fields as unavailable internally
+- the raw text remains available for future re-parsing
+
+### 17.8 Network and system error states [IMPLEMENTATION GUIDANCE]
+
+**Network failure during Coach or Tool flow:**
+
+- save all completed steps locally
+- show: "Connection lost. Your progress has been saved. We'll sync when you're back online."
+- on reconnection, sync silently and confirm: "Your [module] entry has been synced."
+
+**Network failure during AI output generation:**
+
+- show: "Could not generate feedback right now. Your entry has been saved."
+- retry automatically on reconnection
+- do not block the user from navigating away
+
+**Unexpected system error:**
+
+- show: "Something went wrong. Your data is safe. Please try again."
+- log the error with session context for debugging
+- never show raw error messages, stack traces, or technical details to the user
+
+## 18. Final v1 surfaced insight objects [PRODUCT LAW]
+
+These are the only Derived Insight Objects that should be surfaced in the v1 UI.
+
+### 18.1 Profile Display Object
+
+Shows:
+
+- primary profile
+- secondary profile if needed
+- short baseline explanation
+
+### 18.2 Recurring Blind Spot Summary
+
+Shows:
+
+- top repeated behavior pattern
+- short explanation
+- evidence-backed confidence state
+
+### 18.3 How You Tend to Land Summary
+
+Shows:
+
+- likely interpersonal-impact pattern
+- short under-stress shift
+- one practical implication
+
+### 18.4 Person / Relationship Memory Summary
+
+Shows:
+
+- person-specific summary
+- what tends to work
+- what tends to go wrong
+- repeated tension pattern if evidence exists
+
+## 19. What is delayed from literal v1 build scope [PRODUCT LAW]
+
+Keep the architecture shape, but do not require all future machinery now. See Section 24 for the full v1 scope summary.
+
+Delay from literal v1 implementation:
+
+- Repair (build after core loop is proven with Prepare and Review)
+- monthly report UI and engine
+- full contradiction-status system beyond basic counter-evidence support
+- elaborate regeneration workflows
+- heavy state machinery not required by first UI
+- extra objects that do not solve a clear v1 query or product need
+
+## 20. Governance rules [IMPLEMENTATION GUIDANCE]
+
+### 20.1 Taxonomy governance
+
+The observation taxonomy must be governed intentionally.
+
+There must be an explicit process for:
+
+- adding tags
+- renaming tags
+- deprecating tags
+
+V1 should keep this tightly controlled.
+
+### 20.2 Versioning
+
+V1 must support basic version fields:
+
+- schema_version
+- parser_version
+- extractor_version
+- generator_version
+- prompt_version
+
+Do not build a giant versioning platform unless real usage justifies it.
+
+## 21. Non-negotiable implementation rules [PRODUCT LAW]
+
+### 21.1 Do not overfit storage to the v1 UI
+
+Build for durable objects, not current cards.
+
+### 21.2 Do not store only summaries
+
+Always preserve source evidence.
+
+### 21.3 Do not let AI invent structure at runtime
+
+V1 requires controlled schemas and controlled pattern taxonomies.
+
+### 21.4 Do not ship polished but weak insights
+
+The product's credibility depends more on restraint than on cleverness.
+
+### 21.5 Do not confuse profile with trend
+
+Onboarding profile is a baseline orientation. Observed behavior trend is separate.
+
+### 21.6 Do not skip failure paths
+
+Every AI call must have a defined fallback. Silence is acceptable. Garbage is not.
+
+### 21.7 Do not show empty where designed states belong
+
+Every screen the user can reach must have an intentional state, even when there is no data to show.
+
+## 22. Build order [PRODUCT LAW]
+
+### 22.1 Principle
+
+Prove the core loop before building the engine. If nobody finishes a Prepare session and finds the AI output useful, nothing else matters.
+
+### 22.2 Phases
+
+**v0 — Prove the loop**
+
+- Onboarding (9-question Communication Profile)
+- Prepare (full flow with AI output)
+- Voice and text input on all free text fields (mic icon in text box)
+- Paywall
+
+This is the minimum testable product. A user can sign up, get their profile, prepare for a hard conversation, receive AI coaching feedback, and hit the paywall. If this loop does not work, nothing downstream matters.
+
+**v0.1 — I'm Overwhelmed**
+
+- Full Overwhelmed flow with before/after rating
+- Voice and text input on all free text fields
+
+Simpler than Coach modules, emotionally useful, gives users a reason to return between hard conversations.
+
+**v0.2 — Review**
+
+- Full Review flow with AI output
+- Outcome tracking (immediate interaction outcome)
+- Voice and text input on all free text fields
+
+Review produces the richest data for downstream insights. Getting it in early builds the evidence base.
+
+**v0.3 — I'm Triggered**
+
+- Full Trigger Log flow
+- Voice and text input on all free text fields
+
+**v0.4 — Storage and linking**
+
+- Person linking
+- Thread linking
+- Raw/parsed storage hardening
+- AI parsing and field normalization
+
+**v0.5 — Basic Insights**
+
+- Profile display in Insights tab
+- One simple recurring blind spot surface (emerging only)
+- Empty states for all insight modules not yet active
+
+**Later**
+
+- Repair
+- Richer Insights (established patterns, how you tend to land, person-specific)
+- Outcome tracking (repair outcome, thread resolution)
+- Monthly reports engine
+
+### 22.3 Voice and text from day one
+
+Voice and text input must both be available on every free text field from v0 onward. This is not a later addition. Every phase that includes a free text field must ship with a microphone icon inside the text input box — both input modes visible in the same component, no separate screens or menus.
+
+## 23. Acceptance criteria [PRODUCT LAW]
+
+### 23.1 Voice input acceptance criteria
+
+These are pass/fail requirements. A module is not shippable until these are met.
+
+**Transcription usability [PRODUCT LAW]**
+
+- User can edit transcript before submitting
+- Fallback to text input works with no dead end or error modal
+- Microphone icon is visible inside every free text field
+- Voice and text are both accessible in the same input component
+
+**Transcription performance [DEFAULT POLICY]**
+
+- 90%+ of test utterances produce visible transcription in under 2 seconds
+
+These targets are starting points. Adjust after real-device testing.
+
+**Parsing quality [DEFAULT POLICY]**
+
+- On a fixed test set of 20–30 real emotional voice examples, the parser correctly extracts the required structured field in at least:
+    - 80% of clean inputs
+    - 75% of fragmented emotional inputs
+
+These accuracy bars are starting targets. The product law is that the parser must be reliable enough that users trust it with emotional content. The exact percentages will shift after testing.
+
+**Parsing rules [PRODUCT LAW]**
+
+- When unsure, the parser preserves raw text and marks ambiguity instead of guessing
+- A failed parse never blocks record creation
+
+**Failure handling [PRODUCT LAW]**
+
+- If speech-to-text fails, the user can still complete the flow via text
+- If parsing fails, the record is still saved with raw text
+- No case where voice failure blocks submission or loses user input
+
+### 23.2 Empty state acceptance criteria
+
+Empty states are part of module completion, not a separate task. A module is not done until its empty states are implemented.
+
+**Every reachable screen has a defined zero-data state**
+
+- Coach first-use state
+- Tools first-use state
+- Insights zero-data state
+- Person with no entries
+- Thread with only a Prepare
+
+These behaviors are defined in Section 17. They are mandatory for shipping, not optional polish.
+
+**No blank containers**
+
+- No empty charts
+- No blank cards
+- No invisible modules
+- No fake insight filler
+
+**Progress-preserving failure states**
+
+- Network loss preserves draft
+- AI delay never traps the user on a loading screen
+- AI failure never wipes previous valid output
+
+### 23.3 AI output acceptance criteria
+
+**Structured output**
+
+- All Coach outputs (Prepare, Review, Repair) return structured JSON with fixed keys
+- Free-form prose is not acceptable as the primary response format
+
+**Retries**
+
+- If AI returns invalid output, retry up to 2 times before falling back to failure message
+- Failure message is defined per module in Section 16.5
+
+**Banned phrase filter**
+
+- Before displaying any AI output, check against the banned phrasing list (Section 15.3)
+- Any output containing banned phrasing is rejected and retried
+
+**Taxonomy validation**
+
+- Pattern tags must come from the approved taxonomy (Section 7.6)
+- Unknown or invented tags are rejected
+
+## 24. V1 scope summary [PRODUCT LAW]
+
+### 24.1 Build now
+
+- Onboarding with 9-question Communication Profile
+- Prepare with AI output
+- I'm Overwhelmed
+- Review with AI output and immediate outcome tracking
+- I'm Triggered
+- Person and thread linking
+- Raw/parsed storage with voice input mode tracking
+- Basic Insights (Profile + one emerging blind spot surface)
+- Paywall
+- Voice and text input on all free text fields (mic icon in text box)
+- Structured AI outputs with retries and banned-phrase filtering
+- Defined empty states for every reachable screen
+- Voice parsing test set (20–30 examples)
+
+### 24.2 Do not build now
+
+- Repair (delay until core loop is proven)
+- Monthly report UI and engine
+- Full contradiction-status system beyond basic counter-evidence support
+- Elaborate regeneration workflows
+- Heavy state machinery not required by first UI
+- Extra canonical objects that do not solve a clear v1 query
+- Complex versioning platform
+- Cross-relationship comparison dashboards
+- Heavy trend storytelling or profile evolution visuals
