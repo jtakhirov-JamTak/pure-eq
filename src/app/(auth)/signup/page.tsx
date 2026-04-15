@@ -30,9 +30,14 @@ export default function SignupPage() {
 
     if (error) {
       // Supabase returns "User already registered" (or a near variant) when
-      // the email exists. Offer a clean path to login without losing the
-      // pending quiz answers sitting in sessionStorage.
-      if (/already\s+registered/i.test(error.message)) {
+      // the email exists. Match both the HTTP status code (primary, stable)
+      // and the English message (fallback) so localization or minor wording
+      // changes don't silently break the graceful path.
+      const looksAlreadyRegistered =
+        error.status === 422 ||
+        /already\s+(registered|exists|in use)/i.test(error.message) ||
+        /user\s+exists/i.test(error.message);
+      if (looksAlreadyRegistered) {
         setAlreadyRegistered(true);
       } else {
         setError(error.message);
@@ -61,10 +66,12 @@ export default function SignupPage() {
             <input
               id="email"
               type="email"
+              inputMode="email"
+              autoComplete="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1 block h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="mt-1 block h-12 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               placeholder="you@example.com"
             />
           </div>
@@ -76,11 +83,12 @@ export default function SignupPage() {
             <input
               id="password"
               type="password"
+              autoComplete="new-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="mt-1 block h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="mt-1 block h-12 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
               placeholder="••••••••"
             />
           </div>
@@ -90,19 +98,24 @@ export default function SignupPage() {
           )}
 
           {alreadyRegistered && (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-              You already have an account with this email.{" "}
-              <Link href="/login" className="font-medium underline">
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm text-amber-900">
+                You already have an account with this email. Your quiz answers
+                will be saved automatically after you sign in.
+              </p>
+              <Link
+                href="/login"
+                className="flex h-11 w-full items-center justify-center rounded-lg bg-amber-900 text-sm font-medium text-white transition-colors hover:bg-amber-950 active:bg-amber-950"
+              >
                 Log in instead
-              </Link>{" "}
-              — your quiz answers will be saved automatically after you sign in.
+              </Link>
             </div>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white transition-colors hover:bg-zinc-800 disabled:opacity-50"
+            className="flex h-12 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white transition-colors hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-50"
           >
             {loading ? "Creating account..." : "Get started"}
           </button>

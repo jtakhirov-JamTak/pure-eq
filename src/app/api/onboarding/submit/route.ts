@@ -9,6 +9,7 @@ import {
   scoreProfile,
   type QuizOption,
 } from "@/lib/onboarding";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -39,17 +40,46 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // 3. Re-score server-side. Client-computed values are display-only; the
+  // 3. Rate limit per user. 5 submissions per minute is generous for a
+  //    legitimate flow (one retry + some testing) and blocks accidental
+  //    loops / hostile spamming.
+  const rl = rateLimit(`onboarding:${user.id}`, {
+    limit: 5,
+    windowMs: 60_000,
+  });
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many requests" },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+        },
+      }
+    );
+  }
+
+  // 4. Re-score server-side. Client-computed values are display-only; the
   //    DB row is always derived from the raw answers we just received.
+  //    submitQuizSchema already enforces exactly one answer per index 0-8.
   const orderedAnswers: (QuizOption | null)[] = new Array(9).fill(null);
   for (const a of parsed.data.answers) {
     orderedAnswers[a.questionIndex] = a.selectedOption;
   }
-  const result = scoreProfile(orderedAnswers);
+
+  let result;
+  try {
+    result = scoreProfile(orderedAnswers);
+  } catch {
+    return NextResponse.json(
+      { error: "Quiz answers could not be scored" },
+      { status: 400 }
+    );
+  }
   const naturalModule = computeNaturalModule(result.improvementGoal);
   const now = new Date().toISOString();
 
-  // 4. Build raw_records payload. Snapshot question text so future wording
+  // 5. Build raw_records payload. Snapshot question text so future wording
   //    changes don't corrupt historical records (§21.2 "preserve source").
   const payload = {
     answers: parsed.data.answers.map((a) => ({
@@ -72,15 +102,18 @@ export async function POST(req: Request) {
     },
   };
 
-  // 5. Source of truth first (raw_records), then the derived summary
-  //    (user_profiles). If the summary insert fails we still have the
-  //    source row and can re-derive later.
+  // 6. Source of truth first (raw_records), then the derived summary
+  //    (user_profiles). If the summary insert fails we delete the orphan
+  //    raw_record so retries don't pile up. A Postgres RPC would be more
+  //    elegant, but cleanup-on-failure is sufficient for v0.
   const { data: rawInserted, error: rawErr } = await supabase
     .from("raw_records")
     .insert({
       user_id: user.id,
       record_type: "onboarding_profile",
       module_type: "onboarding",
+      // Server-generated session id. Not client-correlated in v0 — if we
+      // ever need cross-device correlation we'll pipe this from the client.
       source_session_id: crypto.randomUUID(),
       payload_json: payload,
       schema_version: 1,
@@ -114,6 +147,13 @@ export async function POST(req: Request) {
 
   if (profileErr) {
     console.error("onboarding: user_profiles insert failed", profileErr.code);
+    // Cleanup orphan raw_record so retries start clean. Failure to delete
+    // here is acceptable: the next successful attempt will just add another
+    // raw row, which is append-only by design anyway.
+    await supabase
+      .from("raw_records")
+      .delete()
+      .eq("raw_record_id", rawInserted.raw_record_id);
     return NextResponse.json(
       { error: "Could not save profile snapshot" },
       { status: 500 }

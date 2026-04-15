@@ -3,13 +3,24 @@ import { z } from "zod";
 
 // Onboarding
 export const quizAnswerSchema = z.object({
-  questionIndex: z.number().min(0).max(8),
+  questionIndex: z.number().int().min(0).max(8),
   selectedOption: z.enum(["A", "B", "C", "D", "E"]),
 });
 
-export const submitQuizSchema = z.object({
-  answers: z.array(quizAnswerSchema).length(9),
-});
+export const submitQuizSchema = z
+  .object({
+    answers: z.array(quizAnswerSchema).length(9),
+  })
+  .refine(
+    (data) => {
+      const indices = data.answers.map((a) => a.questionIndex);
+      const unique = new Set(indices);
+      if (unique.size !== 9) return false;
+      for (let i = 0; i < 9; i++) if (!unique.has(i)) return false;
+      return true;
+    },
+    { message: "answers must cover each questionIndex 0-8 exactly once" }
+  );
 
 // Coach — Prepare
 export const createPrepareSchema = z.object({

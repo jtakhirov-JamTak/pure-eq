@@ -356,6 +356,90 @@ Validated against Pure EQ v0 voice parsing with Claude Sonnet 4.5: the
 and vague speech samples. Model refused to exceed 0.7 on any genuinely
 ambiguous input — confidence calibration was honest.
 
+### Content versioning via payload snapshot
+
+When you persist a derived entity that was produced from versioned source
+content (quiz questions, prompt templates, scoring rules), store a snapshot
+of the source content alongside the entity — don't assume you can look it
+up later. Content evolves. Users who onboarded under v1 questions should
+still be resolvable even after the questions are rewritten in v2.
+
+The pattern in practice:
+
+    await supabase.from("raw_records").insert({
+      user_id,
+      record_type: "onboarding_profile",
+      payload_json: {
+        answers: [...],                       // what the user chose
+        question_snapshot: QUESTIONS.map(     // what they were asked,
+          q => ({ text, options, mapping })   // frozen at insert time
+        ),
+        derived: {                            // what was computed from it
+          primary_profile, secondary_profile, scores, ...
+        }
+      }
+    });
+
+Why it matters:
+
+- Historical analytics remain correct after content edits. "What % of
+  Reflective users in Q1 chose answer B on Q5" is still answerable
+  a year later even if Q5 was rewritten in Q3.
+- Re-scoring or re-derivation is always possible without reconstructing
+  version history. Given the snapshot, you can replay any scoring
+  algorithm against any old row.
+- Debugging and support: a user who says "my profile changed" can be
+  diffed against their raw snapshot to confirm whether the input
+  changed, the algorithm changed, or both.
+
+Tradeoff: payload size grows with every insert. Acceptable when entries
+are bounded (e.g., onboarding happens once or a handful of times per
+user). For high-frequency entries, version the content separately and
+store just `content_version: "v1"` in the payload — but keep the full
+snapshot on low-volume rows.
+
+### Layer 1 raw + Layer 2 derived: rebuild-from-source rule
+
+Adopt this architectural rule for any app handling meaningful user-
+generated content: Layer 1 (raw records) is append-only source of
+truth, Layer 2 (derived summaries, typed tables, aggregations) is a
+cache that can always be rebuilt from Layer 1.
+
+Concretely:
+
+1. **Every user-entered event writes a raw_record first**, with full
+   payload, before any derived row is written. The raw_record is the
+   canonical evidence; the derived row is ergonomics.
+2. **Derived tables never hold facts the raw_record lacks.** If you
+   want a new column on the derived table, you must be able to
+   compute it from the raw_record retroactively.
+3. **Insert order is raw → derived.** On derived insert failure,
+   delete the just-written raw row (or accept orphan and retry idem-
+   potently) so retries start from a clean state.
+4. **Rebuilding is a first-class operation.** At any point, a dev
+   should be able to run "drop and rebuild user_profiles from
+   raw_records" as a single script. If that's not possible, a fact
+   has leaked into the derived table and Layer 1 is no longer a full
+   source of truth.
+
+Why this matters:
+
+- Schema evolution becomes safe. You can add, remove, or change
+  columns on derived tables without data loss because Layer 1 is
+  intact.
+- Bug recovery becomes tractable. A scoring bug that corrupts
+  derived rows can be rolled back by re-deriving from raw_records.
+- Analytics and ML use the same source. There's no "production
+  table" vs. "analytics copy" drift because both read from Layer 1.
+
+Anti-patterns this rule forbids:
+
+- Updating a derived row in place without also updating raw_records.
+  (If the user's profile changes, it should be because a new raw
+  record was added, not because the old derivation was mutated.)
+- Storing "derived only" facts like "last_seen_at" on user_profiles
+  when they could live in raw_records as session events.
+
 ---
 
 ## 10. Testing

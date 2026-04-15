@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/supabase/server";
 import { createPrepareSchema } from "@/lib/validation";
@@ -9,8 +10,9 @@ const MAX_RETRIES = 2;
 
 export async function POST(request: Request) {
   try {
-    // Auth check
-    const user = await getAuthUser();
+    // Auth check — user.id will be needed in step 4 to persist the raw record
+    // and look up the real user_profile. For now, just gate the endpoint.
+    await getAuthUser();
 
     // Validate input
     const body = await request.json();

@@ -154,6 +154,9 @@ export function clampToEnabledModule(natural: RecommendedModule): RecommendedMod
 // Tie-break: Q8 → Q7 → Q6 → Q5 → Q4 (per §3).
 export const SCORING_VERSION = 1;
 
+// Shared by client (result screen) and server (API route). Same module
+// import on both sides so drift is impossible at runtime — if you find
+// yourself duplicating this logic, stop and reuse the shared function.
 export function scoreProfile(answers: (QuizOption | null)[]): ProfileResult {
   const scores: Record<ProfileType, number> = {
     direct: 0,
@@ -164,14 +167,23 @@ export function scoreProfile(answers: (QuizOption | null)[]): ProfileResult {
     intense: 0,
   };
 
+  let pointsScored = 0;
   for (let i = 0; i < 8; i++) {
     const answer = answers[i];
     if (!answer) continue;
     const q = QUESTIONS[i];
     if (!q.mapping) continue;
     scores[q.mapping[answer]] += 2;
+    pointsScored += 2;
     const sec = q.secondary?.[answer];
-    if (sec) scores[sec.profile] += sec.points;
+    if (sec) {
+      scores[sec.profile] += sec.points;
+      pointsScored += sec.points;
+    }
+  }
+
+  if (pointsScored === 0) {
+    throw new Error("scoreProfile: no scorable answers in questions 1-8");
   }
 
   const sorted = (Object.entries(scores) as [ProfileType, number][]).sort(
@@ -179,7 +191,6 @@ export function scoreProfile(answers: (QuizOption | null)[]): ProfileResult {
   );
 
   let primary = sorted[0][0];
-  const secondary = sorted[1][1] > 0 ? sorted[1][0] : null;
 
   // Tie-break on primary using later questions in reverse order.
   if (sorted[0][1] === sorted[1][1]) {
@@ -196,6 +207,11 @@ export function scoreProfile(answers: (QuizOption | null)[]): ProfileResult {
       }
     }
   }
+
+  // Secondary must be computed AFTER tie-break, excluding the final primary,
+  // otherwise a tie-swap can leave secondary == primary.
+  const secondary =
+    sorted.find(([p, s]) => p !== primary && s > 0)?.[0] ?? null;
 
   const q9Answer = answers[8];
   const improvementGoal: ImprovementGoal = q9Answer

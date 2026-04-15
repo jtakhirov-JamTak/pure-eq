@@ -1,9 +1,11 @@
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 
 // Dev-only smoke test page. Proves the full chain:
 // browser → middleware cookies → server client → auth → RLS-scoped query.
-// Delete this route once Coach tab ships.
+// Production builds 404 this route unconditionally (see notFound() below)
+// so the debug surface never leaks to real users. Delete this route
+// once the real Coach tab is stable and the smoke test is no longer useful.
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +17,8 @@ async function signOut() {
 }
 
 export default async function WhoAmIPage() {
+  if (process.env.NODE_ENV === "production") notFound();
+
   const supabase = await createClient();
 
   const {
