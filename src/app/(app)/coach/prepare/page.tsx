@@ -74,29 +74,36 @@ const STEPS = [
   },
 ];
 
+type AiOutput = {
+  likely_blind_spot: string;
+  reality_check_question: string;
+  thing_not_to_do: string;
+  user_read_accuracy: string;
+  what_user_may_be_missing: string;
+  best_next_move: string;
+};
+
 export default function PreparePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<Record<string, string>>({});
-  const [inputModes, setInputModes] = useState<
-    Record<string, "voice" | "text">
-  >({});
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
-  const [aiOutput, setAiOutput] = useState<Record<string, string> | null>(null);
+  const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
   const submitRef = useRef(false);
+  // Same idempotency key for every retry of this submission, so the server
+  // reuses rows instead of duplicating them. Reset on navigate-away.
+  const idempotencyKeyRef = useRef<string>("");
+  if (!idempotencyKeyRef.current) {
+    idempotencyKeyRef.current = crypto.randomUUID();
+  }
 
   const currentStep = STEPS[step];
   const value = data[currentStep.key] || "";
 
-  function setFieldValue(key: string, next: string, mode: "voice" | "text") {
+  function setFieldValue(key: string, next: string) {
     setData((d) => ({ ...d, [key]: next }));
-    setInputModes((m) => {
-      if (mode === "voice") return { ...m, [key]: "voice" };
-      if (m[key] === "voice") return m;
-      return { ...m, [key]: "text" };
-    });
   }
 
   function handleNext() {
@@ -117,7 +124,10 @@ export default function PreparePage() {
       const res = await fetch("/api/coach/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, inputModes }),
+        body: JSON.stringify({
+          ...data,
+          idempotencyKey: idempotencyKeyRef.current,
+        }),
       });
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
@@ -128,7 +138,7 @@ export default function PreparePage() {
       } else {
         setSavedMessage(
           result.message ??
-            "Your entry is saved, but coaching feedback wasn't available this time."
+            "Your entry is saved. Coaching feedback wasn't available this time."
         );
       }
     } catch (err) {
@@ -136,16 +146,21 @@ export default function PreparePage() {
       setSubmitError(
         "Could not save. Check your connection and try again."
       );
-      submitRef.current = false;
     } finally {
       setSubmitting(false);
+      submitRef.current = false;
     }
+  }
+
+  function retryCoaching() {
+    setSavedMessage(null);
+    handleSubmit();
   }
 
   // AI output screen
   if (aiOutput) {
     return (
-      <div className="px-5 pt-8">
+      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <h2 className="text-xl font-bold text-zinc-900">Your Prepare Feedback</h2>
         <div className="mt-6 space-y-5">
           {[
@@ -160,15 +175,15 @@ export default function PreparePage() {
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
                 {label}
               </p>
-              <p className="mt-1 text-sm text-zinc-800">
-                {aiOutput[key] || "—"}
+              <p className="mt-1 text-base text-zinc-800">
+                {aiOutput[key as keyof AiOutput] || "—"}
               </p>
             </div>
           ))}
         </div>
         <button
           onClick={() => router.push("/coach")}
-          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white"
+          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
         >
           Done
         </button>
@@ -179,14 +194,20 @@ export default function PreparePage() {
   // Saved but no AI feedback screen
   if (savedMessage) {
     return (
-      <div className="px-5 pt-8">
+      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
         <p className="mt-4 text-base text-zinc-700">{savedMessage}</p>
         <button
-          onClick={() => router.push("/coach")}
-          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white"
+          onClick={retryCoaching}
+          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
         >
-          Done
+          Try again for coaching feedback
+        </button>
+        <button
+          onClick={() => router.push("/coach")}
+          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+        >
+          Back to Coach
         </button>
       </div>
     );
@@ -208,7 +229,7 @@ export default function PreparePage() {
 
   // Step form
   return (
-    <div className="px-5 pt-8">
+    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
       {/* Progress */}
       <div className="flex items-center gap-1">
         {STEPS.map((_, i) => (
@@ -235,15 +256,15 @@ export default function PreparePage() {
       {/* Input */}
       <div className="mt-4">
         {currentStep.type === "select" ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {RELATIONSHIPS.map((rel) => (
               <button
                 key={rel.value}
                 onClick={() => {
-                  setData({ ...data, [currentStep.key]: rel.value });
+                  setFieldValue(currentStep.key, rel.value);
                   setStep(step + 1);
                 }}
-                className={`flex h-11 w-full items-center rounded-lg border px-4 text-sm transition-colors ${
+                className={`flex h-11 w-full items-center rounded-lg border px-4 text-base transition-colors ${
                   value === rel.value
                     ? "border-zinc-900 bg-zinc-50 text-zinc-900"
                     : "border-zinc-200 text-zinc-700 hover:border-zinc-300"
@@ -256,8 +277,7 @@ export default function PreparePage() {
         ) : currentStep.type === "textarea" ? (
           <VoiceInput
             value={value}
-            onChange={(next, mode) => setFieldValue(currentStep.key, next, mode)}
-            fieldName={currentStep.key}
+            onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}
             placeholder="Type or tap the mic to speak..."
           />
@@ -265,9 +285,7 @@ export default function PreparePage() {
           <input
             type="text"
             value={value}
-            onChange={(e) =>
-              setFieldValue(currentStep.key, e.target.value, "text")
-            }
+            onChange={(e) => setFieldValue(currentStep.key, e.target.value)}
             className="block h-11 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
             placeholder="Enter name..."
           />
@@ -282,7 +300,7 @@ export default function PreparePage() {
         {step > 0 && (
           <button
             onClick={() => setStep(step - 1)}
-            className="flex h-11 flex-1 items-center justify-center rounded-lg border border-zinc-200 text-sm font-medium text-zinc-700"
+            className="flex h-11 flex-1 items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
           >
             Back
           </button>
@@ -291,7 +309,7 @@ export default function PreparePage() {
           <button
             onClick={handleNext}
             disabled={!value.trim()}
-            className="flex h-11 flex-1 items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white disabled:opacity-40"
+            className="flex h-11 flex-1 items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white disabled:opacity-40"
           >
             {step === STEPS.length - 1 ? "Get Feedback" : "Next"}
           </button>

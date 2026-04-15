@@ -2,12 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type InputMode = "voice" | "text";
-
 type Props = {
   value: string;
-  onChange: (next: string, mode: InputMode) => void;
-  fieldName: string;
+  onChange: (next: string) => void;
   placeholder?: string;
   rows?: number;
   disabled?: boolean;
@@ -27,7 +24,11 @@ function pickMimeType(): string | undefined {
     return undefined;
   }
   for (const t of CODEC_PREFERENCE) {
-    if (MediaRecorder.isTypeSupported(t)) return t;
+    try {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    } catch {
+      // Some browsers throw on unknown mime types.
+    }
   }
   return undefined;
 }
@@ -35,7 +36,6 @@ function pickMimeType(): string | undefined {
 export function VoiceInput({
   value,
   onChange,
-  fieldName,
   placeholder,
   rows = 4,
   disabled,
@@ -46,24 +46,57 @@ export function VoiceInput({
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const usedVoiceRef = useRef(false);
+  const mountedRef = useRef(true);
+
+  // Fresh value + onChange refs so async callbacks never close over stale state.
+  // Without these, a transcript returning after the parent re-renders would
+  // overwrite whatever the user typed in the meantime.
+  const valueRef = useRef(value);
+  const onChangeRef = useRef(onChange);
+  valueRef.current = value;
+  onChangeRef.current = onChange;
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       streamRef.current?.getTracks().forEach((t) => t.stop());
       abortRef.current?.abort();
+      const r = recorderRef.current;
+      if (r && r.state !== "inactive") {
+        try {
+          r.stop();
+        } catch {
+          // ignore
+        }
+      }
     };
   }, []);
 
+  function safeSetStatus(next: Status) {
+    if (mountedRef.current) setStatus(next);
+  }
+  function safeSetError(next: string | null) {
+    if (mountedRef.current) setError(next);
+  }
+
   async function startRecording() {
-    setError(null);
+    safeSetError(null);
+    const mimeType = pickMimeType();
+    if (!mimeType) {
+      safeSetStatus("error");
+      safeSetError("Voice input isn't supported in this browser. Please type instead.");
+      return;
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mimeType = pickMimeType();
-      const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType });
+      } catch {
+        recorder = new MediaRecorder(stream);
+      }
       recorderRef.current = recorder;
       chunksRef.current = [];
 
@@ -79,19 +112,26 @@ export function VoiceInput({
       };
 
       recorder.start();
-      setStatus("recording");
+      safeSetStatus("recording");
     } catch (err) {
       console.error("mic access failed", (err as Error)?.name);
-      setStatus("error");
-      setError("Microphone blocked. Enable mic access in your browser settings.");
+      safeSetStatus("error");
+      safeSetError(
+        "Microphone blocked. Enable mic access in your browser settings."
+      );
     }
   }
 
   function stopRecording() {
     const r = recorderRef.current;
     if (r && r.state !== "inactive") {
-      setStatus("transcribing");
-      r.stop();
+      safeSetStatus("transcribing");
+      try {
+        r.stop();
+      } catch {
+        safeSetStatus("error");
+        safeSetError("Recording ended unexpectedly. Try again.");
+      }
     }
   }
 
@@ -101,7 +141,6 @@ export function VoiceInput({
     try {
       const fd = new FormData();
       fd.append("audio", blob, "audio");
-      fd.append("fieldName", fieldName);
 
       const res = await fetch("/api/transcribe", {
         method: "POST",
@@ -113,18 +152,22 @@ export function VoiceInput({
       }
       const data: { text?: string } = await res.json();
       const text = (data.text ?? "").trim();
+      if (!mountedRef.current) return;
       if (!text) {
-        setStatus("idle");
+        safeSetStatus("idle");
         return;
       }
-      usedVoiceRef.current = true;
-      const next = value.trim() ? `${value.trim()} ${text}` : text;
-      onChange(next, "voice");
-      setStatus("idle");
+      // Read value via ref so we append to whatever the user has typed
+      // since we started recording, not the captured render-time value.
+      const current = valueRef.current.trim();
+      const next = current ? `${current} ${text}` : text;
+      onChangeRef.current(next);
+      safeSetStatus("idle");
     } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
       console.error("transcribe request failed", (err as Error)?.message);
-      setStatus("error");
-      setError("Couldn't transcribe. Try again or type it.");
+      safeSetStatus("error");
+      safeSetError("Couldn't transcribe. Try again or type it.");
     }
   }
 
@@ -141,54 +184,57 @@ export function VoiceInput({
   const transcribing = status === "transcribing";
 
   return (
-    <div className="relative">
-      <textarea
-        value={value}
-        onChange={(e) =>
-          onChange(e.target.value, usedVoiceRef.current ? "voice" : "text")
-        }
-        rows={rows}
-        disabled={disabled}
-        className="block w-full rounded-lg border border-zinc-300 p-3 pr-14 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-60"
-        placeholder={placeholder}
-      />
-      <button
-        type="button"
-        onClick={handleMicClick}
-        disabled={disabled || transcribing}
-        aria-label={recording ? "Stop recording" : "Start voice input"}
-        className={`absolute bottom-3 right-3 flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
-          recording
-            ? "bg-red-500 text-white"
-            : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-        } disabled:opacity-50`}
-      >
-        {transcribing ? (
-          <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
-        ) : recording ? (
-          <span className="h-3 w-3 rounded-sm bg-white" />
-        ) : (
-          <svg
-            className="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={2}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-            <line x1="12" y1="19" x2="12" y2="23" />
-            <line x1="8" y1="23" x2="16" y2="23" />
-          </svg>
-        )}
-      </button>
-      {error && (
-        <p className="mt-2 text-xs text-red-600">{error}</p>
-      )}
+    <div>
+      <div className="relative">
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={rows}
+          disabled={disabled}
+          // pb-14 reserves vertical room so the mic button never overlaps
+          // the last line of text when the textarea fills up.
+          className="block w-full rounded-lg border border-zinc-300 p-3 pb-14 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500 disabled:opacity-60"
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          onClick={handleMicClick}
+          disabled={disabled || transcribing}
+          aria-label={recording ? "Stop recording" : "Start voice input"}
+          className={`absolute bottom-2 right-2 flex h-11 w-11 items-center justify-center rounded-full transition-colors ${
+            recording
+              ? "bg-red-500 text-white"
+              : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+          } disabled:opacity-50`}
+        >
+          {transcribing ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+          ) : recording ? (
+            <span className="h-3 w-3 rounded-sm bg-white" />
+          ) : (
+            <svg
+              className="h-5 w-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          )}
+        </button>
+      </div>
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
       {recording && !error && (
-        <p className="mt-2 text-xs text-zinc-500">Recording… tap to stop.</p>
+        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-red-600">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
+          Recording… tap to stop.
+        </p>
       )}
     </div>
   );
