@@ -45,11 +45,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // If authenticated and trying to access login/signup → redirect to coach
-  // TEMP: routing to /dev/whoami until the real Coach tab ships (v0 step 4).
+  // If authenticated and trying to access login/signup → route through
+  // /onboarding, which acts as the v0 routing hub (flushes pending quiz
+  // answers, forwards returning users to their starting module, or shows
+  // the quiz if their profile isn't saved yet).
   if (user && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/dev/whoami";
+    url.pathname = "/onboarding";
     return NextResponse.redirect(url);
   }
 

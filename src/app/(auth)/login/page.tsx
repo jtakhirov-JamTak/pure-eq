@@ -29,7 +29,10 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/dev/whoami");
+    // /onboarding is the routing hub: it flushes any pending quiz answers,
+    // forwards users who already have a profile to their starting module,
+    // and falls through to the quiz for partially-onboarded accounts.
+    router.push("/onboarding");
     router.refresh();
   }
 

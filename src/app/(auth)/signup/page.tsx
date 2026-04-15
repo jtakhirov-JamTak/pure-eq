@@ -9,12 +9,14 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setAlreadyRegistered(false);
     setLoading(true);
 
     const supabase = createClient();
@@ -27,7 +29,14 @@ export default function SignupPage() {
     });
 
     if (error) {
-      setError(error.message);
+      // Supabase returns "User already registered" (or a near variant) when
+      // the email exists. Offer a clean path to login without losing the
+      // pending quiz answers sitting in sessionStorage.
+      if (/already\s+registered/i.test(error.message)) {
+        setAlreadyRegistered(true);
+      } else {
+        setError(error.message);
+      }
       setLoading(false);
       return;
     }
@@ -78,6 +87,16 @@ export default function SignupPage() {
 
           {error && (
             <p className="text-sm text-red-600">{error}</p>
+          )}
+
+          {alreadyRegistered && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              You already have an account with this email.{" "}
+              <Link href="/login" className="font-medium underline">
+                Log in instead
+              </Link>{" "}
+              — your quiz answers will be saved automatically after you sign in.
+            </div>
           )}
 
           <button
