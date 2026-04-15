@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 import type { ProfileType, ProfileResult, ImprovementGoal } from "@/types";
 
 export type QuizOption = "A" | "B" | "C" | "D" | "E";

@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 "use client";
 
 import { useEffect, useState } from "react";

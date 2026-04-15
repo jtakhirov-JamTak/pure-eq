@@ -1,3 +1,4 @@
+-- Pure EQ domain — replace in fork.
 -- Pure EQ v0 — Layer 2D (relationship_memories), Layer 3 (pattern_observations),
 -- Layer 4 (derived_insights). Tag taxonomy is CLOSED v1 — enforced via CHECK.
 -- RLS: every table scoped by auth.uid() = user_id.

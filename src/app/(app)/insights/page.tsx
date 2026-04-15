@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 export default function InsightsPage() {
   // TODO: Fetch user profile from Supabase
   // For now, show the empty state per product spec Section 17.5

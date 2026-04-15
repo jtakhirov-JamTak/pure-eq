@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 import { z } from "zod";
 
 // Onboarding

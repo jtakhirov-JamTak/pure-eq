@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 // Communication Profile types
 export type ProfileType =
   | "direct"

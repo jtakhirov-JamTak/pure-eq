@@ -1,3 +1,4 @@
+-- Pure EQ domain — replace in fork.
 -- Pure EQ v0 — Module entry tables (Prepare / Overwhelmed / Trigger)
 -- Each row links back to raw_records (Layer 1) as source of truth.
 -- RLS: every table scoped by auth.uid() = user_id.

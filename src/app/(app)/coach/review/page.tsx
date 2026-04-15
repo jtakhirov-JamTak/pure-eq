@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 export default function ReviewPage() {
   return (
     <div className="px-5 pt-8">

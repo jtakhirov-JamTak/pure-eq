@@ -1,3 +1,4 @@
+-- Pure EQ domain — replace in fork.
 -- Pure EQ v0 — Layer 1 (raw_records) + Layer 2 (canonical objects)
 -- RLS: every table scoped by auth.uid() = user_id
 

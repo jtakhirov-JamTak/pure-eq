@@ -1,3 +1,4 @@
+// Pure EQ domain — replace in fork.
 import Link from "next/link";
 
 export default function CoachPage() {
