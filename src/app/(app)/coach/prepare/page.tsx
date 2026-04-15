@@ -1,8 +1,9 @@
 // Pure EQ domain — replace in fork.
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { VoiceInput } from "@/components/voice-input";
 import type { RelationshipDomain } from "@/types";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
@@ -77,11 +78,26 @@ export default function PreparePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<Record<string, string>>({});
+  const [inputModes, setInputModes] = useState<
+    Record<string, "voice" | "text">
+  >({});
   const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<Record<string, string> | null>(null);
+  const submitRef = useRef(false);
 
   const currentStep = STEPS[step];
   const value = data[currentStep.key] || "";
+
+  function setFieldValue(key: string, next: string, mode: "voice" | "text") {
+    setData((d) => ({ ...d, [key]: next }));
+    setInputModes((m) => {
+      if (mode === "voice") return { ...m, [key]: "voice" };
+      if (m[key] === "voice") return m;
+      return { ...m, [key]: "text" };
+    });
+  }
 
   function handleNext() {
     if (!value.trim()) return;
@@ -93,19 +109,34 @@ export default function PreparePage() {
   }
 
   async function handleSubmit() {
+    if (submitRef.current) return;
+    submitRef.current = true;
     setSubmitting(true);
+    setSubmitError(null);
     try {
       const res = await fetch("/api/coach/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        body: JSON.stringify({ ...data, inputModes }),
       });
-      if (res.ok) {
-        const result = await res.json();
-        setAiOutput(result.aiOutput);
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`);
       }
-    } catch {
-      // Fallback — entry saved even if AI fails
+      const result = await res.json();
+      if (result.aiOutput) {
+        setAiOutput(result.aiOutput);
+      } else {
+        setSavedMessage(
+          result.message ??
+            "Your entry is saved, but coaching feedback wasn't available this time."
+        );
+      }
+    } catch (err) {
+      console.error("prepare submit failed", (err as Error)?.message);
+      setSubmitError(
+        "Could not save. Check your connection and try again."
+      );
+      submitRef.current = false;
     } finally {
       setSubmitting(false);
     }
@@ -135,6 +166,22 @@ export default function PreparePage() {
             </div>
           ))}
         </div>
+        <button
+          onClick={() => router.push("/coach")}
+          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white"
+        >
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  // Saved but no AI feedback screen
+  if (savedMessage) {
+    return (
+      <div className="px-5 pt-8">
+        <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
+        <p className="mt-4 text-base text-zinc-700">{savedMessage}</p>
         <button
           onClick={() => router.push("/coach")}
           className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-sm font-medium text-white"
@@ -207,41 +254,28 @@ export default function PreparePage() {
             ))}
           </div>
         ) : currentStep.type === "textarea" ? (
-          <div className="relative">
-            <textarea
-              value={value}
-              onChange={(e) =>
-                setData({ ...data, [currentStep.key]: e.target.value })
-              }
-              rows={4}
-              className="block w-full rounded-lg border border-zinc-300 p-3 pr-12 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-              placeholder="Type or tap the mic to speak..."
-            />
-            {/* Mic icon — voice input placeholder */}
-            <button
-              className="absolute bottom-3 right-3 flex h-8 w-8 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 hover:bg-zinc-200"
-              title="Voice input (coming soon)"
-            >
-              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <line x1="12" y1="19" x2="12" y2="23" />
-                <line x1="8" y1="23" x2="16" y2="23" />
-              </svg>
-            </button>
-          </div>
+          <VoiceInput
+            value={value}
+            onChange={(next, mode) => setFieldValue(currentStep.key, next, mode)}
+            fieldName={currentStep.key}
+            rows={4}
+            placeholder="Type or tap the mic to speak..."
+          />
         ) : (
           <input
             type="text"
             value={value}
             onChange={(e) =>
-              setData({ ...data, [currentStep.key]: e.target.value })
+              setFieldValue(currentStep.key, e.target.value, "text")
             }
-            className="block h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="block h-11 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
             placeholder="Enter name..."
           />
         )}
       </div>
+      {submitError && (
+        <p className="mt-3 text-sm text-red-600">{submitError}</p>
+      )}
 
       {/* Navigation */}
       <div className="mt-6 flex gap-3">
