@@ -46,9 +46,10 @@ export async function middleware(request: NextRequest) {
   }
 
   // If authenticated and trying to access login/signup → redirect to coach
+  // TEMP: routing to /dev/whoami until the real Coach tab ships (v0 step 4).
   if (user && (pathname === "/login" || pathname === "/signup")) {
     const url = request.nextUrl.clone();
-    url.pathname = "/coach";
+    url.pathname = "/dev/whoami";
     return NextResponse.redirect(url);
   }
 

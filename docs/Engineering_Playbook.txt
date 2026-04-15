@@ -302,6 +302,60 @@ switching databases later, and auditing data access in one place.
       };
     }
 
+### Structured extraction: confidence gate pattern
+
+When using an LLM to extract structured fields from unstructured user
+input (voice transcript, free text, messy natural language), always have
+the model return a self-reported confidence score AND gate the UX on it.
+Do not trust high-confidence defaults — make the model earn its confidence.
+
+Extraction schema must include:
+
+    {
+      primary_value: string;              // the extracted answer
+      candidates: string[];                // other plausible answers, ranked
+      confidence: number;                  // 0.00 to 1.00, self-reported
+      ambiguity_flag: boolean;             // true iff candidates are ~tied
+      reason: string;                      // one-sentence justification
+    }
+
+Prompt instruction (required):
+
+    "Be conservative with confidence. Low confidence is fine and expected
+    on ambiguous or off-topic input. Only set ambiguity_flag to true when
+    two candidates are genuinely tied — i.e., you would change your
+    primary_value if you saw one more sentence of context."
+
+UX gate in the application:
+
+    if (result.confidence >= 0.7 && !result.ambiguity_flag) {
+      // Show the extracted value directly as "we heard X"
+      showResult(result.primary_value);
+    } else {
+      // Show it as a question the user confirms or changes
+      showConfirmPrompt({
+        suggested: result.primary_value,
+        alternatives: result.candidates,
+      });
+    }
+
+Why this pattern matters:
+
+- Hallucinated high confidence on ambiguous input is worse than honest
+  low confidence. A user who sees "we think you care about honesty" when
+  they actually care about safety loses trust in one interaction.
+- The "confirm or change" path turns uncertainty into engagement. The
+  user feels heard and the product learns from the correction.
+- The confidence score also feeds Layer 3 observations — a pattern tag
+  extracted from a low-confidence parse should carry lower weight in
+  downstream insight generation, not the same weight as a clean parse.
+
+Validated against Pure EQ v0 voice parsing with Claude Sonnet 4.5: the
+0.7 threshold cleanly separated "confident enough to show directly" from
+"should ask user to confirm" across clear, messy, ambiguous, emotional,
+and vague speech samples. Model refused to exceed 0.7 on any genuinely
+ambiguous input — confidence calibration was honest.
+
 ---
 
 ## 10. Testing

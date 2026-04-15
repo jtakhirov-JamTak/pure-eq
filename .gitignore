@@ -137,3 +137,9 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Throwaway exploratory scripts — not part of the app
+scratch/
+
+# Claude Code per-user settings (personal to the developer, never commit)
+.claude/

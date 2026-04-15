@@ -121,4 +121,4 @@ docs/
 
 ## Lessons Learned
 
-- (Add new lessons here as they arise)
+- **Email confirmation is DISABLED in Supabase Auth for dev speed.** Must be re-enabled before any real user touches the app. Shipping to production with email confirmation off means anyone can sign up with a fake or other-people's email addresses, which is both a security and abuse risk. Re-enable via Supabase dashboard → Authentication → Providers → Email → Confirm email.

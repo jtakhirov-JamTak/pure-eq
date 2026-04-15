@@ -29,7 +29,7 @@ export default function LoginPage() {
       return;
     }
 
-    router.push("/coach");
+    router.push("/dev/whoami");
     router.refresh();
   }
 
