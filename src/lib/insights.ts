@@ -111,10 +111,10 @@ export const OBSERVATION_TYPE_FOR_TAG: Record<ObservationTag, ObservationType> =
 export const INSIGHT_THRESHOLDS = {
   minEntries: 6,
   minDistinctDays: 3,
-  // v0.5: lowered from 3 to 1 because only Review produces observations.
-  // Requiring 3 event types blocks the exact users with the most pattern data.
-  // Revisit when Trigger/Prepare extractors ship.
-  minEventTypes: 1,
+  // v0.6: raised to 2 now that Review + Trigger extract observations.
+  // Cross-module confirmation gives stronger signal than single-module alone.
+  // Raise to 3 when Overwhelmed extractor ships.
+  minEventTypes: 2,
   minHighFitEntries: 2,
   emergingTagCount: 2,
 } as const;
