@@ -445,7 +445,7 @@ export async function POST(req: Request) {
             observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
             observation_tag: tag,
             direction: tagDesc.direction,
-            confidence_score: 0.7, // Predictive, not observed
+            confidence_score: 0.5, // Predictive — pre-conversation guess, not observed
             observation_source: "predictive",
             extractor_version: "prepare_v1",
             supporting_evidence_json: {

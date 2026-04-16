@@ -138,6 +138,9 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 
+# Supabase CLI temp files (contains project ref, not source code)
+supabase/.temp/
+
 # Throwaway exploratory scripts — not part of the app
 scratch/
 
