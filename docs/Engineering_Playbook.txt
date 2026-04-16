@@ -887,3 +887,63 @@ Rules:
   and the condition for restoring it
 - Same principle as minEventTypes: match thresholds to what's
   actually instrumented, not what's planned
+
+### 16.9 Client-Side fetch() Must Check res.ok
+
+Problem: `fetch()` only throws on network failures, not HTTP errors.
+A 401, 429, or 500 response is a "successful" fetch. If the client
+checks only try/catch, it silently treats server rejections as success.
+
+    // BROKEN — shows "saved" on 401/429/500
+    try {
+      await fetch("/api/endpoint", { method: "PATCH", ... });
+      setSuccess(true);
+    } catch { /* only fires on network error */ }
+
+    // CORRECT — check response status
+    try {
+      const res = await fetch("/api/endpoint", { method: "PATCH", ... });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      setSuccess(true);
+    } catch {
+      setError(true);
+    }
+
+Rules:
+- Every client-side fetch that writes data must check `res.ok`
+  before marking success
+- On failure, show an inline error — never swallow silently
+- 403 should redirect to /paywall (subscription gate)
+- 429 can show "Try again later"
+- This applies to both POST and PATCH submissions
+
+### 16.10 Side Effects Inside Idempotency Guard
+
+Problem: A route creates a new row (thread, person, etc.) BEFORE
+the idempotency check. On retry or strict-mode double-mount, the
+side effect runs again, creating duplicates.
+
+    // BROKEN — creates duplicate thread on every retry
+    if (!threadId && personId) {
+      const thread = await createThread(...);  // runs BEFORE idempotency
+      threadId = thread.id;
+    }
+    const existing = await checkIdempotency(sessionId);
+
+    // CORRECT — only create on first submission
+    const existing = await checkIdempotency(sessionId);
+    if (!existing) {
+      if (!threadId && personId) {
+        const thread = await createThread(...);
+        threadId = thread.id;
+      }
+      await insertRawRecord(...);
+    }
+
+Rules:
+- Any side effect that creates new rows (threads, persons, derived
+  entries) must be inside the "no existing raw record" branch
+- The idempotency check is the gate — everything below it runs
+  only on first submission
+- This also applies to AI calls, which should be after both raw
+  and derived inserts

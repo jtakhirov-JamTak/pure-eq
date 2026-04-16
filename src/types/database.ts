@@ -487,6 +487,7 @@ export type Database = {
           deleted_at: string | null
           desired_outcome: string
           is_complete: boolean
+          outcome_json: Json | null
           person_id: string | null
           raw_record_id: string | null
           repair_entry_id: string
@@ -506,6 +507,7 @@ export type Database = {
           deleted_at?: string | null
           desired_outcome: string
           is_complete?: boolean
+          outcome_json?: Json | null
           person_id?: string | null
           raw_record_id?: string | null
           repair_entry_id?: string
@@ -525,6 +527,7 @@ export type Database = {
           deleted_at?: string | null
           desired_outcome?: string
           is_complete?: boolean
+          outcome_json?: Json | null
           person_id?: string | null
           raw_record_id?: string | null
           repair_entry_id?: string
@@ -569,6 +572,7 @@ export type Database = {
           hardest_moment_feeling: string | null
           is_complete: boolean
           observed_in_them: string | null
+          outcome_json: Json | null
           person_id: string | null
           raw_record_id: string | null
           review_entry_id: string
@@ -590,6 +594,7 @@ export type Database = {
           hardest_moment_feeling?: string | null
           is_complete?: boolean
           observed_in_them?: string | null
+          outcome_json?: Json | null
           person_id?: string | null
           raw_record_id?: string | null
           review_entry_id?: string
@@ -611,6 +616,7 @@ export type Database = {
           hardest_moment_feeling?: string | null
           is_complete?: boolean
           observed_in_them?: string | null
+          outcome_json?: Json | null
           person_id?: string | null
           raw_record_id?: string | null
           review_entry_id?: string

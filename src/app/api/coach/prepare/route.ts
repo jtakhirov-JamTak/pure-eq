@@ -186,6 +186,8 @@ export async function POST(req: Request) {
     }
   }
 
+  let effectiveThreadId: string | null = input.threadId ?? null;
+
   // 5. Idempotency. The client sends a UUID once per submission attempt;
   //    on retry (network flake, strict-mode double-mount, user-initiated
   //    retry), the same key reuses any rows already written so we never
@@ -205,6 +207,27 @@ export async function POST(req: Request) {
   if (existingRaw) {
     rawRecordId = existingRaw.raw_record_id;
   } else {
+    // 5b. Auto-create conversation thread (only on first submission, not retry).
+    if (!effectiveThreadId && effectivePersonId) {
+      const title = input.situation.slice(0, 80).replace(/\s+\S*$/, ""); // word-boundary truncation
+      const { data: newThread, error: threadErr } = await supabase
+        .from("conversation_threads")
+        .insert({
+          user_id: user.id,
+          person_id: effectivePersonId,
+          title: title || input.situation.slice(0, 80),
+          status: "open",
+          last_activity_at: new Date().toISOString(),
+        })
+        .select("thread_id")
+        .single();
+      if (newThread) {
+        effectiveThreadId = newThread.thread_id;
+      } else if (threadErr) {
+        console.error("prepare: thread creation failed", threadErr.code);
+      }
+    }
+
     const { data: rawInserted, error: rawErr } = await supabase
       .from("raw_records")
       .insert({
@@ -230,7 +253,7 @@ export async function POST(req: Request) {
         is_complete: true,
         completed_at: new Date().toISOString(),
         person_id: effectivePersonId,
-        thread_id: input.threadId ?? null,
+        thread_id: effectiveThreadId,
       })
       .select("raw_record_id")
       .single();
@@ -282,7 +305,7 @@ export async function POST(req: Request) {
         ai_plan_version: null,
         is_complete: false,
         person_id: effectivePersonId,
-        thread_id: input.threadId ?? null,
+        thread_id: effectiveThreadId,
       })
       .select("prepare_entry_id")
       .single();
@@ -418,7 +441,7 @@ export async function POST(req: Request) {
             source_raw_record_id: rawRecordId,
             source_interaction_entry_id: prepareEntryId,
             person_id: effectivePersonId,
-            thread_id: input.threadId ?? null,
+            thread_id: effectiveThreadId,
             observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
             observation_tag: tag,
             direction: tagDesc.direction,

@@ -104,11 +104,19 @@ export const createPersonSchema = z.object({
 // Subscribe (v0 mock — no payment fields yet)
 export const subscribeSchema = z.object({});
 
-// Outcome tracking
+// Outcome tracking — Review
 export const immediateOutcomeSchema = z.object({
   movedForward: z.enum(["yes", "partly", "no", "unclear"]),
   theySeemUnderstood: z.enum(["more", "same", "less", "unclear"]),
   usedPreparePlan: z.enum(["yes", "partly", "no", "no_prepare"]),
-  reviewId: z.string().uuid(),
+  reviewEntryId: z.string().uuid(),
+});
+
+// Outcome tracking — Repair
+export const repairOutcomeSchema = z.object({
+  attemptedRepair: z.enum(["yes", "planned", "no"]),
+  howReceived: z.enum(["positive", "mixed", "negative", "no_response", "too_early"]),
+  understandingImproved: z.enum(["yes", "partly", "no", "unclear"]),
+  repairEntryId: z.string().uuid(),
 });
 

@@ -88,6 +88,39 @@ type AiOutput = {
   pattern_tag: string;
 };
 
+const REPAIR_OUTCOME_QUESTIONS = [
+  {
+    key: "attemptedRepair",
+    title: "Did you attempt repair?",
+    options: [
+      { value: "yes", label: "Yes" },
+      { value: "planned", label: "Planned" },
+      { value: "no", label: "No" },
+    ],
+  },
+  {
+    key: "howReceived",
+    title: "How was it received?",
+    options: [
+      { value: "positive", label: "Positive" },
+      { value: "mixed", label: "Mixed" },
+      { value: "negative", label: "Negative" },
+      { value: "no_response", label: "No response" },
+      { value: "too_early", label: "Too early" },
+    ],
+  },
+  {
+    key: "understandingImproved",
+    title: "Did understanding improve?",
+    options: [
+      { value: "yes", label: "Yes" },
+      { value: "partly", label: "Partly" },
+      { value: "no", label: "No" },
+      { value: "unclear", label: "Unclear" },
+    ],
+  },
+] as const;
+
 export default function RepairPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -97,6 +130,9 @@ export default function RepairPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  const [repairEntryId, setRepairEntryId] = useState<string | null>(null);
+  const [outcomeData, setOutcomeData] = useState<Record<string, string>>({});
+  const [outcomeSaved, setOutcomeSaved] = useState(false);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
@@ -144,6 +180,9 @@ export default function RepairPage() {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
+      if (result.repairEntryId) {
+        setRepairEntryId(result.repairEntryId);
+      }
       if (result.aiOutput) {
         setAiOutput(result.aiOutput);
       } else {
@@ -167,6 +206,31 @@ export default function RepairPage() {
     setSavedMessage(null);
     handleSubmit();
   }
+
+  const [outcomeError, setOutcomeError] = useState(false);
+
+  async function submitOutcome() {
+    if (!repairEntryId) return;
+    setOutcomeError(false);
+    try {
+      const res = await fetch("/api/coach/repair/outcome", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repairEntryId,
+          ...outcomeData,
+        }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      setOutcomeSaved(true);
+    } catch {
+      setOutcomeError(true);
+    }
+  }
+
+  const allOutcomeAnswered = REPAIR_OUTCOME_QUESTIONS.every(
+    (q) => outcomeData[q.key]
+  );
 
   // AI output screen
   if (aiOutput) {
@@ -201,9 +265,63 @@ export default function RepairPage() {
             </span>
           </div>
         </div>
+
+        {/* Repair Outcome Tracking */}
+        {repairEntryId && !outcomeSaved && (
+          <div className="mt-8 border-t border-zinc-200 pt-6">
+            <p className="text-sm font-medium text-zinc-700">
+              How did the repair go?
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Optional — helps track what works over time.
+            </p>
+            <div className="mt-4 space-y-4">
+              {REPAIR_OUTCOME_QUESTIONS.map((q) => (
+                <div key={q.key}>
+                  <p className="text-sm text-zinc-700">{q.title}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {q.options.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() =>
+                          setOutcomeData((d) => ({ ...d, [q.key]: opt.value }))
+                        }
+                        className={`rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
+                          outcomeData[q.key] === opt.value
+                            ? "bg-zinc-900 text-white"
+                            : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {allOutcomeAnswered && (
+              <button
+                onClick={submitOutcome}
+                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-800 text-base font-medium text-white"
+              >
+                Save Outcome
+              </button>
+            )}
+            {outcomeError && (
+              <p className="mt-2 text-sm text-red-600">
+                Could not save outcome. Try again.
+              </p>
+            )}
+          </div>
+        )}
+
+        {outcomeSaved && (
+          <p className="mt-6 text-sm text-zinc-500">Outcome saved.</p>
+        )}
+
         <button
           onClick={() => router.push("/coach")}
-          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
         >
           Done
         </button>

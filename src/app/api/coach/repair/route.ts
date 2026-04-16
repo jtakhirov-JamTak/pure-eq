@@ -178,6 +178,30 @@ export async function POST(req: Request) {
     }
   }
 
+  // 4c. Auto-link to most recent open thread for this person (< 7 days).
+  let effectiveThreadId: string | null = input.threadId ?? null;
+  if (!effectiveThreadId && effectivePersonId) {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentThread } = await supabase
+      .from("conversation_threads")
+      .select("thread_id")
+      .eq("user_id", user.id)
+      .eq("person_id", effectivePersonId)
+      .eq("status", "open")
+      .gte("last_activity_at", sevenDaysAgo)
+      .order("last_activity_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (recentThread) {
+      effectiveThreadId = recentThread.thread_id;
+      await supabase
+        .from("conversation_threads")
+        .update({ last_activity_at: new Date().toISOString() })
+        .eq("thread_id", effectiveThreadId)
+        .eq("user_id", user.id);
+    }
+  }
+
   // 5. Idempotency.
   const { data: existingRaw, error: existingErr } = await supabase
     .from("raw_records")
@@ -216,7 +240,7 @@ export async function POST(req: Request) {
         is_complete: true,
         completed_at: new Date().toISOString(),
         person_id: effectivePersonId,
-        thread_id: input.threadId ?? null,
+        thread_id: effectiveThreadId,
       })
       .select("raw_record_id")
       .single();
@@ -265,7 +289,7 @@ export async function POST(req: Request) {
         ai_strategy_version: null,
         is_complete: false,
         person_id: effectivePersonId,
-        thread_id: input.threadId ?? null,
+        thread_id: effectiveThreadId,
       })
       .select("repair_entry_id")
       .single();
@@ -384,7 +408,7 @@ export async function POST(req: Request) {
             source_raw_record_id: rawRecordId,
             source_interaction_entry_id: repairEntryId,
             person_id: effectivePersonId,
-            thread_id: input.threadId ?? null,
+            thread_id: effectiveThreadId,
             observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
             observation_tag: tag,
             direction: tagDesc.direction,
@@ -407,6 +431,7 @@ export async function POST(req: Request) {
     success: true,
     aiOutput,
     rawRecordId,
+    repairEntryId,
     saveWarning,
     aiFailureKind: aiOutput ? undefined : lastFailureKind,
     message: aiOutput

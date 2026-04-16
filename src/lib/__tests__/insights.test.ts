@@ -5,6 +5,7 @@ import {
   getHowYouTendToLand,
   getPersonPatterns,
   inferTriggerPatternTag,
+  inferOverwhelmedPatternTag,
 } from "@/lib/insights";
 
 describe("checkInsightThresholds", () => {
@@ -37,7 +38,7 @@ describe("checkInsightThresholds", () => {
     });
     expect(needsDays.state).toBe("needs_more_days");
 
-    // threshold_met (needs 2+ event types now)
+    // threshold_met (needs 2+ event types)
     const met = checkInsightThresholds({
       totalEntries: 8,
       distinctDays: 4,
@@ -47,17 +48,17 @@ describe("checkInsightThresholds", () => {
     expect(met.state).toBe("threshold_met");
   });
 
-  it("mixed event types (review + trigger) meet minEventTypes: 2", () => {
-    // Integration test: realistic multi-module user with 2 Reviews + 1 Trigger
+  it("mixed event types (2+ modules) meet minEventTypes: 2", () => {
+    // Integration test: realistic multi-module user
     const result = checkInsightThresholds({
-      totalEntries: 7,     // 2 reviews + 1 trigger + 4 other entries
+      totalEntries: 7,
       distinctDays: 4,
-      eventTypes: ["review", "trigger_log", "prepare"],
-      highFitEntries: 3,   // 2 reviews + 1 trigger = 3 high-fit
+      eventTypes: ["review", "trigger_log", "overwhelmed"],
+      highFitEntries: 3,
     });
     expect(result.state).toBe("threshold_met");
 
-    // Single event type should NOT meet threshold
+    // Single event type should NOT meet threshold (need 2)
     const singleType = checkInsightThresholds({
       totalEntries: 10,
       distinctDays: 5,
@@ -346,6 +347,71 @@ describe("inferTriggerPatternTag", () => {
         urgeIntensity: 5,
         emotion: "confused",
         trigger: "something happened at work",
+      })
+    ).toBeNull();
+  });
+});
+
+describe("inferOverwhelmedPatternTag", () => {
+  it("high overwhelm + no improvement → escalated_after_trigger", () => {
+    expect(
+      inferOverwhelmedPatternTag({
+        beforeRating: 5,
+        afterRating: 5,
+        feelingLabel: "I feel terrible because everything is falling apart",
+      })
+    ).toBe("escalated_after_trigger");
+  });
+
+  it("high overwhelm + slight improvement still escalation", () => {
+    expect(
+      inferOverwhelmedPatternTag({
+        beforeRating: 4,
+        afterRating: 3,
+        feelingLabel: "I feel anxious because of the meeting",
+      })
+    ).toBe("escalated_after_trigger");
+  });
+
+  it("criticism keyword in feeling → recurring_trigger_criticism (keyword before intensity)", () => {
+    // Keywords take priority over intensity heuristic — a user who writes
+    // "I was criticized" at high intensity should get the keyword tag.
+    expect(
+      inferOverwhelmedPatternTag({
+        beforeRating: 5,
+        afterRating: 5,
+        feelingLabel: "I feel terrible because I was criticized by my boss",
+      })
+    ).toBe("recurring_trigger_criticism");
+  });
+
+  it("pressure keyword in feeling → recurring_trigger_pressure", () => {
+    expect(
+      inferOverwhelmedPatternTag({
+        beforeRating: 3,
+        afterRating: 1,
+        feelingLabel: "I feel stressed because of the deadline",
+      })
+    ).toBe("recurring_trigger_pressure");
+  });
+
+  it("effective regulation with no keywords → null", () => {
+    expect(
+      inferOverwhelmedPatternTag({
+        beforeRating: 4,
+        afterRating: 1,
+        feelingLabel: "I feel tense because of a difficult conversation",
+      })
+    ).toBeNull();
+  });
+
+  it("low overwhelm (beforeRating < 3) always returns null", () => {
+    // Low overwhelm entries shouldn't generate pattern tags even with keywords
+    expect(
+      inferOverwhelmedPatternTag({
+        beforeRating: 2,
+        afterRating: 1,
+        feelingLabel: "I feel a bit criticized today",
       })
     ).toBeNull();
   });

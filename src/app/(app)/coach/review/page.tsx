@@ -72,6 +72,39 @@ const STEPS = [
   },
 ];
 
+const OUTCOME_QUESTIONS = [
+  {
+    key: "movedForward",
+    title: "Did this move things forward?",
+    options: [
+      { value: "yes", label: "Yes" },
+      { value: "partly", label: "Partly" },
+      { value: "no", label: "No" },
+      { value: "unclear", label: "Unclear" },
+    ],
+  },
+  {
+    key: "theySeemUnderstood",
+    title: "Did they seem more understood?",
+    options: [
+      { value: "more", label: "More" },
+      { value: "same", label: "Same" },
+      { value: "less", label: "Less" },
+      { value: "unclear", label: "Unclear" },
+    ],
+  },
+  {
+    key: "usedPreparePlan",
+    title: "Did you use your prepare plan?",
+    options: [
+      { value: "yes", label: "Yes" },
+      { value: "partly", label: "Partly" },
+      { value: "no", label: "No" },
+      { value: "no_prepare", label: "No plan" },
+    ],
+  },
+] as const;
+
 type AiOutput = {
   how_user_likely_came_across: string;
   where_projecting: string;
@@ -88,6 +121,9 @@ export default function ReviewPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  const [reviewEntryId, setReviewEntryId] = useState<string | null>(null);
+  const [outcomeData, setOutcomeData] = useState<Record<string, string>>({});
+  const [outcomeSaved, setOutcomeSaved] = useState(false);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
@@ -134,6 +170,9 @@ export default function ReviewPage() {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
+      if (result.reviewEntryId) {
+        setReviewEntryId(result.reviewEntryId);
+      }
       if (result.aiOutput) {
         setAiOutput(result.aiOutput);
       } else {
@@ -158,6 +197,31 @@ export default function ReviewPage() {
     handleSubmit();
   }
 
+  const [outcomeError, setOutcomeError] = useState(false);
+
+  async function submitOutcome() {
+    if (!reviewEntryId) return;
+    setOutcomeError(false);
+    try {
+      const res = await fetch("/api/coach/review/outcome", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reviewEntryId,
+          ...outcomeData,
+        }),
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      setOutcomeSaved(true);
+    } catch {
+      setOutcomeError(true);
+    }
+  }
+
+  const allOutcomeAnswered = OUTCOME_QUESTIONS.every(
+    (q) => outcomeData[q.key]
+  );
+
   // AI output screen
   if (aiOutput) {
     return (
@@ -176,16 +240,16 @@ export default function ReviewPage() {
             },
           ].map(({ label, key }) => (
             <div key={key}>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                 {label}
               </p>
               <p className="mt-1 text-base text-zinc-800">
-                {aiOutput[key as keyof AiOutput] || "—"}
+                {aiOutput[key as keyof AiOutput] || "\u2014"}
               </p>
             </div>
           ))}
           <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
               Pattern noticed
             </p>
             <span className="mt-2 inline-flex items-center rounded-full bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700">
@@ -193,9 +257,63 @@ export default function ReviewPage() {
             </span>
           </div>
         </div>
+
+        {/* Outcome Tracking — inline after AI output */}
+        {reviewEntryId && !outcomeSaved && (
+          <div className="mt-8 border-t border-zinc-200 pt-6">
+            <p className="text-sm font-medium text-zinc-700">
+              Rate this conversation
+            </p>
+            <p className="mt-1 text-xs text-zinc-500">
+              Optional — helps build your patterns over time.
+            </p>
+            <div className="mt-4 space-y-4">
+              {OUTCOME_QUESTIONS.map((q) => (
+                <div key={q.key}>
+                  <p className="text-sm text-zinc-700">{q.title}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {q.options.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() =>
+                          setOutcomeData((d) => ({ ...d, [q.key]: opt.value }))
+                        }
+                        className={`rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
+                          outcomeData[q.key] === opt.value
+                            ? "bg-zinc-900 text-white"
+                            : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {allOutcomeAnswered && (
+              <button
+                onClick={submitOutcome}
+                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-800 text-base font-medium text-white"
+              >
+                Save Outcome
+              </button>
+            )}
+            {outcomeError && (
+              <p className="mt-2 text-sm text-red-600">
+                Could not save outcome. Try again.
+              </p>
+            )}
+          </div>
+        )}
+
+        {outcomeSaved && (
+          <p className="mt-6 text-sm text-zinc-500">Outcome saved.</p>
+        )}
+
         <button
           onClick={() => router.push("/coach")}
-          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
         >
           Done
         </button>
@@ -253,7 +371,7 @@ export default function ReviewPage() {
           />
         ))}
       </div>
-      <p className="mt-2 text-xs text-zinc-400">
+      <p className="mt-2 text-xs text-zinc-500">
         Step {step + 1} of {STEPS.length}
       </p>
 

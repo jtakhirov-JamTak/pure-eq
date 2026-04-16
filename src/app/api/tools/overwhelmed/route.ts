@@ -7,6 +7,12 @@ import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
+import {
+  inferOverwhelmedPatternTag,
+  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TYPE_FOR_TAG,
+} from "@/lib/insights";
+import type { ObservationTag } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -182,6 +188,49 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+  }
+
+  // 6. Extract pattern observation (fire-and-forget, heuristic).
+  try {
+    const tag = inferOverwhelmedPatternTag({
+      beforeRating: input.beforeRating,
+      afterRating: input.afterRating,
+      feelingLabel: input.feelingLabel,
+    });
+
+    if (tag) {
+      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag as ObservationTag];
+      if (tagDesc) {
+        const { data: existingObs } = await supabase
+          .from("pattern_observations")
+          .select("pattern_observation_id")
+          .eq("user_id", user.id)
+          .eq("source_raw_record_id", rawRecordId)
+          .maybeSingle();
+
+        if (!existingObs) {
+          await supabase.from("pattern_observations").insert({
+            user_id: user.id,
+            source_raw_record_id: rawRecordId,
+            source_interaction_entry_id: null,
+            person_id: null,
+            thread_id: null,
+            observation_type: OBSERVATION_TYPE_FOR_TAG[tag as ObservationTag],
+            observation_tag: tag,
+            direction: tagDesc.direction,
+            confidence_score: 0.5,
+            observation_source: "observed",
+            extractor_version: "overwhelmed_v1",
+            supporting_evidence_json: {
+              before_rating: input.beforeRating,
+              after_rating: input.afterRating,
+            },
+          });
+        }
+      }
+    }
+  } catch {
+    console.error("overwhelmed: pattern observation insert failed");
   }
 
   return NextResponse.json({

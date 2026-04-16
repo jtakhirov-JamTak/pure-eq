@@ -111,15 +111,15 @@ export const OBSERVATION_TYPE_FOR_TAG: Record<ObservationTag, ObservationType> =
 export const INSIGHT_THRESHOLDS = {
   minEntries: 6,
   minDistinctDays: 3,
-  // v0.6: raised to 2 now that Review + Trigger extract observations.
-  // Cross-module confirmation gives stronger signal than single-module alone.
-  // Raise to 3 when Overwhelmed extractor ships.
+  // v0.7: keep at 2 until overwhelmed extractor is validated in production.
+  // Raising to 3 now would regress existing users who have insights from
+  // review + trigger. Raise to 3 after confirming real overwhelmed adoption.
   minEventTypes: 2,
   minHighFitEntries: 2,
   emergingTagCount: 2,
 } as const;
 
-export const HIGH_FIT_RECORD_TYPES = ["review", "trigger_log", "repair"] as const;
+export const HIGH_FIT_RECORD_TYPES = ["review", "trigger_log", "repair", "outcome_tracking"] as const;
 
 // ---------- Threshold Checking ----------
 
@@ -287,7 +287,7 @@ export const TEND_TO_LAND_THRESHOLDS = {
 } as const;
 
 // High-fit for "how you tend to land" — only Review and Outcome (§10.4)
-export const TEND_TO_LAND_HIGH_FIT = ["review"] as const; // Add "outcome" when it ships
+export const TEND_TO_LAND_HIGH_FIT = ["review", "outcome_tracking"] as const;
 
 // Tags that indicate interpersonal impact (not trigger patterns)
 const INTERPERSONAL_OBSERVATION_TYPES = new Set([
@@ -506,5 +506,41 @@ export function inferTriggerPatternTag(input: {
   }
 
   // Ambiguous: can't confidently assign a tag. Skip observation entirely.
+  return null;
+}
+
+// ---------- Overwhelmed Heuristic Extractor ----------
+// Maps structured overwhelmed entry fields to observation tags.
+// Weaker signal than trigger_log (coarser 1-5 scale vs 1-10).
+// Returns null for ambiguous cases — "silence over garbage."
+
+export function inferOverwhelmedPatternTag(input: {
+  beforeRating: number; // 1-5 overwhelm level before regulation
+  afterRating: number; // 1-5 overwhelm level after regulation
+  feelingLabel: string; // free text "I feel X because Y"
+}): ObservationTag | null {
+  // Only extract from meaningful overwhelm (3+ on 1-5 scale).
+  // Low-overwhelm entries with keyword matches are noise, not pattern.
+  if (input.beforeRating < 3) return null;
+
+  // Check feeling text for trigger pattern keywords FIRST.
+  // A user who writes "I was criticized" at intensity 5 should get
+  // recurring_trigger_criticism, not escalated_after_trigger.
+  const feelingLower = input.feelingLabel.toLowerCase();
+
+  if (CRITICISM_KEYWORDS.some((k) => feelingLower.includes(k))) {
+    return "recurring_trigger_criticism";
+  }
+
+  if (PRESSURE_KEYWORDS.some((k) => feelingLower.includes(k))) {
+    return "recurring_trigger_pressure";
+  }
+
+  // High overwhelm that didn't improve = stuck in high arousal
+  if (input.beforeRating >= 4 && input.afterRating >= input.beforeRating - 1) {
+    return "escalated_after_trigger";
+  }
+
+  // Ambiguous or effective regulation: skip observation entirely.
   return null;
 }
