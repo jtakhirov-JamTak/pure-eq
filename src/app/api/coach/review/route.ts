@@ -11,7 +11,11 @@ import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import { reviewOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
-import type { ProfileType } from "@/types";
+import {
+  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TYPE_FOR_TAG,
+} from "@/lib/insights";
+import type { ProfileType, ObservationTag } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -377,6 +381,49 @@ export async function POST(req: Request) {
       // is_complete=false with null reflection. Flag it so the client knows
       // the save is partial and the insights pipeline can re-derive later.
       saveWarning = true;
+    }
+  }
+
+  // 9. Extract pattern observation (fire-and-forget).
+  // Review AI already produces a taxonomy-constrained pattern_tag.
+  // Write it to pattern_observations so the Insights tab can aggregate.
+  if (aiOutput?.pattern_tag) {
+    try {
+      const tag = aiOutput.pattern_tag as ObservationTag;
+      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      if (tagDesc) {
+        // Idempotency: skip if observation already exists for this raw record
+        const { data: existingObs } = await supabase
+          .from("pattern_observations")
+          .select("pattern_observation_id")
+          .eq("user_id", user.id)
+          .eq("source_raw_record_id", rawRecordId)
+          .maybeSingle();
+
+        if (!existingObs) {
+          await supabase.from("pattern_observations").insert({
+            user_id: user.id,
+            source_raw_record_id: rawRecordId,
+            source_interaction_entry_id: reviewEntryId,
+            person_id: effectivePersonId,
+            thread_id: input.threadId ?? null,
+            observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
+            observation_tag: tag,
+            direction: tagDesc.direction,
+            confidence_score: 0.8, // Fixed for v0.5; future extractors may vary by source quality
+            extractor_version: "review_v1",
+            supporting_evidence_json: {
+              how_user_likely_came_across:
+                aiOutput.how_user_likely_came_across,
+              where_projecting: aiOutput.where_projecting,
+            },
+          });
+        }
+      }
+    } catch {
+      // Non-critical: observation extraction failure should not fail the review.
+      // The tag is still stored in ai_reflection_json for backfill.
+      console.error("review: pattern observation insert failed");
     }
   }
 
