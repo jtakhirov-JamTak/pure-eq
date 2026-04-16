@@ -141,6 +141,9 @@ vite.config.ts.timestamp-*
 # Throwaway exploratory scripts — not part of the app
 scratch/
 
+# Session context archives — per-developer history, not source code
+.archive/
+
 # Claude Code per-user settings (personal to the developer, never commit)
 .claude/
 

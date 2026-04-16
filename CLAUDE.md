@@ -24,12 +24,13 @@ When Claude makes a mistake, add the lesson to the "Lessons Learned" section bel
 | Build             | `npm run build`    |
 | Type check        | `npx tsc --noEmit` |
 | Lint              | `npm run lint`     |
+| Tests             | `npm test`         |
 
 Environment: Requires `.env.local` with Supabase and Anthropic keys.
 
 ## Stack
 
-- **Frontend:** Next.js 15 (App Router), React 19, TypeScript, Tailwind CSS, Framer Motion
+- **Frontend:** Next.js 16 (App Router), React 19, TypeScript, Tailwind CSS
 - **Backend:** Next.js API routes (server-side), Supabase Edge Functions if needed
 - **DB:** Supabase (PostgreSQL + Row-Level Security)
 - **Auth:** Supabase Auth (email/password, magic link, social login ready)
@@ -42,35 +43,67 @@ Environment: Requires `.env.local` with Supabase and Anthropic keys.
 ```
 src/
   app/
-    layout.tsx                    # Root layout, fonts, metadata
-    page.tsx                      # Landing page
-    (auth)/login/page.tsx         # Login
-    (auth)/signup/page.tsx        # Signup
-    onboarding/page.tsx           # 9-question Communication Profile quiz
-    (app)/layout.tsx              # Authenticated app shell (Coach/Tools/Insights tabs)
-    (app)/coach/page.tsx          # Coach tab home
-    (app)/coach/prepare/page.tsx  # Prepare flow
-    (app)/coach/review/page.tsx   # Review flow
-    (app)/tools/page.tsx          # Tools tab (I'm Overwhelmed / I'm Triggered)
-    (app)/insights/page.tsx       # Insights tab (Profile + patterns)
-    api/                          # API routes (all server-side)
+    layout.tsx                        # Root layout, metadata, PWA manifest
+    page.tsx                          # Landing page
+    not-found.tsx                     # Branded 404 page
+    (auth)/login/page.tsx             # Login
+    (auth)/signup/page.tsx            # Signup
+    onboarding/page.tsx               # 9-question Communication Profile quiz + routing hub
+    (app)/layout.tsx                  # Authenticated app shell gate (server component)
+    (app)/app-shell.tsx               # Client shell: top bar, bottom tabs, menu
+    (app)/coach/page.tsx              # Coach tab home
+    (app)/coach/prepare/page.tsx      # Prepare flow (multi-step + AI coaching)
+    (app)/coach/review/page.tsx       # Review flow (multi-step + AI reflection)
+    (app)/tools/page.tsx              # Tools tab hub (card links)
+    (app)/tools/overwhelmed/page.tsx  # I'm Overwhelmed (guided reset + timers)
+    (app)/tools/triggered/page.tsx    # I'm Triggered (structured trigger log)
+    (app)/insights/page.tsx           # Insights tab (profile + blind spot + empty states)
+    admin/layout.tsx                  # Admin gate (404 for non-admins)
+    admin/page.tsx                    # Admin stats dashboard
+    admin/actions.ts                  # Server action: toggleAccess
+    admin/users/page.tsx              # User list with grant/revoke
+    admin/users/[id]/page.tsx         # User detail (metadata only, no content)
+    paywall/page.tsx                  # Paywall gate (server component)
+    paywall/paywall-content.tsx       # Pricing display + Start Trial
+    dev/whoami/page.tsx               # Dev smoke test (prod-gated)
+    api/onboarding/submit/route.ts    # Quiz submission + profile scoring
+    api/coach/prepare/route.ts        # Prepare: AI coaching + pattern extraction
+    api/coach/review/route.ts         # Review: AI reflection + observation write
+    api/tools/overwhelmed/route.ts    # Overwhelmed entry save
+    api/tools/triggered/route.ts      # Trigger log entry save
+    api/persons/route.ts              # GET (search) + POST (create) persons
+    api/subscribe/route.ts            # Mock subscribe (trial activation)
+    api/transcribe/route.ts           # Whisper speech-to-text
+    api/auth/callback/route.ts        # PKCE code exchange (email confirmation)
+    api/admin/backfill-observations/route.ts  # One-time observation backfill
   lib/
-    supabase/client.ts            # Browser Supabase client
-    supabase/server.ts            # Server Supabase client
-    supabase/middleware.ts         # Auth middleware helper
-    ai/prompts.ts                 # AI prompt templates (version-controlled)
-    ai/schemas.ts                 # AI output Zod schemas
-    validation.ts                 # All request validation schemas
-    utils.ts                      # cn() helper, shared utilities
+    supabase/client.ts                # Browser Supabase client
+    supabase/server.ts                # Server Supabase client + getAuthUser()
+    supabase/service.ts               # Service role client (admin only, bypasses RLS)
+    ai/prompts.ts                     # AI prompt templates (version-controlled)
+    ai/schemas.ts                     # AI output Zod schemas + banned-phrase filter
+    admin.ts                          # isAdmin() + checkAdmin()
+    check-origin.ts                   # CSRF origin check (shared across routes)
+    insights.ts                       # Observation tag descriptions, thresholds, blind spot logic
+    onboarding.ts                     # Quiz questions, scoring, profile descriptions
+    rate-limit.ts                     # In-memory per-key rate limiter (v0)
+    subscription.ts                   # checkSubscription, markFreePrepareUsed, createTrial
+    validation.ts                     # All request Zod schemas
+    verify-ownership.ts               # Person ownership verification
+    utils.ts                          # cn() helper, shared utilities
   components/
-    ui/                           # Reusable UI primitives
-    voice-input.tsx               # Voice + text dual input component
+    countdown-timer.tsx               # Wall-clock timer with audio ping (iOS-safe)
+    person-picker.tsx                 # Type-ahead person search + voice input
+    voice-input.tsx                   # Voice + text dual input component
   types/
-    database.ts                   # Supabase generated types
-    index.ts                      # Shared app types
+    database.ts                       # Supabase generated types (npm run db:types)
+    index.ts                          # Shared app types + observation taxonomy
 docs/
-  Pure_EQ_Final.txt               # Product spec (source of truth)
-  Engineering_Playbook.txt        # Security and architecture patterns
+  Pure_EQ_Final.txt                   # Product spec (source of truth)
+  Engineering_Playbook.txt            # Security and architecture patterns
+public/
+  manifest.json                       # PWA manifest
+  icon-192.svg, icon-512.svg          # Placeholder PWA icons
 ```
 
 ## Adding an API Endpoint
@@ -160,7 +193,7 @@ docs/
 - **`mousedown` for outside-click dismiss doesn't work reliably on iOS Safari.** Use `pointerdown` instead — it covers both mouse and touch events uniformly. Same applies to any "click outside to close" pattern on dropdowns, modals, or popovers.
 - **LIKE/ILIKE metacharacters `%` and `_` must be escaped in user-supplied search queries.** A user sending `q=%` to a `.ilike("column", `%${q}%`)` call matches every row. Escape with `q.replace(/%/g, "\\%").replace(/_/g, "\\_")` before interpolation. Supabase parameterizes the value (no SQL injection), but the LIKE wildcards inside the pattern are still active.
 - **Keyboard-open dropdown positioning on mobile requires a scroll-into-view nudge.** When a dropdown renders below an input and the mobile keyboard is open, the dropdown can be entirely behind the keyboard. Add `scrollIntoView({ behavior: "smooth", block: "nearest" })` on the dropdown element when it opens, plus a bottom spacer div to ensure there's room to scroll.
-- **Threshold gates must match what's actually instrumented.** The product doc requires 3+ event types for emerging insights, but v0.5 only extracts observations from Review. Requiring 3 event types blocks the exact users with the most pattern data. When only one module produces the gated signal, lower the threshold and comment why — raise it when more extractors ship.
+- **Threshold gates must match what's actually instrumented.** The product doc requires 3+ event types for emerging insights, but v0.5 only extracts observations from Review. Requiring 3 event types blocks the exact users with the most pattern data. When only one module produces the gated signal, lower the threshold and comment why — raise it when more extractors ship. The event diversity requirement exists for a reason: a blind spot surfaced from 6 Reviews alone could be an artifact of how Review's AI assigns tags, not a real behavioral pattern. Cross-module confirmation (Review + Trigger + Prepare all pointing to the same tag) is a stronger signal. Restore `minEventTypes: 3` as soon as a second extractor ships.
 - **Unbounded Supabase selects on server-rendered pages degrade silently.** A `.select()` with no `.limit()` works fine at 10 rows but crawls at 1000. Every server-component query that returns user-scoped rows needs a `.limit()` safety cap (1000 for raw_records, 500 for observations). Flag with a comment for the RPC upgrade path.
 - **`text-zinc-400` at `text-xs` fails WCAG AA contrast (3.5:1).** Use `text-zinc-500` minimum for all body/label text, `text-zinc-600` for `text-xs` labels where contrast matters. zinc-400 is only acceptable for decorative/non-essential text.
 - **Admin-only endpoints still need origin check + rate limit.** An admin session is still a browser session — CSRF applies. The "it's admin-only" instinct skips checkOrigin and rateLimit, but a compromised page can trigger the endpoint if the admin is logged in. Same 3-line pattern as every other POST route.
