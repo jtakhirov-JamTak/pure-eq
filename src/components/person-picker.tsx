@@ -1,0 +1,410 @@
+// Pure EQ domain — replace in fork.
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import type { RelationshipDomain } from "@/types";
+
+type Person = {
+  person_id: string;
+  display_name: string;
+  relationship_domain: RelationshipDomain;
+  relationship_subtype: string | null;
+};
+
+type Props = {
+  /** Current text value of the name input */
+  value: string;
+  /** Fires when the user types or a suggestion fills the name */
+  onChange: (name: string) => void;
+  /** Fires when a person is selected (UUID) or cleared (null) */
+  onPersonSelect: (personId: string | null, relationship?: RelationshipDomain) => void;
+  /** Currently selected personId, if any */
+  selectedPersonId: string | null;
+  placeholder?: string;
+  disabled?: boolean;
+};
+
+const RELATIONSHIP_LABELS: Record<RelationshipDomain, string> = {
+  partner: "Partner",
+  friend: "Friend",
+  family: "Family",
+  manager: "Manager",
+  direct_report: "Direct Report",
+  coworker: "Coworker",
+  client: "Client",
+  other: "Other",
+};
+
+// ---------- Voice recording helpers (mirrors VoiceInput) ----------
+const CODEC_PREFERENCE = [
+  "audio/webm;codecs=opus",
+  "audio/webm",
+  "audio/mp4",
+  "audio/mpeg",
+];
+
+function pickMimeType(): string | undefined {
+  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
+    return undefined;
+  }
+  for (const t of CODEC_PREFERENCE) {
+    try {
+      if (MediaRecorder.isTypeSupported(t)) return t;
+    } catch {
+      /* skip */
+    }
+  }
+  return undefined;
+}
+
+type VoiceStatus = "idle" | "recording" | "transcribing" | "error";
+
+export function PersonPicker({
+  value,
+  onChange,
+  onPersonSelect,
+  selectedPersonId,
+  placeholder = "Person name or label",
+  disabled = false,
+}: Props) {
+  const [suggestions, setSuggestions] = useState<Person[]>([]);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLUListElement>(null);
+
+  // Voice recording state
+  const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const mountedRef = useRef(true);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      abortRef.current?.abort();
+      const r = recorderRef.current;
+      if (r && r.state !== "inactive") {
+        try { r.stop(); } catch { /* ignore */ }
+      }
+    };
+  }, []);
+
+  // Fetch suggestions on input change (debounced)
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    const q = value.trim();
+    if (q.length === 0 || selectedPersonId) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `/api/persons?q=${encodeURIComponent(q)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const persons: Person[] = data.persons ?? [];
+          setSuggestions(persons);
+          setShowDropdown(persons.length > 0);
+        }
+      } catch {
+        // Silently fail — user can still type a new name
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [value, selectedPersonId]);
+
+  // Close dropdown on outside click/tap (pointerdown covers both mouse + touch)
+  useEffect(() => {
+    function handlePointerOutside(e: PointerEvent) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setShowDropdown(false);
+      }
+    }
+    document.addEventListener("pointerdown", handlePointerOutside);
+    return () => document.removeEventListener("pointerdown", handlePointerOutside);
+  }, []);
+
+  // Scroll dropdown into view when it opens (prevents hiding behind keyboard)
+  useEffect(() => {
+    if (showDropdown && dropdownRef.current) {
+      dropdownRef.current.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [showDropdown]);
+
+  function handleSelect(person: Person) {
+    onChange(person.display_name);
+    onPersonSelect(person.person_id, person.relationship_domain);
+    setShowDropdown(false);
+    setSuggestions([]);
+  }
+
+  function handleInputChange(next: string) {
+    if (selectedPersonId) {
+      onPersonSelect(null);
+    }
+    onChange(next);
+  }
+
+  // ---------- Voice recording ----------
+  async function startRecording() {
+    setVoiceError(null);
+    const mimeType = pickMimeType();
+    if (!mimeType) {
+      setVoiceStatus("error");
+      setVoiceError("Voice input isn't supported in this browser.");
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      let recorder: MediaRecorder;
+      try {
+        recorder = new MediaRecorder(stream, { mimeType });
+      } catch {
+        recorder = new MediaRecorder(stream);
+      }
+      recorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const type = recorder.mimeType || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+        void sendBlob(blob);
+      };
+
+      recorder.start();
+      if (mountedRef.current) setVoiceStatus("recording");
+    } catch (err) {
+      console.error("mic access failed", (err as Error)?.name);
+      if (mountedRef.current) {
+        setVoiceStatus("error");
+        setVoiceError("Microphone blocked. Enable mic access in your browser settings.");
+      }
+    }
+  }
+
+  function stopRecording() {
+    const r = recorderRef.current;
+    if (r && r.state !== "inactive") {
+      if (mountedRef.current) setVoiceStatus("transcribing");
+      try { r.stop(); } catch {
+        if (mountedRef.current) {
+          setVoiceStatus("error");
+          setVoiceError("Recording ended unexpectedly.");
+        }
+      }
+    }
+  }
+
+  async function sendBlob(blob: Blob) {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const fd = new FormData();
+      fd.append("audio", blob, "audio");
+      const res = await fetch("/api/transcribe", {
+        method: "POST",
+        body: fd,
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`status ${res.status}`);
+      const data: { text?: string } = await res.json();
+      const text = (data.text ?? "").trim();
+      if (!mountedRef.current) return;
+      if (text) {
+        // For a name field, replace the current value (not append)
+        if (selectedPersonId) onPersonSelect(null);
+        onChangeRef.current(text);
+      }
+      setVoiceStatus("idle");
+    } catch (err) {
+      if ((err as Error)?.name === "AbortError") return;
+      console.error("transcribe failed", (err as Error)?.message);
+      if (mountedRef.current) {
+        setVoiceStatus("error");
+        setVoiceError("Couldn't transcribe. Try again or type it.");
+      }
+    }
+  }
+
+  function handleMicClick() {
+    if (disabled) return;
+    if (voiceStatus === "recording") {
+      stopRecording();
+    } else if (voiceStatus === "idle" || voiceStatus === "error") {
+      void startRecording();
+    }
+  }
+
+  const recording = voiceStatus === "recording";
+  const transcribing = voiceStatus === "transcribing";
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <div className="relative">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => handleInputChange(e.target.value)}
+          onFocus={() => {
+            if (suggestions.length > 0 && !selectedPersonId) {
+              setShowDropdown(true);
+            }
+          }}
+          placeholder={placeholder}
+          disabled={disabled || transcribing}
+          autoComplete="off"
+          autoCapitalize="words"
+          className={`w-full rounded-xl border px-4 py-3 pr-24 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+            selectedPersonId
+              ? "border-indigo-300 bg-indigo-50"
+              : "border-zinc-200 bg-white"
+          }`}
+        />
+        {/* Right-side buttons: mic + clear */}
+        <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center gap-1">
+          {/* Mic button — always visible unless a person is selected */}
+          {!selectedPersonId && (
+            <button
+              type="button"
+              onClick={handleMicClick}
+              disabled={disabled || transcribing}
+              aria-label={recording ? "Stop recording" : "Start voice input"}
+              className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
+                recording
+                  ? "bg-red-500 text-white"
+                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+              } disabled:opacity-50`}
+            >
+              {transcribing ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+              ) : recording ? (
+                <span className="h-3 w-3 rounded-sm bg-white" />
+              ) : (
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              )}
+            </button>
+          )}
+          {/* Clear button — shown when a person is selected */}
+          {selectedPersonId && (
+            <button
+              type="button"
+              onClick={() => {
+                onPersonSelect(null);
+                onChange("");
+                setSuggestions([]);
+              }}
+              className="flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+              aria-label="Clear selection"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          )}
+          {/* Search loading indicator */}
+          {loading && !selectedPersonId && !recording && !transcribing && (
+            <div className="flex h-10 w-10 items-center justify-center">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-500" />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Voice feedback */}
+      {voiceError && (
+        <p className="mt-2 text-sm text-red-600">{voiceError}</p>
+      )}
+      {recording && !voiceError && (
+        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-red-600">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
+          Recording... tap to stop.
+        </p>
+      )}
+
+      {/* Suggestions dropdown */}
+      {showDropdown && suggestions.length > 0 && (
+        <ul
+          ref={dropdownRef}
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-lg"
+        >
+          {suggestions.map((person) => (
+            <li key={person.person_id}>
+              <button
+                type="button"
+                onClick={() => handleSelect(person)}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 active:bg-zinc-100"
+                style={{ minHeight: "44px" }}
+              >
+                <span className="text-base font-medium text-zinc-900">
+                  {person.display_name}
+                </span>
+                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
+                  {RELATIONSHIP_LABELS[person.relationship_domain] ??
+                    person.relationship_domain}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {/* Bottom spacer when dropdown is open — prevents keyboard from hiding suggestions */}
+      {showDropdown && suggestions.length > 0 && (
+        <div className="h-40" aria-hidden />
+      )}
+    </div>
+  );
+}

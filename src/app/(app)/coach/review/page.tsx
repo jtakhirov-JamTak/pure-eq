@@ -4,8 +4,16 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
+import { PersonPicker } from "@/components/person-picker";
 
 const STEPS = [
+  {
+    key: "personName",
+    title: "Who was this conversation with?",
+    prompt: "Start typing to see people you've mentioned before",
+    type: "person" as const,
+    optional: true,
+  },
   {
     key: "whatHappened",
     title: "What actually happened in the conversation?",
@@ -75,6 +83,7 @@ export default function ReviewPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<Record<string, string>>({});
+  const [personId, setPersonId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -113,6 +122,7 @@ export default function ReviewPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          personId: personId || null,
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
@@ -257,20 +267,19 @@ export default function ReviewPage() {
 
       {/* Input */}
       <div className="mt-4">
-        {currentStep.type === "textarea" ? (
+        {currentStep.type === "person" ? (
+          <PersonPicker
+            value={value}
+            onChange={(next) => setFieldValue(currentStep.key, next)}
+            onPersonSelect={(id) => setPersonId(id)}
+            selectedPersonId={personId}
+          />
+        ) : (
           <VoiceInput
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}
             placeholder="Type or tap the mic to speak..."
-          />
-        ) : (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => setFieldValue(currentStep.key, e.target.value)}
-            className="block h-11 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-            placeholder="One sentence..."
           />
         )}
       </div>

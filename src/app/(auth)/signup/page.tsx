@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
@@ -11,7 +10,6 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -46,8 +44,9 @@ export default function SignupPage() {
       return;
     }
 
-    router.push("/onboarding");
-    router.refresh();
+    // Full navigation so middleware sets session cookies before onboarding
+    // tries to read auth state. Client-side push + refresh is a race.
+    window.location.href = "/onboarding";
   }
 
   return (

@@ -4,6 +4,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
+import { PersonPicker } from "@/components/person-picker";
 import type { RelationshipDomain } from "@/types";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
@@ -21,8 +22,8 @@ const STEPS = [
   {
     key: "personName",
     title: "Who is this with?",
-    prompt: "Person name or label",
-    type: "text" as const,
+    prompt: "Start typing to see people you've mentioned before",
+    type: "person" as const,
   },
   {
     key: "relationship",
@@ -87,6 +88,7 @@ export default function PreparePage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [data, setData] = useState<Record<string, string>>({});
+  const [personId, setPersonId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -126,6 +128,7 @@ export default function PreparePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...data,
+          personId: personId || null,
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
@@ -259,7 +262,20 @@ export default function PreparePage() {
 
       {/* Input */}
       <div className="mt-4">
-        {currentStep.type === "select" ? (
+        {currentStep.type === "person" ? (
+          <PersonPicker
+            value={value}
+            onChange={(next) => setFieldValue(currentStep.key, next)}
+            onPersonSelect={(id, relationship) => {
+              setPersonId(id);
+              // Auto-fill relationship when selecting an existing person
+              if (id && relationship) {
+                setFieldValue("relationship", relationship);
+              }
+            }}
+            selectedPersonId={personId}
+          />
+        ) : currentStep.type === "select" ? (
           <div className="space-y-3">
             {RELATIONSHIPS.map((rel) => (
               <button
@@ -278,20 +294,12 @@ export default function PreparePage() {
               </button>
             ))}
           </div>
-        ) : currentStep.type === "textarea" ? (
+        ) : (
           <VoiceInput
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}
             placeholder="Type or tap the mic to speak..."
-          />
-        ) : (
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => setFieldValue(currentStep.key, e.target.value)}
-            className="block h-11 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
-            placeholder="Enter name..."
           />
         )}
       </div>

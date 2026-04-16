@@ -24,7 +24,7 @@ export const submitQuizSchema = z
 
 // Coach — Prepare
 export const createPrepareSchema = z.object({
-  personName: z.string().min(1).max(200),
+  personName: z.string().trim().min(1).max(200),
   relationship: z.enum([
     "partner", "friend", "family", "manager",
     "direct_report", "coworker", "client", "other",
@@ -75,6 +75,16 @@ export const createTriggerSchema = z.object({
   outcome: z.string().min(1).max(5000),
   reflection: z.string().min(1).max(5000),
   afterFeeling: z.string().min(1).max(200),
+});
+
+// Persons
+export const createPersonSchema = z.object({
+  displayName: z.string().trim().min(1).max(200),
+  relationshipDomain: z.enum([
+    "partner", "friend", "family", "manager",
+    "direct_report", "coworker", "client", "other",
+  ]),
+  relationshipSubtype: z.string().max(200).nullable().optional(),
 });
 
 // Subscribe (v0 mock — no payment fields yet)

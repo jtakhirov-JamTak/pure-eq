@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
@@ -10,7 +9,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -29,11 +27,11 @@ export default function LoginPage() {
       return;
     }
 
-    // /onboarding is the routing hub: it flushes any pending quiz answers,
-    // forwards users who already have a profile to their starting module,
-    // and falls through to the quiz for partially-onboarded accounts.
-    router.push("/onboarding");
-    router.refresh();
+    // Full navigation (not client-side) so the middleware runs and sets
+    // session cookies before the onboarding page tries to read auth state.
+    // router.push + router.refresh is a race — the page can mount before
+    // the middleware processes the new session.
+    window.location.href = "/onboarding";
   }
 
   return (

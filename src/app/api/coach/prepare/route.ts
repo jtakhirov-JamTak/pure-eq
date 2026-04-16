@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createPrepareSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { verifyPersonOwnership } from "@/lib/verify-ownership";
 import { checkSubscription, markFreePrepareUsed } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import { prepareOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
@@ -133,6 +134,54 @@ export async function POST(req: Request) {
   }
   const userProfile = rawProfile as ProfileType;
 
+  // 4b. Resolve person_id: verify ownership if provided, auto-create if new name.
+  let effectivePersonId: string | null = input.personId ?? null;
+  if (effectivePersonId) {
+    const owns = await verifyPersonOwnership(supabase, user.id, effectivePersonId);
+    if (!owns) {
+      return NextResponse.json({ error: "Invalid person" }, { status: 400 });
+    }
+    // Touch updated_at so the person sorts to the top in the picker
+    await supabase
+      .from("persons")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("person_id", effectivePersonId)
+      .eq("user_id", user.id);
+  } else if (input.personName) {
+    // Dedup: reuse existing person with same name + relationship before creating
+    const { data: existingPerson } = await supabase
+      .from("persons")
+      .select("person_id")
+      .eq("user_id", user.id)
+      .eq("display_name", input.personName)
+      .eq("relationship_domain", input.relationship)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (existingPerson) {
+      effectivePersonId = existingPerson.person_id;
+      await supabase
+        .from("persons")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("person_id", effectivePersonId)
+        .eq("user_id", user.id);
+    } else {
+      const { data: newPerson } = await supabase
+        .from("persons")
+        .insert({
+          user_id: user.id,
+          display_name: input.personName,
+          relationship_domain: input.relationship,
+        })
+        .select("person_id")
+        .single();
+      if (newPerson) {
+        effectivePersonId = newPerson.person_id;
+      }
+      // If auto-create fails, continue without person_id — not a blocking error
+    }
+  }
+
   // 5. Idempotency. The client sends a UUID once per submission attempt;
   //    on retry (network flake, strict-mode double-mount, user-initiated
   //    retry), the same key reuses any rows already written so we never
@@ -176,7 +225,7 @@ export async function POST(req: Request) {
         schema_version: 1,
         is_complete: true,
         completed_at: new Date().toISOString(),
-        person_id: input.personId ?? null,
+        person_id: effectivePersonId,
         thread_id: input.threadId ?? null,
       })
       .select("raw_record_id")
@@ -228,7 +277,7 @@ export async function POST(req: Request) {
         ai_plan_json: null,
         ai_plan_version: null,
         is_complete: false,
-        person_id: input.personId ?? null,
+        person_id: effectivePersonId,
         thread_id: input.threadId ?? null,
       })
       .select("prepare_entry_id")

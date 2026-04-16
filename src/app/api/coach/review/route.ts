@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createReviewSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { verifyPersonOwnership } from "@/lib/verify-ownership";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import { reviewOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
@@ -29,6 +30,9 @@ const PROFILE_VALUES: ProfileType[] = [
 
 const requestSchema = createReviewSchema.extend({
   idempotencyKey: z.string().uuid(),
+  // Person picker sends personName for display — not used by Review route
+  // but included in the request body from the form's data spread.
+  personName: z.string().max(200).optional(),
 });
 
 type ReviewAiOutput = z.infer<typeof reviewOutputSchema>;
@@ -130,6 +134,53 @@ export async function POST(req: Request) {
   }
   const userProfile = rawProfile as ProfileType;
 
+  // 4b. Resolve person_id: verify ownership if provided, auto-create if new name.
+  let effectivePersonId: string | null = input.personId ?? null;
+  if (effectivePersonId) {
+    const owns = await verifyPersonOwnership(supabase, user.id, effectivePersonId);
+    if (!owns) {
+      return NextResponse.json({ error: "Invalid person" }, { status: 400 });
+    }
+    // Touch updated_at so the person sorts to the top in the picker
+    await supabase
+      .from("persons")
+      .update({ updated_at: new Date().toISOString() })
+      .eq("person_id", effectivePersonId)
+      .eq("user_id", user.id);
+  } else if (input.personName) {
+    // Auto-create with "other" relationship since Review doesn't collect it.
+    // Dedup: reuse existing person with same name before creating.
+    const { data: existingPerson } = await supabase
+      .from("persons")
+      .select("person_id")
+      .eq("user_id", user.id)
+      .eq("display_name", input.personName)
+      .eq("is_active", true)
+      .maybeSingle();
+
+    if (existingPerson) {
+      effectivePersonId = existingPerson.person_id;
+      await supabase
+        .from("persons")
+        .update({ updated_at: new Date().toISOString() })
+        .eq("person_id", effectivePersonId)
+        .eq("user_id", user.id);
+    } else {
+      const { data: newPerson } = await supabase
+        .from("persons")
+        .insert({
+          user_id: user.id,
+          display_name: input.personName,
+          relationship_domain: "other",
+        })
+        .select("person_id")
+        .single();
+      if (newPerson) {
+        effectivePersonId = newPerson.person_id;
+      }
+    }
+  }
+
   // 5. Idempotency.
   const { data: existingRaw, error: existingErr } = await supabase
     .from("raw_records")
@@ -169,7 +220,7 @@ export async function POST(req: Request) {
         schema_version: 1,
         is_complete: true,
         completed_at: new Date().toISOString(),
-        person_id: input.personId ?? null,
+        person_id: effectivePersonId,
         thread_id: input.threadId ?? null,
       })
       .select("raw_record_id")
@@ -220,7 +271,7 @@ export async function POST(req: Request) {
         ai_reflection_json: null,
         ai_reflection_version: null,
         is_complete: false,
-        person_id: input.personId ?? null,
+        person_id: effectivePersonId,
         thread_id: input.threadId ?? null,
       })
       .select("review_entry_id")
