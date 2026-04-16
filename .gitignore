@@ -143,3 +143,6 @@ scratch/
 
 # Claude Code per-user settings (personal to the developer, never commit)
 .claude/
+
+# /save-context skill state — per-developer running context, not source code
+session-context.md

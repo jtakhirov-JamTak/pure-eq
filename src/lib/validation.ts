@@ -56,10 +56,10 @@ export const createReviewSchema = z.object({
 
 // Tools — Overwhelmed
 export const createOverwhelmedSchema = z.object({
-  beforeRating: z.number().min(1).max(5),
+  beforeRating: z.number().int().min(1).max(5),
   bodyLocation: z.string().max(200).nullable().optional(),
   feelingLabel: z.string().min(1).max(5000),
-  afterRating: z.number().min(1).max(5),
+  afterRating: z.number().int().min(1).max(5),
   afterFeeling: z.string().min(1).max(200),
 });
 
@@ -68,9 +68,9 @@ export const createTriggerSchema = z.object({
   trigger: z.string().min(1).max(5000),
   interpretation: z.string().min(1).max(5000),
   emotion: z.string().min(1).max(1000),
-  emotionIntensity: z.number().min(1).max(10),
+  emotionIntensity: z.number().int().min(1).max(10),
   urge: z.string().min(1).max(1000),
-  urgeIntensity: z.number().min(1).max(10),
+  urgeIntensity: z.number().int().min(1).max(10),
   behavior: z.string().min(1).max(5000),
   outcome: z.string().min(1).max(5000),
   reflection: z.string().min(1).max(5000),

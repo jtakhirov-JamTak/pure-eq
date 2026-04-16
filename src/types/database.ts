@@ -125,6 +125,7 @@ export type Database = {
       }
       overwhelmed_entries: {
         Row: {
+          after_feeling: string | null
           ai_response_json: Json | null
           body_sensations: string | null
           completed_at: string | null
@@ -140,6 +141,7 @@ export type Database = {
           what_happened: string | null
         }
         Insert: {
+          after_feeling?: string | null
           ai_response_json?: Json | null
           body_sensations?: string | null
           completed_at?: string | null
@@ -155,6 +157,7 @@ export type Database = {
           what_happened?: string | null
         }
         Update: {
+          after_feeling?: string | null
           ai_response_json?: Json | null
           body_sensations?: string | null
           completed_at?: string | null
@@ -561,12 +564,14 @@ export type Database = {
       }
       trigger_entries: {
         Row: {
+          after_feeling: string | null
           ai_response_json: Json | null
           behavior: string | null
           completed_at: string | null
           created_at: string
           deleted_at: string | null
           emotion: string | null
+          emotion_intensity: number | null
           event_text: string | null
           interpretation: string | null
           is_complete: boolean
@@ -577,15 +582,18 @@ export type Database = {
           thread_id: string | null
           trigger_entry_id: string
           urge: string | null
+          urge_intensity: number | null
           user_id: string
         }
         Insert: {
+          after_feeling?: string | null
           ai_response_json?: Json | null
           behavior?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           emotion?: string | null
+          emotion_intensity?: number | null
           event_text?: string | null
           interpretation?: string | null
           is_complete?: boolean
@@ -596,15 +604,18 @@ export type Database = {
           thread_id?: string | null
           trigger_entry_id?: string
           urge?: string | null
+          urge_intensity?: number | null
           user_id: string
         }
         Update: {
+          after_feeling?: string | null
           ai_response_json?: Json | null
           behavior?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           emotion?: string | null
+          emotion_intensity?: number | null
           event_text?: string | null
           interpretation?: string | null
           is_complete?: boolean
@@ -615,6 +626,7 @@ export type Database = {
           thread_id?: string | null
           trigger_entry_id?: string
           urge?: string | null
+          urge_intensity?: number | null
           user_id?: string
         }
         Relationships: [

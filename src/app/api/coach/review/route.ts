@@ -5,6 +5,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { createReviewSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
+import { checkOrigin } from "@/lib/check-origin";
 import { reviewOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
 import type { ProfileType } from "@/types";
@@ -29,17 +30,6 @@ const requestSchema = createReviewSchema.extend({
 });
 
 type ReviewAiOutput = z.infer<typeof reviewOutputSchema>;
-
-function checkOrigin(req: Request): boolean {
-  const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
-  if (!origin || !host) return false;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(req: Request) {
   if (!checkOrigin(req)) {

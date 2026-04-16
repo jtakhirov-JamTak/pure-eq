@@ -2,25 +2,12 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getAuthUser } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { checkOrigin } from "@/lib/check-origin";
 
 export const runtime = "nodejs";
 
 const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 const MIN_AUDIO_BYTES = 2 * 1024;
-
-// Reject cross-origin POSTs. Whisper is a paid API — a malicious page that
-// catches a logged-in user's SameSite=Lax cookie could otherwise trigger
-// spend on their behalf. Our own client always sends the origin header.
-function checkOrigin(req: Request): boolean {
-  const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
-  if (!origin || !host) return false;
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
-}
 
 // Magic-byte sniff. The Blob's self-declared `type` is client-supplied and
 // trivially spoofable — without this, an attacker can upload any file and
