@@ -11,7 +11,11 @@ import { checkSubscription, markFreePrepareUsed } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import { prepareOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
 import { buildPreparePrompt } from "@/lib/ai/prompts";
-import type { ProfileType } from "@/types";
+import {
+  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TYPE_FOR_TAG,
+} from "@/lib/insights";
+import type { ProfileType, ObservationTag } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -389,6 +393,47 @@ export async function POST(req: Request) {
       // is_complete=false with null plan. Flag it so the client knows the
       // save is partial and the insights pipeline can re-derive later.
       saveWarning = true;
+    }
+  }
+
+  // 8b. Extract pattern observation (fire-and-forget, predictive).
+  // Prepare AI now predicts which behavioral pattern is most likely to appear.
+  // Stored as observation_source="predictive" — excluded from user-facing
+  // insight thresholds but available for future analysis.
+  if (aiOutput?.pattern_tag) {
+    try {
+      const tag = aiOutput.pattern_tag as ObservationTag;
+      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      if (tagDesc) {
+        const { data: existingObs } = await supabase
+          .from("pattern_observations")
+          .select("pattern_observation_id")
+          .eq("user_id", user.id)
+          .eq("source_raw_record_id", rawRecordId)
+          .maybeSingle();
+
+        if (!existingObs) {
+          await supabase.from("pattern_observations").insert({
+            user_id: user.id,
+            source_raw_record_id: rawRecordId,
+            source_interaction_entry_id: prepareEntryId,
+            person_id: effectivePersonId,
+            thread_id: input.threadId ?? null,
+            observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
+            observation_tag: tag,
+            direction: tagDesc.direction,
+            confidence_score: 0.7, // Predictive, not observed
+            observation_source: "predictive",
+            extractor_version: "prepare_v1",
+            supporting_evidence_json: {
+              likely_blind_spot: aiOutput.likely_blind_spot,
+              what_user_may_be_missing: aiOutput.what_user_may_be_missing,
+            },
+          });
+        }
+      }
+    } catch {
+      console.error("prepare: pattern observation insert failed");
     }
   }
 

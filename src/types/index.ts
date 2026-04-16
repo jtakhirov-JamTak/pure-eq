@@ -95,6 +95,7 @@ export interface PrepareAIOutput {
   user_read_accuracy: string;
   what_user_may_be_missing: string;
   best_next_move: string;
+  pattern_tag: string;
 }
 
 export interface ReviewAIOutput {

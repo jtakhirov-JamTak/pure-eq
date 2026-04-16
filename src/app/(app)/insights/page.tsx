@@ -39,7 +39,7 @@ export default async function InsightsPage() {
 
     supabase
       .from("pattern_observations")
-      .select("observation_tag, observed_at")
+      .select("observation_tag, observed_at, observation_source")
       .eq("user_id", user.id)
       .order("observed_at", { ascending: false })
       .limit(500), // Safety cap; sufficient for v0 scale

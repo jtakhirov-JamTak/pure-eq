@@ -7,6 +7,11 @@ import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
+import {
+  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TYPE_FOR_TAG,
+  inferTriggerPatternTag,
+} from "@/lib/insights";
 
 export const runtime = "nodejs";
 
@@ -191,6 +196,53 @@ export async function POST(req: Request) {
         { status: 500 }
       );
     }
+  }
+
+  // 6. Extract pattern observation (fire-and-forget, heuristic).
+  // No AI call — map from structured intensity fields and keywords.
+  // Returns null for ambiguous cases (skip observation entirely).
+  try {
+    const tag = inferTriggerPatternTag({
+      emotionIntensity: input.emotionIntensity,
+      urgeIntensity: input.urgeIntensity,
+      emotion: input.emotion,
+      trigger: input.trigger,
+    });
+
+    if (tag) {
+      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      if (tagDesc) {
+        const { data: existingObs } = await supabase
+          .from("pattern_observations")
+          .select("pattern_observation_id")
+          .eq("user_id", user.id)
+          .eq("source_raw_record_id", rawRecordId)
+          .maybeSingle();
+
+        if (!existingObs) {
+          await supabase.from("pattern_observations").insert({
+            user_id: user.id,
+            source_raw_record_id: rawRecordId,
+            source_interaction_entry_id: null,
+            person_id: null,
+            thread_id: null,
+            observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
+            observation_tag: tag,
+            direction: tagDesc.direction,
+            confidence_score: 0.6, // Heuristic, not AI-assigned
+            observation_source: "observed",
+            extractor_version: "trigger_v1",
+            supporting_evidence_json: {
+              emotion_intensity: input.emotionIntensity,
+              urge_intensity: input.urgeIntensity,
+              emotion: input.emotion,
+            },
+          });
+        }
+      }
+    }
+  } catch {
+    console.error("triggered: pattern observation insert failed");
   }
 
   return NextResponse.json({

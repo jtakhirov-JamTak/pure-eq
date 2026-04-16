@@ -195,6 +195,7 @@ export function checkInsightThresholds(stats: EntryStats): ThresholdResult {
 export interface PatternObservation {
   observation_tag: string;
   observed_at: string;
+  observation_source: string; // "observed" | "predictive"
 }
 
 export interface BlindSpotResult {
@@ -208,9 +209,16 @@ export function getTopBlindSpot(
   observations: PatternObservation[],
   totalEntries: number
 ): BlindSpotResult | null {
+  // Only count observed behavior, not predictive (from Prepare).
+  // Predictive observations are stored for future analysis but excluded
+  // from user-facing insight thresholds.
+  const observed = observations.filter(
+    (o) => o.observation_source === "observed"
+  );
+
   // Group by tag, only negative-direction tags
   const counts = new Map<ObservationTag, number>();
-  for (const obs of observations) {
+  for (const obs of observed) {
     const tag = obs.observation_tag as ObservationTag;
     const desc = OBSERVATION_TAG_DESCRIPTIONS[tag];
     if (!desc || desc.direction !== "negative") continue;
@@ -239,4 +247,49 @@ export function getTopBlindSpot(
     count: topCount,
     freshnessLabel: `Based on your first ${totalEntries} entries. Next update at ${nextThreshold}.`,
   };
+}
+
+// ---------- Trigger Heuristic Extractor ----------
+// Maps structured trigger entry fields to observation tags without an AI call.
+// Returns null for ambiguous cases — "no weak/fake insight" rule.
+
+const CRITICISM_KEYWORDS = [
+  "criticized", "criticism", "judged", "blamed", "attacked", "called out",
+  "put down", "mocked", "ridiculed", "belittled",
+];
+
+const PRESSURE_KEYWORDS = [
+  "pressure", "deadline", "demanded", "rushed", "forced", "overwhelmed",
+  "cornered", "ultimatum", "no choice", "had to",
+];
+
+export function inferTriggerPatternTag(input: {
+  emotionIntensity: number;
+  urgeIntensity: number;
+  emotion: string;
+  trigger: string;
+}): ObservationTag | null {
+  // High emotion + high urge = escalation pattern
+  if (input.emotionIntensity >= 7 && input.urgeIntensity >= 7) {
+    return "escalated_after_trigger";
+  }
+
+  // High emotion but controlled urge = withdrawal under tension
+  if (input.emotionIntensity >= 7 && input.urgeIntensity <= 4) {
+    return "withdrew_under_tension";
+  }
+
+  // Check for criticism/pressure keywords in the trigger text
+  const triggerLower = input.trigger.toLowerCase();
+
+  if (CRITICISM_KEYWORDS.some((k) => triggerLower.includes(k))) {
+    return "recurring_trigger_criticism";
+  }
+
+  if (PRESSURE_KEYWORDS.some((k) => triggerLower.includes(k))) {
+    return "recurring_trigger_pressure";
+  }
+
+  // Ambiguous: can't confidently assign a tag. Skip observation entirely.
+  return null;
 }

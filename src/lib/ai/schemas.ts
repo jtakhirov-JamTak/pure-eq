@@ -9,6 +9,7 @@ export const prepareOutputSchema = z.object({
   user_read_accuracy: z.string().max(150),
   what_user_may_be_missing: z.string().max(150),
   best_next_move: z.string().max(120),
+  pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
 // Review AI output schema

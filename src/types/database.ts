@@ -187,6 +187,7 @@ export type Database = {
           confidence_score: number
           direction: string | null
           extractor_version: string
+          observation_source: string
           observation_tag: string
           observation_type: string
           observed_at: string
@@ -202,6 +203,7 @@ export type Database = {
           confidence_score: number
           direction?: string | null
           extractor_version: string
+          observation_source?: string
           observation_tag: string
           observation_type: string
           observed_at?: string
@@ -217,6 +219,7 @@ export type Database = {
           confidence_score?: number
           direction?: string | null
           extractor_version?: string
+          observation_source?: string
           observation_tag?: string
           observation_type?: string
           observed_at?: string

@@ -411,6 +411,7 @@ export async function POST(req: Request) {
             observation_tag: tag,
             direction: tagDesc.direction,
             confidence_score: 0.8, // Fixed for v0.5; future extractors may vary by source quality
+            observation_source: "observed",
             extractor_version: "review_v1",
             supporting_evidence_json: {
               how_user_likely_came_across:
