@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createReviewSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { checkSubscription } from "@/lib/subscription";
+import { isAdmin } from "@/lib/admin";
 import { reviewOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
 import type { ProfileType } from "@/types";
@@ -59,6 +61,17 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // 2b. Subscription gate — Review has no free tier. Admins bypass.
+  if (!isAdmin(user.email)) {
+    const access = await checkSubscription(supabase, user.id);
+    if (!access.hasAccess) {
+      return NextResponse.json(
+        { error: "Subscription required" },
+        { status: 403 }
+      );
+    }
   }
 
   // 3. Rate limit per user. Two buckets: minute-window blocks burst abuse,

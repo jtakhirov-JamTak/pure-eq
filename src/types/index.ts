@@ -157,6 +157,14 @@ export type ObservationTag = (typeof OBSERVATION_TAGS)[number];
 // Evidence states for insights
 export type EvidenceState = "not_enough" | "emerging" | "established";
 
+// Subscription states
+export type SubscriptionStatus =
+  | "none"
+  | "trial_active"
+  | "active"
+  | "trial_expired"
+  | "cancelled";
+
 // Banned AI phrases — checked before displaying any output
 export const BANNED_PHRASES = [
   "You are someone who",

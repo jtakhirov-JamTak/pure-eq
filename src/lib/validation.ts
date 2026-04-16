@@ -77,6 +77,9 @@ export const createTriggerSchema = z.object({
   afterFeeling: z.string().min(1).max(200),
 });
 
+// Subscribe (v0 mock — no payment fields yet)
+export const subscribeSchema = z.object({});
+
 // Outcome tracking
 export const immediateOutcomeSchema = z.object({
   movedForward: z.enum(["yes", "partly", "no", "unclear"]),

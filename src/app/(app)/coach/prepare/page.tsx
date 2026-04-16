@@ -129,6 +129,10 @@ export default function PreparePage() {
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
+      if (res.status === 403) {
+        router.push("/paywall");
+        return;
+      }
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }

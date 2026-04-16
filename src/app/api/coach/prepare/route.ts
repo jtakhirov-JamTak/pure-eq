@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createPrepareSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { checkSubscription, markFreePrepareUsed } from "@/lib/subscription";
+import { isAdmin } from "@/lib/admin";
 import { prepareOutputSchema, validateAIOutput } from "@/lib/ai/schemas";
 import { buildPreparePrompt } from "@/lib/ai/prompts";
 import type { ProfileType } from "@/types";
@@ -59,6 +61,19 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // 2b. Subscription gate — allow one free Prepare, then require subscription.
+  //     Admins bypass entirely.
+  const adminUser = isAdmin(user.email);
+  const access = adminUser
+    ? { hasAccess: true, freePrepareUsed: false, status: "active" as const, trialEndsAt: null }
+    : await checkSubscription(supabase, user.id);
+  if (access.freePrepareUsed && !access.hasAccess) {
+    return NextResponse.json(
+      { error: "Subscription required" },
+      { status: 403 }
+    );
   }
 
   // 3. Rate limit per user. Two buckets: minute-window blocks burst abuse,
@@ -326,6 +341,11 @@ export async function POST(req: Request) {
       // save is partial and the insights pipeline can re-derive later.
       saveWarning = true;
     }
+  }
+
+  // 9. Mark free Prepare as used (if this was the first and AI succeeded).
+  if (aiOutput && !access.freePrepareUsed) {
+    await markFreePrepareUsed(supabase, user.id);
   }
 
   return NextResponse.json({
