@@ -12,6 +12,15 @@ export const prepareOutputSchema = z.object({
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
+// Repair AI output schema
+export const repairOutputSchema = z.object({
+  repair_strategy: z.string().max(200),
+  thing_not_to_say: z.string().max(150),
+  recommended_timing: z.string().max(120),
+  next_move_if_poorly_received: z.string().max(150),
+  pattern_tag: z.enum(OBSERVATION_TAGS),
+});
+
 // Review AI output schema
 export const reviewOutputSchema = z.object({
   how_user_likely_came_across: z.string().max(200),

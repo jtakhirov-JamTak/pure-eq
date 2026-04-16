@@ -840,3 +840,50 @@ Rules:
   component unmount
 - For iOS Safari: AudioContext for completion sounds must be created
   inside a user gesture (tap handler), not inside setInterval
+
+### 16.7 Select-Step Auto-Advance with Submit
+
+Problem: Multi-step forms with select buttons that auto-advance work
+fine for middle steps, but on the last step the select must both set
+the value AND trigger submit. Using setState + setTimeout(0) before
+handleSubmit reads stale state from the closure.
+
+    // BROKEN — handleSubmit reads stale data
+    setData(d => ({ ...d, [key]: value }));
+    setTimeout(() => handleSubmit(), 0);
+
+    // CORRECT — pass the final payload directly
+    async function handleSubmit(overrideData?: Record<string, string>) {
+      const payload = overrideData ?? data;
+      // ... use payload, not data
+    }
+
+    // In the select handler:
+    const merged = { ...data, [currentStep.key]: opt.value };
+    setFieldValue(currentStep.key, opt.value); // for UI highlight
+    handleSubmit(merged);                       // submit with merged payload
+
+Rules:
+- Never read from useState in the same handler that sets it
+- Pass the final merged payload as a parameter to submit
+- Same class of bug as stale closures in async callbacks —
+  useState is async even in synchronous call chains
+- This applies to any form where a user interaction both
+  updates state and triggers a side effect that reads it
+
+### 16.8 Evidence Threshold Gating for New Modules
+
+Problem: Product doc thresholds for insight families may require entries
+from modules that are newly shipped or not yet built (e.g., "1+ Repair
+entry" for person patterns when Repair just launched). Enforcing these
+thresholds immediately blocks the insight for every existing user.
+
+Rules:
+- When a gating module has zero adoption, relax its threshold to 0
+  with a comment documenting the intended value
+- Add the intended threshold as a constant alongside the active one
+- Raise the threshold when the module has real adoption data
+- Never silently lower a threshold — always comment the deviation
+  and the condition for restoring it
+- Same principle as minEventTypes: match thresholds to what's
+  actually instrumented, not what's planned

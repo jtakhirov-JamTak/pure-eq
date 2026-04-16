@@ -477,6 +477,88 @@ export type Database = {
           },
         ]
       }
+      repair_entries: {
+        Row: {
+          ai_strategy_json: Json | null
+          ai_strategy_version: number | null
+          channel: string
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          desired_outcome: string
+          is_complete: boolean
+          person_id: string | null
+          raw_record_id: string | null
+          repair_entry_id: string
+          their_need: string
+          thread_id: string | null
+          timing: string
+          user_id: string
+          what_needs_repair: string
+          your_responsibility: string
+        }
+        Insert: {
+          ai_strategy_json?: Json | null
+          ai_strategy_version?: number | null
+          channel: string
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          desired_outcome: string
+          is_complete?: boolean
+          person_id?: string | null
+          raw_record_id?: string | null
+          repair_entry_id?: string
+          their_need: string
+          thread_id?: string | null
+          timing: string
+          user_id: string
+          what_needs_repair: string
+          your_responsibility: string
+        }
+        Update: {
+          ai_strategy_json?: Json | null
+          ai_strategy_version?: number | null
+          channel?: string
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          desired_outcome?: string
+          is_complete?: boolean
+          person_id?: string | null
+          raw_record_id?: string | null
+          repair_entry_id?: string
+          their_need?: string
+          thread_id?: string | null
+          timing?: string
+          user_id?: string
+          what_needs_repair?: string
+          your_responsibility?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "repair_entries_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "repair_entries_raw_record_id_fkey"
+            columns: ["raw_record_id"]
+            isOneToOne: false
+            referencedRelation: "raw_records"
+            referencedColumns: ["raw_record_id"]
+          },
+          {
+            foreignKeyName: "repair_entries_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_threads"
+            referencedColumns: ["thread_id"]
+          },
+        ]
+      }
       review_entries: {
         Row: {
           ai_reflection_json: Json | null

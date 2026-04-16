@@ -8,7 +8,10 @@ import {
 import {
   checkInsightThresholds,
   getTopBlindSpot,
+  getHowYouTendToLand,
+  getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
+  TEND_TO_LAND_HIGH_FIT,
 } from "@/lib/insights";
 import type { ProfileType } from "@/types";
 
@@ -19,35 +22,44 @@ export default async function InsightsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Parallel fetches: profile, entry stats, pattern observations
-  const [profileRes, rawRecordsRes, observationsRes] = await Promise.all([
-    supabase
-      .from("user_profiles")
-      .select("primary_profile, secondary_profile")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+  // Parallel fetches: profile, entry stats, pattern observations, persons
+  const [profileRes, rawRecordsRes, observationsRes, personsRes] =
+    await Promise.all([
+      supabase
+        .from("user_profiles")
+        .select("primary_profile, secondary_profile")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
 
-    supabase
-      .from("raw_records")
-      .select("record_type, created_at")
-      .eq("user_id", user.id)
-      .eq("is_complete", true)
-      .is("deleted_at", null)
-      .limit(1000), // Safety cap; RPC upgrade when needed
+      supabase
+        .from("raw_records")
+        .select("record_type, created_at, person_id")
+        .eq("user_id", user.id)
+        .eq("is_complete", true)
+        .is("deleted_at", null)
+        .limit(1000),
 
-    supabase
-      .from("pattern_observations")
-      .select("observation_tag, observed_at, observation_source")
-      .eq("user_id", user.id)
-      .order("observed_at", { ascending: false })
-      .limit(500), // Safety cap; sufficient for v0 scale
-  ]);
+      supabase
+        .from("pattern_observations")
+        .select("observation_tag, observed_at, observation_source, person_id")
+        .eq("user_id", user.id)
+        .order("observed_at", { ascending: false })
+        .limit(500),
+
+      supabase
+        .from("persons")
+        .select("person_id, display_name")
+        .eq("user_id", user.id)
+        .eq("is_active", true)
+        .limit(100),
+    ]);
 
   const profile = profileRes.data;
   const rawRecords = rawRecordsRes.data ?? [];
   const observations = observationsRes.data ?? [];
+  const persons = personsRes.data ?? [];
 
   // Compute entry stats
   const distinctDays = new Set(
@@ -72,6 +84,76 @@ export default async function InsightsPage() {
     thresholdResult.state === "threshold_met"
       ? getTopBlindSpot(observations, rawRecords.length)
       : null;
+
+  // "How You Tend to Land" — stricter thresholds
+  const tendToLandHighFit = rawRecords.filter((r) =>
+    (TEND_TO_LAND_HIGH_FIT as readonly string[]).includes(r.record_type)
+  ).length;
+  const reviewEntries = rawRecords.filter(
+    (r) => r.record_type === "review"
+  ).length;
+
+  const tendToLand = getHowYouTendToLand(observations, {
+    totalEntries: rawRecords.length,
+    distinctDays,
+    eventTypes,
+    highFitEntries: tendToLandHighFit,
+    reviewEntries,
+  });
+
+  // Per-person patterns
+  const personNameMap = new Map(
+    persons.map((p) => [p.person_id, p.display_name])
+  );
+
+  // Build per-person stats from raw_records
+  const personStatsAccum = new Map<
+    string,
+    {
+      totalEntries: number;
+      reviewEntries: number;
+      repairEntries: number;
+      displayName: string;
+      days: Set<string>;
+    }
+  >();
+
+  for (const r of rawRecords) {
+    if (!r.person_id) continue;
+    const name = personNameMap.get(r.person_id);
+    if (!name) continue;
+
+    let entry = personStatsAccum.get(r.person_id);
+    if (!entry) {
+      entry = {
+        totalEntries: 0,
+        reviewEntries: 0,
+        repairEntries: 0,
+        displayName: name,
+        days: new Set(),
+      };
+      personStatsAccum.set(r.person_id, entry);
+    }
+    entry.totalEntries++;
+    if (r.created_at) entry.days.add(r.created_at.slice(0, 10));
+    if (r.record_type === "review") entry.reviewEntries++;
+    if (r.record_type === "repair") entry.repairEntries++;
+  }
+
+  const finalPersonStats = new Map(
+    [...personStatsAccum].map(([id, s]) => [
+      id,
+      {
+        totalEntries: s.totalEntries,
+        distinctDays: s.days.size,
+        reviewEntries: s.reviewEntries,
+        repairEntries: s.repairEntries,
+        displayName: s.displayName,
+      },
+    ])
+  );
+
+  const personPatterns = getPersonPatterns(observations, finalPersonStats);
 
   const primary = profile?.primary_profile as ProfileType | undefined;
   const secondary = profile?.secondary_profile as ProfileType | undefined;
@@ -118,21 +200,52 @@ export default async function InsightsPage() {
         </div>
       )}
 
-      {/* How You Tend to Land — deferred */}
-      <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
-        <p className="text-sm font-medium text-zinc-700">
-          How You Tend to Land
-        </p>
-        <p className="mt-1 text-sm text-zinc-500">Not enough data yet</p>
-      </div>
+      {/* How You Tend to Land */}
+      {tendToLand ? (
+        <TendToLandCard result={tendToLand} />
+      ) : (
+        <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
+          <p className="text-sm font-medium text-zinc-700">
+            How You Tend to Land
+          </p>
+          <p className="mt-1 text-sm text-zinc-500">
+            {rawRecords.length === 0
+              ? "Not enough data yet"
+              : reviewEntries < 2
+              ? "Needs at least 2 Review entries to analyze how you come across."
+              : "Keep using different modules to unlock this insight."}
+          </p>
+        </div>
+      )}
 
-      {/* People & Relationships — deferred */}
-      <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
-        <p className="text-sm font-medium text-zinc-700">
-          People &amp; Relationships
-        </p>
-        <p className="mt-1 text-sm text-zinc-500">Not enough data yet</p>
-      </div>
+      {/* People & Relationships */}
+      {personPatterns.length > 0 ? (
+        <div className="mt-4 space-y-3">
+          <p className="text-sm font-medium text-zinc-700">
+            People &amp; Relationships
+          </p>
+          {personPatterns.map((pp) => (
+            <PersonPatternCard
+              key={pp.personId}
+              result={pp}
+              displayName={
+                finalPersonStats.get(pp.personId)?.displayName ?? "Someone"
+              }
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
+          <p className="text-sm font-medium text-zinc-700">
+            People &amp; Relationships
+          </p>
+          <p className="mt-1 text-sm text-zinc-500">
+            {rawRecords.length === 0
+              ? "Not enough data yet"
+              : "Person-specific patterns will appear after more entries linked to the same person."}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -224,6 +337,113 @@ function BlindSpotCard({
         </p>
         <p className="text-xs text-zinc-500">{blindSpot.freshnessLabel}</p>
       </div>
+    </div>
+  );
+}
+
+// ---------- "How You Tend to Land" Card ----------
+
+function TendToLandCard({
+  result,
+}: {
+  result: {
+    summary: string;
+    counterPattern: { summary: string } | null;
+    confidenceLevel: "emerging" | "established";
+    freshnessLabel: string;
+  };
+}) {
+  const badgeColor =
+    result.confidenceLevel === "established"
+      ? "bg-green-100 text-green-700"
+      : "bg-blue-100 text-blue-700";
+  const borderColor =
+    result.confidenceLevel === "established"
+      ? "border-green-200 bg-green-50"
+      : "border-blue-200 bg-blue-50";
+
+  return (
+    <div className={`mt-4 rounded-xl border p-5 ${borderColor}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-zinc-700">
+          How You Tend to Land
+        </p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeColor}`}
+        >
+          {result.confidenceLevel === "established"
+            ? "Established"
+            : "Emerging"}
+        </span>
+      </div>
+
+      <p className="mt-2 text-sm text-zinc-800">{result.summary}</p>
+
+      {result.counterPattern && (
+        <p className="mt-2 text-sm text-zinc-600">
+          At the same time, {result.counterPattern.summary.charAt(0).toLowerCase() + result.counterPattern.summary.slice(1)}
+        </p>
+      )}
+
+      <p className="mt-3 text-xs text-zinc-500">{result.freshnessLabel}</p>
+    </div>
+  );
+}
+
+// ---------- Person Pattern Card ----------
+
+function PersonPatternCard({
+  result,
+  displayName,
+}: {
+  result: {
+    topNegative: { summary: string; count: number } | null;
+    topPositive: { summary: string } | null;
+    confidenceLevel: "emerging" | "established";
+    freshnessLabel: string;
+  };
+  displayName: string;
+}) {
+  const badgeColor =
+    result.confidenceLevel === "established"
+      ? "bg-green-100 text-green-700"
+      : "bg-purple-100 text-purple-700";
+  const borderColor =
+    result.confidenceLevel === "established"
+      ? "border-green-200 bg-green-50"
+      : "border-purple-200 bg-purple-50";
+
+  return (
+    <div className={`rounded-xl border p-5 ${borderColor}`}>
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-zinc-700">
+          With {displayName}
+        </p>
+        <span
+          className={`rounded-full px-2 py-0.5 text-xs font-medium ${badgeColor}`}
+        >
+          {result.confidenceLevel === "established"
+            ? "Established"
+            : "Emerging"}
+        </span>
+      </div>
+
+      {result.topNegative && (
+        <p className="mt-2 text-sm text-zinc-800">
+          {result.topNegative.summary}
+        </p>
+      )}
+
+      {result.topPositive && (
+        <p className="mt-2 text-sm text-zinc-600">
+          {result.topNegative ? "However, you also " : ""}
+          {result.topNegative
+            ? result.topPositive.summary.charAt(0).toLowerCase() + result.topPositive.summary.slice(1)
+            : result.topPositive.summary}
+        </p>
+      )}
+
+      <p className="mt-3 text-xs text-zinc-500">{result.freshnessLabel}</p>
     </div>
   );
 }

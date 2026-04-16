@@ -3,7 +3,7 @@ import Link from "next/link";
 
 export default function CoachPage() {
   return (
-    <div className="px-5 pt-8">
+    <div className="px-5 pb-28 pt-8">
       <h2 className="text-xl font-bold text-zinc-900">Coach</h2>
       <p className="mt-1 text-sm text-zinc-500">
         Prepare for hard conversations, review what happened, and repair when needed.
@@ -30,12 +30,15 @@ export default function CoachPage() {
           </p>
         </Link>
 
-        <div className="rounded-xl border border-zinc-100 bg-zinc-50 p-5 opacity-60">
-          <h3 className="text-base font-semibold text-zinc-400">Repair</h3>
-          <p className="mt-1 text-sm text-zinc-400">
-            Coming soon. Attempt repair after something landed badly.
+        <Link
+          href="/coach/repair"
+          className="block rounded-xl border border-zinc-200 p-5 transition-colors hover:border-zinc-300 hover:bg-zinc-50"
+        >
+          <h3 className="text-base font-semibold text-zinc-900">Repair</h3>
+          <p className="mt-1 text-sm text-zinc-500">
+            Attempt repair after something landed badly or a rupture needs attention.
           </p>
-        </div>
+        </Link>
       </div>
     </div>
   );

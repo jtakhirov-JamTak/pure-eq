@@ -119,7 +119,7 @@ export const INSIGHT_THRESHOLDS = {
   emergingTagCount: 2,
 } as const;
 
-export const HIGH_FIT_RECORD_TYPES = ["review", "trigger_log"] as const;
+export const HIGH_FIT_RECORD_TYPES = ["review", "trigger_log", "repair"] as const;
 
 // ---------- Threshold Checking ----------
 
@@ -216,37 +216,252 @@ export function getTopBlindSpot(
     (o) => o.observation_source === "observed"
   );
 
-  // Group by tag, only negative-direction tags
-  const counts = new Map<ObservationTag, number>();
-  for (const obs of observed) {
-    const tag = obs.observation_tag as ObservationTag;
-    const desc = OBSERVATION_TAG_DESCRIPTIONS[tag];
-    if (!desc || desc.direction !== "negative") continue;
-    counts.set(tag, (counts.get(tag) ?? 0) + 1);
-  }
+  const { negative } = countByDirection(observed);
+  const top = topFromMap(negative, INSIGHT_THRESHOLDS.emergingTagCount);
+  if (!top) return null;
 
-  // Find the tag with highest count, must meet minimum
-  let topTag: ObservationTag | null = null;
-  let topCount = 0;
-  for (const [tag, count] of counts) {
-    if (count >= INSIGHT_THRESHOLDS.emergingTagCount && count > topCount) {
-      topTag = tag;
-      topCount = count;
-    }
-  }
-
-  if (!topTag) return null;
-
-  // Freshness label: "Based on your first N entries. Next update at M."
-  // Next threshold is next multiple of 6 above totalEntries.
   const nextThreshold = Math.ceil((totalEntries + 1) / 6) * 6;
 
   return {
-    tag: topTag,
-    summary: OBSERVATION_TAG_DESCRIPTIONS[topTag].summary,
-    count: topCount,
+    tag: top.tag,
+    summary: OBSERVATION_TAG_DESCRIPTIONS[top.tag].summary,
+    count: top.count,
     freshnessLabel: `Based on your first ${totalEntries} entries. Next update at ${nextThreshold}.`,
   };
+}
+
+// ---------- Shared Helpers ----------
+
+function countByDirection(
+  observations: PatternObservation[],
+  filterTag?: (tag: ObservationTag) => boolean
+): { negative: Map<ObservationTag, number>; positive: Map<ObservationTag, number> } {
+  const negative = new Map<ObservationTag, number>();
+  const positive = new Map<ObservationTag, number>();
+  for (const obs of observations) {
+    const tag = obs.observation_tag as ObservationTag;
+    const desc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+    if (!desc) continue;
+    if (filterTag && !filterTag(tag)) continue;
+    if (desc.direction === "negative") {
+      negative.set(tag, (negative.get(tag) ?? 0) + 1);
+    } else if (desc.direction === "positive") {
+      positive.set(tag, (positive.get(tag) ?? 0) + 1);
+    }
+  }
+  return { negative, positive };
+}
+
+function topFromMap(
+  counts: Map<ObservationTag, number>,
+  minCount = 1
+): { tag: ObservationTag; count: number } | null {
+  let best: ObservationTag | null = null;
+  let bestCount = 0;
+  for (const [tag, count] of counts) {
+    if (count >= minCount && count > bestCount) {
+      best = tag;
+      bestCount = count;
+    }
+  }
+  return best ? { tag: best, count: bestCount } : null;
+}
+
+// ---------- "How You Tend to Land" ----------
+// Interpersonal-impact pattern — how the user comes across to others.
+// Product doc §11.2: stricter thresholds than blind spot.
+// High-fit for this family: Review and Outcome Tracking (§10.4).
+// v0: no Outcome Tracking yet, so we only count Review entries.
+
+export const TEND_TO_LAND_THRESHOLDS = {
+  minEntries: 6,
+  minDistinctDays: 3,
+  minEventTypes: 3,
+  minHighFitEntries: 3, // Review + Outcome (stricter than blind spot's 2)
+  minReviewEntries: 2,  // 2+ Review or Outcome entries
+  emergingTagCount: 2,
+  establishedEntries: 18,
+  establishedHighFit: 7,
+  establishedReviewEntries: 3,
+  establishedDistinctDays: 9,
+} as const;
+
+// High-fit for "how you tend to land" — only Review and Outcome (§10.4)
+export const TEND_TO_LAND_HIGH_FIT = ["review"] as const; // Add "outcome" when it ships
+
+// Tags that indicate interpersonal impact (not trigger patterns)
+const INTERPERSONAL_OBSERVATION_TYPES = new Set([
+  "communication_move",
+  "repair_behavior",
+  "stress_response",
+]);
+
+export interface TendToLandResult {
+  topPattern: ObservationTag;
+  summary: string;
+  counterPattern: { tag: ObservationTag; summary: string } | null;
+  confidenceLevel: "emerging" | "established";
+  freshnessLabel: string;
+}
+
+export function getHowYouTendToLand(
+  observations: PatternObservation[],
+  stats: {
+    totalEntries: number;
+    distinctDays: number;
+    eventTypes: string[];
+    highFitEntries: number; // count of Review + Outcome entries
+    reviewEntries: number;
+  }
+): TendToLandResult | null {
+  const { totalEntries, distinctDays, eventTypes, highFitEntries, reviewEntries } = stats;
+
+  // Check thresholds
+  if (totalEntries < TEND_TO_LAND_THRESHOLDS.minEntries) return null;
+  if (distinctDays < TEND_TO_LAND_THRESHOLDS.minDistinctDays) return null;
+  if (eventTypes.length < TEND_TO_LAND_THRESHOLDS.minEventTypes) return null;
+  if (highFitEntries < TEND_TO_LAND_THRESHOLDS.minHighFitEntries) return null;
+  if (reviewEntries < TEND_TO_LAND_THRESHOLDS.minReviewEntries) return null;
+
+  // Filter to observed-only, interpersonal-impact tags
+  const observed = observations.filter(
+    (o) => o.observation_source === "observed"
+  );
+
+  const isInterpersonal = (tag: ObservationTag) =>
+    INTERPERSONAL_OBSERVATION_TYPES.has(OBSERVATION_TYPE_FOR_TAG[tag]);
+
+  const { negative, positive } = countByDirection(observed, isInterpersonal);
+
+  const top = topFromMap(negative, TEND_TO_LAND_THRESHOLDS.emergingTagCount);
+  if (!top) return null;
+
+  // Require emergingTagCount for positive counter-patterns too —
+  // a single positive observation is not a pattern worth showing.
+  const counter = topFromMap(positive, TEND_TO_LAND_THRESHOLDS.emergingTagCount);
+
+  // Confidence level
+  const isEstablished =
+    totalEntries >= TEND_TO_LAND_THRESHOLDS.establishedEntries &&
+    distinctDays >= TEND_TO_LAND_THRESHOLDS.establishedDistinctDays &&
+    highFitEntries >= TEND_TO_LAND_THRESHOLDS.establishedHighFit &&
+    reviewEntries >= TEND_TO_LAND_THRESHOLDS.establishedReviewEntries;
+
+  const nextThreshold = Math.ceil((totalEntries + 1) / 6) * 6;
+
+  return {
+    topPattern: top.tag,
+    summary: OBSERVATION_TAG_DESCRIPTIONS[top.tag].summary,
+    counterPattern: counter
+      ? { tag: counter.tag, summary: OBSERVATION_TAG_DESCRIPTIONS[counter.tag].summary }
+      : null,
+    confidenceLevel: isEstablished ? "established" : "emerging",
+    // v0: insights recompute on every page load (no batch job yet).
+    // Label reflects current behavior; change to batch-interval text when derived_insights writes ship.
+    freshnessLabel: `Based on ${totalEntries} entries across ${distinctDays} days.`,
+  };
+}
+
+// ---------- Per-Person Patterns ----------
+// Product doc §11.3: person-specific tension patterns.
+// High-fit: Review, Repair, Outcome Tracking (§10.3).
+
+export const PERSON_PATTERN_THRESHOLDS = {
+  minEntries: 3,
+  minDistinctDays: 2,
+  minReviewEntries: 2,
+  // Product doc §11.3 requires 1+ Repair or Outcome entry. Relaxed to 0
+  // for v0 because Repair just shipped — gating person patterns behind a
+  // brand-new module blocks the insight for every existing user. Raise to 1
+  // once Repair has real adoption.
+  minRepairEntries: 0,
+  emergingTagCount: 2,
+  establishedEntries: 9,
+  establishedDistinctDays: 6,
+  establishedReviewEntries: 6,
+  establishedRepairEntries: 3,
+} as const;
+
+export interface PersonObservation extends PatternObservation {
+  person_id: string | null;
+}
+
+export interface PersonPatternResult {
+  personId: string;
+  topNegative: { tag: ObservationTag; summary: string; count: number } | null;
+  topPositive: { tag: ObservationTag; summary: string; count: number } | null;
+  confidenceLevel: "emerging" | "established";
+  entryCount: number;
+  freshnessLabel: string;
+}
+
+export function getPersonPatterns(
+  observations: PersonObservation[],
+  personStats: Map<
+    string,
+    {
+      totalEntries: number;
+      distinctDays: number;
+      reviewEntries: number;
+      repairEntries: number;
+      displayName: string;
+    }
+  >
+): PersonPatternResult[] {
+  // Group observations by person
+  const byPerson = new Map<string, PersonObservation[]>();
+  for (const obs of observations) {
+    if (!obs.person_id || obs.observation_source !== "observed") continue;
+    const arr = byPerson.get(obs.person_id) ?? [];
+    arr.push(obs);
+    byPerson.set(obs.person_id, arr);
+  }
+
+  const results: PersonPatternResult[] = [];
+
+  for (const [personId, personObs] of byPerson) {
+    const stats = personStats.get(personId);
+    if (!stats) continue;
+
+    // Check thresholds
+    if (stats.totalEntries < PERSON_PATTERN_THRESHOLDS.minEntries) continue;
+    if (stats.distinctDays < PERSON_PATTERN_THRESHOLDS.minDistinctDays) continue;
+    if (stats.reviewEntries < PERSON_PATTERN_THRESHOLDS.minReviewEntries) continue;
+    if (stats.repairEntries < PERSON_PATTERN_THRESHOLDS.minRepairEntries) continue;
+
+    const { negative, positive } = countByDirection(personObs);
+    const topNeg = topFromMap(negative, PERSON_PATTERN_THRESHOLDS.emergingTagCount);
+    // Require emergingTagCount for positive patterns too — n=1 is not a pattern.
+    const topPos = topFromMap(positive, PERSON_PATTERN_THRESHOLDS.emergingTagCount);
+
+    if (!topNeg && !topPos) continue;
+
+    const isEstablished =
+      stats.totalEntries >= PERSON_PATTERN_THRESHOLDS.establishedEntries &&
+      stats.distinctDays >= PERSON_PATTERN_THRESHOLDS.establishedDistinctDays &&
+      stats.reviewEntries >= PERSON_PATTERN_THRESHOLDS.establishedReviewEntries &&
+      stats.repairEntries >= PERSON_PATTERN_THRESHOLDS.establishedRepairEntries;
+
+    const nextThreshold = Math.ceil((stats.totalEntries + 1) / 3) * 3;
+
+    results.push({
+      personId,
+      topNegative: topNeg
+        ? { tag: topNeg.tag, summary: OBSERVATION_TAG_DESCRIPTIONS[topNeg.tag].summary, count: topNeg.count }
+        : null,
+      topPositive: topPos
+        ? { tag: topPos.tag, summary: OBSERVATION_TAG_DESCRIPTIONS[topPos.tag].summary, count: topPos.count }
+        : null,
+      confidenceLevel: isEstablished ? "established" : "emerging",
+      entryCount: stats.totalEntries,
+      // v0: recomputes on page load, no batch job. Honest label.
+      freshnessLabel: `${stats.totalEntries} entries across ${stats.distinctDays} days.`,
+    });
+  }
+
+  // Sort by entry count descending, limit to 5
+  results.sort((a, b) => b.entryCount - a.entryCount);
+  return results.slice(0, 5);
 }
 
 // ---------- Trigger Heuristic Extractor ----------

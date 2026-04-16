@@ -105,6 +105,14 @@ export interface ReviewAIOutput {
   pattern_tag: string;
 }
 
+export interface RepairAIOutput {
+  repair_strategy: string;
+  thing_not_to_say: string;
+  recommended_timing: string;
+  next_move_if_poorly_received: string;
+  pattern_tag: string;
+}
+
 // Tools types
 export interface OverwhelmedEntry {
   id: string;

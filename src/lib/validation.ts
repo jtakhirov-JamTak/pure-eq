@@ -77,6 +77,20 @@ export const createTriggerSchema = z.object({
   afterFeeling: z.string().min(1).max(200),
 });
 
+// Coach — Repair
+export const createRepairSchema = z.object({
+  whatNeedsRepair: z.string().trim().min(1).max(5000),
+  yourResponsibility: z.string().trim().min(1).max(5000),
+  theirNeed: z.string().trim().min(1).max(5000),
+  desiredOutcome: z.enum([
+    "acknowledge_impact", "apologize", "reset_expectations", "set_boundary",
+  ]),
+  channel: z.enum(["text", "call", "in_person", "no_action"]),
+  timing: z.enum(["now", "later_today", "tomorrow", "after_they_respond"]),
+  personId: z.string().uuid().nullable().optional(),
+  threadId: z.string().uuid().nullable().optional(),
+});
+
 // Persons
 export const createPersonSchema = z.object({
   displayName: z.string().trim().min(1).max(200),
