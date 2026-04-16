@@ -12,7 +12,7 @@ npm run dev                  # http://localhost:3000
 
 ## Stack
 
-Next.js 15 (App Router) + React 19 + TypeScript + Tailwind CSS + Supabase (PostgreSQL + Auth + RLS) + Anthropic Claude API + OpenAI Whisper API + Zod
+Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS + Supabase (PostgreSQL + Auth + RLS) + Anthropic Claude API + OpenAI Whisper API + Zod
 
 ## Documentation
 
