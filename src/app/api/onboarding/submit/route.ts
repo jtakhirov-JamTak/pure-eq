@@ -10,10 +10,16 @@ import {
   type QuizOption,
 } from "@/lib/onboarding";
 import { rateLimit } from "@/lib/rate-limit";
+import { checkOrigin } from "@/lib/check-origin";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  // 0. Origin check — CSRF protection.
+  if (!checkOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // 1. Parse + validate.
   let body: unknown;
   try {
