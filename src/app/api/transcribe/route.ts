@@ -80,7 +80,7 @@ export async function POST(req: Request) {
   // Per-minute burst cap + per-day total cap. Both guard against cost-bleed
   // if an account gets scripted. Note: in-memory, per-instance — see
   // src/lib/rate-limit.ts for launch-time swap notes.
-  const minuteRl = rateLimit(`transcribe:min:${user.id}`, {
+  const minuteRl = await rateLimit(`transcribe:min:${user.id}`, {
     limit: 6,
     windowMs: 60_000,
   });
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
       }
     );
   }
-  const dayRl = rateLimit(`transcribe:day:${user.id}`, {
+  const dayRl = await rateLimit(`transcribe:day:${user.id}`, {
     limit: 60,
     windowMs: 24 * 60 * 60 * 1000,
   });

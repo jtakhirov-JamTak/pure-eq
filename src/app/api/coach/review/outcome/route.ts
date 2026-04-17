@@ -39,14 +39,14 @@ export async function PATCH(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const rl = rateLimit(`review-outcome:min:${user.id}`, { limit: 20, windowMs: 60_000 });
+  const rl = await rateLimit(`review-outcome:min:${user.id}`, { limit: 20, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
   // Verify the review entry belongs to this user
   // Per-day rate limit
-  const rlDay = rateLimit(`review-outcome:day:${user.id}`, {
+  const rlDay = await rateLimit(`review-outcome:day:${user.id}`, {
     limit: 100,
     windowMs: 24 * 60 * 60 * 1000,
   });

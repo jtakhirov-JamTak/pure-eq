@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   }
 
   // Rate limit — 2/min, admin-only, one-time use
-  const rl = rateLimit(`backfill:${user.id}`, { limit: 2, windowMs: 60_000 });
+  const rl = await rateLimit(`backfill:${user.id}`, { limit: 2, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }

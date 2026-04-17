@@ -1,16 +1,11 @@
-// Minimal in-memory rate limiter for v0. Per-key sliding window.
+// Rate limiter with Upstash Redis backend and in-memory fallback.
 //
-// Limitations (intentional for v0):
-// - In-memory only. Does NOT work across serverless instances — a user
-//   routed to two different Next.js workers can exceed the limit.
-// - Cleared on every server restart.
-// - Not suitable for production traffic at scale.
-//
-// When any of these become real problems, swap in Upstash Ratelimit or
-// a Postgres-backed limiter and keep the same function signature.
+// When UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set, uses
+// Upstash Ratelimit (works across serverless instances, survives restarts).
+// When not set (local dev), falls back to a simple in-memory sliding window.
 
-type Bucket = { count: number; windowStart: number };
-const buckets = new Map<string, Bucket>();
+import { Redis } from "@upstash/redis";
+import { Ratelimit } from "@upstash/ratelimit";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -18,9 +13,73 @@ export interface RateLimitResult {
   resetAt: number;
 }
 
-export function rateLimit(
+// ---------------------------------------------------------------------------
+// Upstash backend (production)
+// ---------------------------------------------------------------------------
+
+const USE_UPSTASH =
+  !!process.env.UPSTASH_REDIS_REST_URL &&
+  !!process.env.UPSTASH_REDIS_REST_TOKEN;
+
+const redis = USE_UPSTASH
+  ? new Redis({
+      url: process.env.UPSTASH_REDIS_REST_URL!,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
+    })
+  : null;
+
+// Cache Ratelimit instances by limit:windowMs combo (only ~5 unique combos).
+const upstashLimiters = new Map<string, Ratelimit>();
+
+function getUpstashLimiter(limit: number, windowMs: number): Ratelimit {
+  const key = `${limit}:${windowMs}`;
+  let limiter = upstashLimiters.get(key);
+  if (!limiter) {
+    // Convert ms to seconds for Upstash window specification.
+    const windowSec = Math.max(1, Math.round(windowMs / 1000));
+    const windowStr = `${windowSec} s` as `${number} s`;
+    limiter = new Ratelimit({
+      redis: redis!,
+      limiter: Ratelimit.slidingWindow(limit, windowStr),
+      prefix: "rl",
+    });
+    upstashLimiters.set(key, limiter);
+  }
+  return limiter;
+}
+
+async function rateLimitUpstash(
   key: string,
-  { limit, windowMs }: { limit: number; windowMs: number }
+  limit: number,
+  windowMs: number,
+): Promise<RateLimitResult> {
+  try {
+    const limiter = getUpstashLimiter(limit, windowMs);
+    const result = await limiter.limit(key);
+    return {
+      allowed: result.success,
+      remaining: result.remaining,
+      resetAt: result.reset,
+    };
+  } catch {
+    // Upstash unreachable or credentials invalid — fall back to in-memory
+    // so the route still works instead of 500-ing every request.
+    console.error("rate-limit: Upstash failed, falling back to in-memory");
+    return rateLimitInMemory(key, limit, windowMs);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// In-memory fallback (local dev)
+// ---------------------------------------------------------------------------
+
+type Bucket = { count: number; windowStart: number };
+const buckets = new Map<string, Bucket>();
+
+function rateLimitInMemory(
+  key: string,
+  limit: number,
+  windowMs: number,
 ): RateLimitResult {
   const now = Date.now();
   const existing = buckets.get(key);
@@ -44,4 +103,18 @@ export function rateLimit(
     remaining: limit - existing.count,
     resetAt: existing.windowStart + windowMs,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Public API (unchanged signature, now async)
+// ---------------------------------------------------------------------------
+
+export async function rateLimit(
+  key: string,
+  { limit, windowMs }: { limit: number; windowMs: number },
+): Promise<RateLimitResult> {
+  if (USE_UPSTASH) {
+    return rateLimitUpstash(key, limit, windowMs);
+  }
+  return rateLimitInMemory(key, limit, windowMs);
 }

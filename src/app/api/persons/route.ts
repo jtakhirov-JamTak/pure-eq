@@ -20,7 +20,7 @@ export async function GET(req: Request) {
   }
 
   // 2. Rate limit.
-  const rl = rateLimit(`persons:get:${user.id}`, {
+  const rl = await rateLimit(`persons:get:${user.id}`, {
     limit: 30,
     windowMs: 60_000,
   });
@@ -91,14 +91,14 @@ export async function POST(req: Request) {
   }
 
   // 3. Rate limit — minute + day buckets.
-  const rlMin = rateLimit(`persons:post:min:${user.id}`, {
+  const rlMin = await rateLimit(`persons:post:min:${user.id}`, {
     limit: 10,
     windowMs: 60_000,
   });
   if (!rlMin.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
-  const rlDay = rateLimit(`persons:post:day:${user.id}`, {
+  const rlDay = await rateLimit(`persons:post:day:${user.id}`, {
     limit: 50,
     windowMs: 86_400_000,
   });

@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   // Rate limit by IP to prevent auth code brute-force
   const ip =
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const rl = rateLimit(`auth-callback:${ip}`, { limit: 10, windowMs: 60_000 });
+  const rl = await rateLimit(`auth-callback:${ip}`, { limit: 10, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.redirect(`${origin}/login`);
   }

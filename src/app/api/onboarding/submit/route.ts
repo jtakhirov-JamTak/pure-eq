@@ -49,7 +49,7 @@ export async function POST(req: Request) {
   // 3. Rate limit per user. 5 submissions per minute is generous for a
   //    legitimate flow (one retry + some testing) and blocks accidental
   //    loops / hostile spamming.
-  const rl = rateLimit(`onboarding:${user.id}`, {
+  const rl = await rateLimit(`onboarding:${user.id}`, {
     limit: 5,
     windowMs: 60_000,
   });

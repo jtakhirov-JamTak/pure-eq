@@ -61,7 +61,7 @@ export async function POST(req: Request) {
   }
 
   // 3. Rate limit — minute bucket blocks burst, day bucket blocks row exhaustion.
-  const rlMin = rateLimit(`triggered:min:${user.id}`, {
+  const rlMin = await rateLimit(`triggered:min:${user.id}`, {
     limit: 10,
     windowMs: 60_000,
   });
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       }
     );
   }
-  const rlDay = rateLimit(`triggered:day:${user.id}`, {
+  const rlDay = await rateLimit(`triggered:day:${user.id}`, {
     limit: 100,
     windowMs: 24 * 60 * 60 * 1000,
   });

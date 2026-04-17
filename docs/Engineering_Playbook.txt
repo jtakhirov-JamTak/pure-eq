@@ -943,7 +943,56 @@ side effect runs again, creating duplicates.
 Rules:
 - Any side effect that creates new rows (threads, persons, derived
   entries) must be inside the "no existing raw record" branch
-- The idempotency check is the gate — everything below it runs
+- Read-only lookups (thread auto-link, person resolution) go BEFORE
+  the idempotency check so retries still resolve them
+- The idempotency check is the gate — writes below it run
   only on first submission
 - This also applies to AI calls, which should be after both raw
   and derived inserts
+
+§16.11 External Service Fallback
+---------------------------------
+When wrapping an external service (Upstash, Stripe, etc.):
+
+    async function callService(key, opts) {
+      try {
+        return await externalClient.call(key, opts);
+      } catch {
+        console.error("service: external call failed, falling back");
+        return localFallback(key, opts);
+      }
+    }
+
+Rules:
+- Construction succeeds even with bad credentials — failure happens
+  on first actual call, not at import time
+- Fallback must use the same return type as the external path
+- Log the failure (not the payload) so ops can detect degradation
+- "Env var present" does not mean "service is reachable" — always
+  handle the unreachable case
+
+§16.12 Shared Route Handler Extraction
+---------------------------------------
+When N routes share >80% identical logic, extract a shared function
+parameterized by a config object. Each route becomes a thin config
++ one-liner POST handler.
+
+    // src/lib/coach/run-module.ts
+    export async function runCoachModule<TInput, TAiOutput>(
+      req: Request,
+      config: CoachModuleConfig<TInput, TAiOutput>
+    ): Promise<NextResponse>
+
+    // src/app/api/coach/prepare/route.ts
+    const config: CoachModuleConfig<Input, AiOutput> = { ... };
+    export async function POST(req: Request) {
+      return runCoachModule(req, config);
+    }
+
+Rules:
+- Config interface must be fully typed — no z.ZodType<any>. Use
+  intersection types for common fields the pipeline accesses
+- Dynamic table access (supabase.from(config.table)) loses column-
+  level type safety. Accept the tradeoff, add comments
+- The extraction threshold is 3+ routes. Two duplicates = copy is
+  fine. Three = extract

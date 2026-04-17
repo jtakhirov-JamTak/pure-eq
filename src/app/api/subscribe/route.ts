@@ -39,7 +39,7 @@ export async function POST(req: Request) {
   }
 
   // Rate limit — tight to prevent abuse of the mock subscribe.
-  const rlMin = rateLimit(`subscribe:min:${user.id}`, {
+  const rlMin = await rateLimit(`subscribe:min:${user.id}`, {
     limit: 3,
     windowMs: 60_000,
   });
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
       }
     );
   }
-  const rlDay = rateLimit(`subscribe:day:${user.id}`, {
+  const rlDay = await rateLimit(`subscribe:day:${user.id}`, {
     limit: 10,
     windowMs: 24 * 60 * 60 * 1000,
   });
