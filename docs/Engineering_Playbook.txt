@@ -369,12 +369,14 @@ pattern — see §3 for the escape rule.
       return NextResponse.json({ error: "Too many requests" }, { status: 429 });
     }
 
-### Bucket sizing
+### Bucket sizing (Pure EQ today)
 
-- AI coaching: 6/min + 60/day per user (Anthropic + Whisper are pricey)
+- Coach modules (Anthropic): 10/min + 50/day per user
+- Whisper transcription: 6/min + 60/day per user
 - Tools (non-AI writes): 10/min + 100/day (cost is DB rows, not API spend)
-- Auth: 10/min per IP
-- Admin actions / server actions: 20/min per user
+- Thread/outcome server actions: 20/min per user
+- Auth callback: 10/min per IP
+- Admin backfill/audit routes: 2/min per user
 
 ---
 
