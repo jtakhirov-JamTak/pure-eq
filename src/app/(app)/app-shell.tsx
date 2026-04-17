@@ -5,12 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { useTheme } from "@/lib/use-theme";
 import {
   MessageCircle,
   Wrench,
   BarChart3,
   User,
   LogOut,
+  Cloud,
+  Check,
 } from "lucide-react";
 
 const TABS = [
@@ -23,6 +26,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { theme, toggle: toggleTheme } = useTheme();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -51,7 +55,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 className="fixed inset-0 z-40"
                 onClick={() => setMenuOpen(false)}
               />
-              <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+              <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                <button
+                  onClick={() => {
+                    toggleTheme();
+                    setMenuOpen(false);
+                  }}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                >
+                  <Cloud className="h-4 w-4" />
+                  <span className="flex-1 text-left">Easy Mode</span>
+                  {theme === "easy" && (
+                    <Check className="h-4 w-4 text-sky-500" />
+                  )}
+                </button>
                 <button
                   onClick={handleLogout}
                   className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"

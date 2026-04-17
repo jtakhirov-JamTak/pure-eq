@@ -30,13 +30,20 @@ export const metadata: Metadata = {
   },
 };
 
+// Applied before React hydrates so the easy-mode sky gradient paints
+// on first render instead of flashing default white then switching.
+const themeBootstrap = `(function(){try{var t=localStorage.getItem("pure_eq_theme");if(t==="easy")document.documentElement.classList.add("easy-mode");}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full antialiased">
+    <html lang="en" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
+      </head>
       <body className="min-h-full flex flex-col font-sans">{children}</body>
     </html>
   );

@@ -16,3 +16,74 @@ body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* ============================================================
+   Easy Mode — light blue sky + white cloud feel
+   Toggled via `html.easy-mode` class (see src/lib/use-theme.ts)
+   ============================================================ */
+
+html.easy-mode {
+  background-image: linear-gradient(
+    180deg,
+    #bae6fd 0%,
+    #dbeafe 50%,
+    #e0f2fe 100%
+  );
+  background-attachment: fixed;
+  background-size: cover;
+}
+
+html.easy-mode body {
+  background: transparent;
+}
+
+/* Root-level white backgrounds (app shell, page containers) become
+   translucent so the sky gradient shows through. */
+html.easy-mode .bg-white {
+  background-color: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+/* Rounded "card"-shaped white elements get cloud-lift shadows. */
+html.easy-mode .rounded-lg.bg-white,
+html.easy-mode .rounded-xl.bg-white,
+html.easy-mode .rounded-2xl.bg-white,
+html.easy-mode .rounded-3xl.bg-white,
+html.easy-mode .rounded-full.bg-white {
+  background-color: rgba(255, 255, 255, 0.92);
+  box-shadow:
+    0 20px 40px -15px rgba(56, 189, 248, 0.3),
+    0 8px 16px -8px rgba(56, 189, 248, 0.15);
+}
+
+/* Zinc-50 and zinc-100 surfaces get a faint sky tint. */
+html.easy-mode .bg-zinc-50 {
+  background-color: rgba(240, 249, 255, 0.6);
+}
+
+html.easy-mode .bg-zinc-100 {
+  background-color: rgba(219, 234, 254, 0.5);
+}
+
+/* Inputs and textareas feel cloud-like. */
+html.easy-mode input:not([type="checkbox"]):not([type="radio"]),
+html.easy-mode textarea,
+html.easy-mode select {
+  background-color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  box-shadow: 0 6px 16px -6px rgba(56, 189, 248, 0.2);
+}
+
+/* Soften zinc borders into sky tones. */
+html.easy-mode .border-zinc-100,
+html.easy-mode .border-zinc-200,
+html.easy-mode .border-zinc-300 {
+  border-color: rgba(147, 197, 253, 0.45);
+}
+
+/* Bottom tab bar: more transparent so it floats over the sky. */
+html.easy-mode .bg-white\/95 {
+  background-color: rgba(255, 255, 255, 0.7) !important;
+}
