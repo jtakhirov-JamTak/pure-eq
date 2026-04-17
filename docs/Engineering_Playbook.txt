@@ -7,24 +7,58 @@
 
 ## 1. Project Structure
 
-Standard directory layout for client/server TypeScript apps:
+Pure EQ uses the Next.js App Router. One `src/` tree, no client/server split.
 
-    client/src/pages/          # One file per page
-    client/src/components/     # Shared components
-    client/src/components/ui/  # Design system components (do NOT modify directly)
-    client/src/hooks/          # Custom hooks (auth, navigation guards, toast)
-    client/src/lib/            # Query client, utilities
-    server/routes/             # One file per domain (e.g., journals, habits)
-    server/routes/helpers.ts   # Rate limiters, input sanitizers, ID parsers
-    server/storage.ts          # Storage interface — ALL db ops go here
-    server/validation.ts       # All Zod schemas for request validation
-    shared/schema.ts           # DB schema + Zod insert schemas (shared client/server)
-    e2e/                       # Playwright end-to-end tests
-    docs/                      # TECH-STACK, ROUTES, DATA-MODEL, SECURITY
+    src/app/                          # Routes (pages + API routes, colocated)
+      layout.tsx                      # Root layout, metadata, PWA manifest
+      page.tsx                        # Landing
+      not-found.tsx                   # Branded 404
+      (auth)/                         # Route group: public auth pages (login, signup)
+      (app)/                          # Route group: authenticated pages
+        layout.tsx                    #   auth gate — redirects if no session
+        app-shell.tsx                 #   top bar + bottom tabs + menu
+        <module>/page.tsx             #   coach, tools, insights, ...
+      admin/                          # Admin-only surface (layout returns notFound for non-admins)
+      onboarding/page.tsx             # Routing hub after signup
+      paywall/                        # Paywall gate + pricing UI
+      api/<domain>/[<sub>/]route.ts   # Route handlers (POST/GET/PATCH)
+    src/components/                   # Shared React components (voice input, pickers, timer, ...)
+    src/lib/                          # Server + client shared utilities
+      supabase/client.ts              # Browser Supabase client (publishable key)
+      supabase/server.ts              # Server Supabase client + getAuthUser()
+      supabase/service.ts             # Service role client (bypasses RLS, server-only)
+      ai/prompts.ts, ai/schemas.ts    # AI prompt templates + Zod output schemas
+      validation.ts                   # Request Zod schemas (centralized)
+      rate-limit.ts                   # Upstash backend + in-memory fallback
+      check-origin.ts                 # CSRF origin check
+      subscription.ts, admin.ts, ... # Per-domain helpers
+      coach/run-module.ts             # Shared coach-route pipeline
+      __tests__/                      # Co-located Vitest unit tests
+    src/types/
+      database.ts                     # Generated from Supabase (npm run db:types)
+      index.ts                        # App-level domain types + observation taxonomy
+    supabase/migrations/              # Versioned SQL (0001_init_core.sql, ...)
+    e2e/                              # Playwright specs
+      helpers/auth.ts                 # Test user lifecycle via service role
+      <flow>.spec.ts                  # One file per critical flow
+    docs/                             # Product doc (Pure_EQ_Final.txt) + this playbook
 
-Path aliases:
-    @/*        → client/src/*
-    @shared/*  → shared/*
+Path alias:
+    @/*   → src/*
+
+No `client/src`, no `server/routes`, no `shared/`, no storage interface.
+Server-only code is kept server-only by convention (file-level comments
+on sensitive modules like `service.ts`) and by being imported only from
+server components, API routes, and server actions.
+
+### Route groups
+
+- `(auth)` wraps `/login` and `/signup`. Public surface — no layout gate.
+- `(app)` wraps every authenticated page. `(app)/layout.tsx` is the
+  single auth gate: no session → redirect. Every authenticated feature
+  page lives under this group and inherits the gate for free.
+- `admin/` is a literal path (not a route group) with its own layout
+  that calls `notFound()` for non-admins, hiding the route's existence.
 
 ---
 
@@ -87,31 +121,92 @@ Path aliases:
 
 ---
 
-## 3. Data Access Pattern — Storage Interface
+## 3. Data Access Pattern — Supabase Client + RLS
 
-Never write direct database queries in route handlers. All DB operations go
-through a storage interface. This enables testing with in-memory storage,
-switching databases later, and auditing data access in one place.
-
-### Interface pattern
-
-    interface IStorage {
-      // Entries
-      getEntries(userId: string): Promise<Entry[]>;
-      createEntry(userId: string, data: NewEntry): Promise<Entry>;
-      updateEntry(userId: string, id: string, data: Partial<Entry>): Promise<Entry>;
-      deleteEntry(userId: string, id: string): Promise<void>;
-
-      // Always include userId in every method signature
-    }
+Route handlers, server actions, and server components access the database
+directly via the Supabase JS client. There is no ORM, no repository layer,
+no storage interface. Row-Level Security is the primary access-control
+layer; explicit `user_id` filtering in every query is defense in depth.
 
 ### Rules
 
-- Every storage method takes userId as the first parameter
-- Every query filters by userId — no exceptions
-- When adding a storage method to IStorage, also add it to any test
-  mock (e.g., memory-storage.ts) — forgetting this crashes tests
-- Never return data from one user to another
+- Every table with user data has RLS enabled and a policy
+  `USING (auth.uid() = user_id)`. Never write `USING (true)`.
+- Every query filters by `user.id` from `supabase.auth.getUser()` even
+  though RLS would enforce it — the explicit filter catches service-role
+  paths that bypass RLS, and makes the scoping visible in code review.
+- Never trust a client-provided `userId`. Extract it server-side from
+  `supabase.auth.getUser()` and use only that value.
+- Use the normal server client (`createClient` from
+  `@/lib/supabase/server`) for user-initiated reads and writes. It reads
+  auth cookies and is RLS-gated.
+- Use the service role client (`createServiceClient` from
+  `@/lib/supabase/service`) only for writes that must bypass RLS:
+  admin actions, RLS-pinned columns (`free_*_used_at`, subscription
+  `status`, `role`), and test user lifecycle in `e2e/helpers/auth.ts`.
+  Never import this client in a client component or middleware.
+
+### Pattern (user-initiated write in a POST route)
+
+    import { NextResponse } from "next/server";
+    import { createClient } from "@/lib/supabase/server";
+    import { someSchema } from "@/lib/validation";
+
+    export async function POST(req: Request) {
+      const parsed = someSchema.safeParse(await req.json());
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+      }
+
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
+
+      const { error } = await supabase
+        .from("entries")
+        .insert({ user_id: user.id, ...parsed.data });
+
+      if (error) {
+        console.error("entries insert failed", error.code);
+        return NextResponse.json({ error: "Could not save" }, { status: 500 });
+      }
+
+      return NextResponse.json({ success: true });
+    }
+
+### Pattern (service-role write for RLS-pinned column)
+
+    // Only from server actions / API routes with prior auth + admin check.
+    import { createServiceClient } from "@/lib/supabase/service";
+
+    const sc = createServiceClient();
+    await sc
+      .from("user_subscriptions")
+      .update({ status: "active", activated_at: new Date().toISOString() })
+      .eq("user_id", targetUserId);
+
+### Raw + derived layering
+
+User-generated content writes two rows: an append-only `raw_records` row
+(full payload + `source_session_id` for idempotency) and a typed derived
+row (e.g., `overwhelmed_entries`, `prepare_entries`). Derived tables are
+a cache that can be rebuilt from raw. See §9 for the insert-ordering
+rules and §16.2 for the AI-call-between-inserts pattern.
+
+### SQL injection and LIKE metacharacters
+
+Supabase JS parameterizes every value — string concatenation isn't
+possible through the client API. The remaining risk is LIKE/ILIKE
+wildcards (`%`, `_`) inside a user-supplied pattern:
+
+    // Escape before interpolating user input into a LIKE pattern.
+    const safe = q.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    await supabase.from("persons")
+      .select()
+      .eq("user_id", user.id)
+      .ilike("display_name", `%${safe}%`);
 
 ---
 
@@ -463,25 +558,129 @@ Anti-patterns this rule forbids:
 
 ## 11. Frontend Data Flow
 
+No client-side data-fetching library. Server components read data in the
+render function and pass resolved props to child components. Client
+components POST via native `fetch` or call server actions for mutations.
+
 ### Rules
 
-- Server state: useQuery / useMutation via TanStack React Query
-- Query keys = API paths: ["/api/entries"], ["/api/profile"]
-- Mutations: apiRequest() then invalidateQueries() on success
-- Local UI state: plain useState — no global store needed for most apps
-- Navigation guards: useUnsavedGuard() for dirty form protection
+- Default to server components for authenticated pages under `(app)/`.
+  Read with the Supabase server client, scoped by `user.id`.
+- Client components (`"use client"`) only when the page needs local
+  state or event handlers. Keep them as small as possible.
+- Writes from client components go to either an API route (`POST
+  /api/...`) or a server action. Rate-limit both — server actions are
+  POST endpoints too.
+- Always check `res.ok` on client `fetch` — `fetch` throws only on
+  network failures, not on 4xx/5xx.
+- Generate an `idempotencyKey` (UUID in a `useRef`) once per submission
+  and send it on every retry. The server dedupes on
+  `(user_id, source_session_id)`.
+- Post-auth navigation uses `window.location.href`, not
+  `router.push` — client nav races the auth cookie.
+- After a server-action write, call `revalidatePath("/path")` to
+  refresh the server component that renders the data.
+- No global store. Server components own the data; client components
+  own local UI state.
 
-### Pattern
+### Pattern (server-component read)
 
-    const { data: entries, isLoading } = useQuery({
-      queryKey: ["/api/entries"],
-      queryFn: () => fetch("/api/entries").then(r => r.json()),
-    });
+    // src/app/(app)/some-page/page.tsx
+    import { createClient } from "@/lib/supabase/server";
+    import { redirect } from "next/navigation";
 
-    const createMutation = useMutation({
-      mutationFn: (data) => apiRequest("POST", "/api/entries", data),
-      onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/entries"] }),
-    });
+    export default async function Page() {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) redirect("/login");
+
+      const { data: entries } = await supabase
+        .from("entries")
+        .select("entry_id, created_at, summary")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      return <EntryList entries={entries ?? []} />;
+    }
+
+### Pattern (client-component POST with idempotency + res.ok check)
+
+    "use client";
+    import { useRef, useState } from "react";
+    import { useRouter } from "next/navigation";
+
+    export function EntryForm() {
+      const router = useRouter();
+      const submitRef = useRef(false);
+      const idempotencyKeyRef = useRef<string>("");
+      if (!idempotencyKeyRef.current) {
+        idempotencyKeyRef.current = crypto.randomUUID();
+      }
+      const [error, setError] = useState<string | null>(null);
+
+      async function handleSubmit(payload: Record<string, unknown>) {
+        if (submitRef.current) return;
+        submitRef.current = true;
+        try {
+          const res = await fetch("/api/entries", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...payload,
+              idempotencyKey: idempotencyKeyRef.current,
+            }),
+          });
+          if (res.status === 403) return router.push("/paywall");
+          if (!res.ok) throw new Error(`status ${res.status}`);
+          router.push("/success");
+        } catch (err) {
+          console.error("entry submit failed", (err as Error).message);
+          setError("Could not save. Check your connection and try again.");
+        } finally {
+          submitRef.current = false;
+        }
+      }
+      // ...
+    }
+
+### Pattern (server action for mutation)
+
+Server actions are a good fit when the mutation is simple, tightly
+coupled to an admin or thread-level page, and benefits from
+`revalidatePath()`. They still require auth, input validation, and
+rate limiting.
+
+    // src/app/<path>/actions.ts
+    "use server";
+
+    import { createClient } from "@/lib/supabase/server";
+    import { rateLimit } from "@/lib/rate-limit";
+
+    export async function updateStatus(id: string, status: string) {
+      // Validate input (regex / enum) before any DB touch.
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Forbidden");
+
+      const rl = await rateLimit(`status:${user.id}`, { limit: 20, windowMs: 60_000 });
+      if (!rl.allowed) throw new Error("Too many requests");
+
+      const { error } = await supabase
+        .from("threads")
+        .update({ status })
+        .eq("thread_id", id)
+        .eq("user_id", user.id);
+      if (error) throw new Error("Could not update");
+    }
+
+### Draft persistence on shared devices
+
+When persisting in-flight form state to `sessionStorage` (e.g.,
+onboarding answers across a refresh), stamp the blob with the current
+user's email or id and verify the stamp matches before using the data.
+`sessionStorage` survives logout — a second user signing up on the
+same tab can otherwise read the first user's in-flight answers.
 
 ---
 
