@@ -10,9 +10,13 @@ const UUID_RE =
 
 const MAX_BATCH_SIZE = 10;
 
-// record_type (in raw_records) → matching derived table name. onboarding_profile
-// and outcome_tracking are intentionally absent: they aren't deletable through
-// the history surface.
+// record_type (in raw_records) → matching derived table.
+// `onboarding_profile` is intentionally excluded: retake flow appends new
+// rows and the routing hub reads the latest; deleting a snapshot would
+// corrupt the audit trail of how a user's profile evolved.
+// `outcome_tracking` is a follow-up PATCH to an existing coach entry
+// (not its own module entry) and belongs with the source, not a separate
+// row in the history list.
 const DERIVED_TABLE = {
   prepare: "prepare_entries",
   review: "review_entries",
@@ -50,12 +54,20 @@ export async function softDeleteEntries(
     return { success: false, deleted: 0, error: "Not authenticated" };
   }
 
-  const rl = await rateLimit(`history-delete:${user.id}`, {
+  const rlMin = await rateLimit(`history-delete:min:${user.id}`, {
     limit: 20,
     windowMs: 60_000,
   });
-  if (!rl.allowed) {
+  if (!rlMin.allowed) {
     return { success: false, deleted: 0, error: "Too many requests" };
+  }
+  // Day bucket: caps mass-erase by a compromised session at ~1k entries/day.
+  const rlDay = await rateLimit(`history-delete:day:${user.id}`, {
+    limit: 500,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!rlDay.allowed) {
+    return { success: false, deleted: 0, error: "Daily limit reached" };
   }
 
   // Fetch record types for the selected ids (scoped to this user + not
@@ -107,61 +119,85 @@ export async function softDeleteEntries(
     byType.set(r.record_type, list);
   }
 
-  await Promise.all(
+  // Partial-failure awareness: Promise.all swallows errors unless each
+  // result is checked. If any derived-table UPDATE fails, we still want
+  // to surface that to the caller instead of reporting success while
+  // leaving orphans (raw marked deleted, derived row still visible to
+  // module-specific queries).
+  const derivedResults = await Promise.all(
     [...byType.entries()].map(async ([type, ids]) => {
       switch (type) {
         case "prepare":
-          await supabase
+          return supabase
             .from("prepare_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);
-          return;
         case "review":
-          await supabase
+          return supabase
             .from("review_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);
-          return;
         case "repair":
-          await supabase
+          return supabase
             .from("repair_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);
-          return;
         case "trigger_log":
-          await supabase
+          return supabase
             .from("trigger_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);
-          return;
         case "overwhelmed":
-          await supabase
+          return supabase
             .from("overwhelmed_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);
-          return;
       }
     })
   );
+  const derivedErrors = derivedResults.filter((r) => r?.error);
+  if (derivedErrors.length > 0) {
+    for (const r of derivedErrors) {
+      console.error("history-delete: derived update failed", r?.error?.code);
+    }
+    return {
+      success: false,
+      deleted: 0,
+      error: "Some entries could not be fully deleted. Try again.",
+    };
+  }
 
   // 3) Hard-delete pattern_observations derived from these entries.
   // Observations are rebuildable from raw_records if undelete ever ships,
   // and leaving them around means deleted entries keep shaping insights.
-  await supabase
+  const { error: obsErr } = await supabase
     .from("pattern_observations")
     .delete()
     .eq("user_id", user.id)
     .in("source_raw_record_id", validIds);
+  if (obsErr) {
+    // Not fatal enough to reject — raw + derived are marked deleted, so
+    // the entries no longer appear anywhere the user can see. But the
+    // observations will keep shaping insights until a later regeneration
+    // pass with full data drops them. Log so this doesn't vanish.
+    console.error("history-delete: observation cleanup failed", obsErr.code);
+  }
 
-  // 4) Rebuild cached insights so the user sees the effect immediately.
-  regenerateInsights(supabase, user.id).catch(() => {
+  // 4) Rebuild cached insights BEFORE revalidating paths. If we don't
+  // await here, revalidatePath triggers an immediate re-render of
+  // /insights reading stale derived_insights rows that still reflect
+  // the deleted observations. Trade-off: delete takes 1-3s longer, but
+  // the confirm modal already preps the user for a destructive action.
+  try {
+    await regenerateInsights(supabase, user.id);
+  } catch {
     console.error("history-delete: insight regeneration failed");
-  });
+  }
 
   revalidatePath("/history");
   revalidatePath("/insights");

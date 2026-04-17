@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { checkOrigin } from "@/lib/check-origin";
 
 export const runtime = "nodejs";
 
@@ -27,6 +28,14 @@ const querySchema = z.object({
 });
 
 export async function GET(req: Request) {
+  // Enumeration endpoint — same origin-check discipline as mutating routes.
+  // SameSite=Lax blocks form-POST CSRF but not fetch-based CSRF from a
+  // compromised page; the list endpoint leaks entry ids + dates if reached
+  // from a foreign origin with the user's cookie.
+  if (!checkOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const url = new URL(req.url);
   const parsed = querySchema.safeParse({
     offset: url.searchParams.get("offset"),
@@ -45,12 +54,20 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  const rl = await rateLimit(`history-get:${user.id}`, {
+  const rlMin = await rateLimit(`history-get:min:${user.id}`, {
     limit: 30,
     windowMs: 60_000,
   });
-  if (!rl.allowed) {
+  if (!rlMin.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+  // Day bucket — caps scraping by a compromised session.
+  const rlDay = await rateLimit(`history-get:day:${user.id}`, {
+    limit: 1000,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!rlDay.allowed) {
+    return NextResponse.json({ error: "Daily limit reached" }, { status: 429 });
   }
 
   const { data: rows, error } = await supabase

@@ -49,6 +49,17 @@ export function HistoryList({
     }
   }
 
+  function mergeUnique(
+    prev: HistoryEntry[],
+    incoming: HistoryEntry[]
+  ): HistoryEntry[] {
+    // If a new entry was completed in another tab between loads, the offset
+    // window can shift and re-include a row the client already holds.
+    // De-dup by id so the list never shows the same entry twice.
+    const seen = new Set(prev.map((e) => e.id));
+    return [...prev, ...incoming.filter((e) => !seen.has(e.id))];
+  }
+
   async function loadMore() {
     if (loadingMore || noMore) return;
     setLoadingMore(true);
@@ -62,7 +73,7 @@ export function HistoryList({
       if (!body.entries || body.entries.length === 0) {
         setNoMore(true);
       } else {
-        setEntries((prev) => [...prev, ...body.entries]);
+        setEntries((prev) => mergeUnique(prev, body.entries));
         if (body.entries.length < pageSize) setNoMore(true);
       }
     } catch (err) {
@@ -99,7 +110,7 @@ export function HistoryList({
           if (res.ok) {
             const body = (await res.json()) as { entries: HistoryEntry[] };
             if (body.entries && body.entries.length > 0) {
-              setEntries((prev) => [...prev, ...body.entries]);
+              setEntries((prev) => mergeUnique(prev, body.entries));
             }
             if (!body.entries || body.entries.length < ids.length) {
               setNoMore(true);
@@ -145,7 +156,7 @@ export function HistoryList({
         {selectedCount > 0 && (
           <button
             onClick={() => setShowConfirm(true)}
-            className="flex items-center gap-1.5 rounded-full bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800"
+            className="inline-flex h-11 items-center gap-1.5 rounded-full bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800"
           >
             <Trash2 className="h-4 w-4" />
             Delete {selectedCount}
@@ -163,21 +174,23 @@ export function HistoryList({
             year: "numeric",
           });
           return (
-            <li
-              key={e.id}
-              className="flex items-center gap-3 px-4 py-3"
-            >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                onChange={() => toggleOne(e.id)}
-                className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
-                aria-label={`Select ${e.label} entry from ${dateLabel}`}
-              />
-              <div className="flex-1">
-                <p className="text-base font-medium text-zinc-900">{e.label}</p>
-                <p className="text-sm text-zinc-500">{dateLabel}</p>
-              </div>
+            <li key={e.id}>
+              {/* Whole row is a label so any tap inside toggles the
+                  checkbox — 16px checkboxes alone are a terrible touch
+                  target, and the row text/date shouldn't be dead zones. */}
+              <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3">
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleOne(e.id)}
+                  className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  aria-label={`Select ${e.label} entry from ${dateLabel}`}
+                />
+                <div className="flex-1">
+                  <p className="text-base font-medium text-zinc-900">{e.label}</p>
+                  <p className="text-sm text-zinc-500">{dateLabel}</p>
+                </div>
+              </label>
             </li>
           );
         })}
