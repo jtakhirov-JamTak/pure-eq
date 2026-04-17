@@ -14,6 +14,7 @@ import {
   LogOut,
   Cloud,
   Check,
+  Clock,
 } from "lucide-react";
 
 const TABS = [
@@ -56,6 +57,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setMenuOpen(false)}
               />
               <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg">
+                <Link
+                  href="/history"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+                >
+                  <Clock className="h-4 w-4" />
+                  History
+                </Link>
                 <button
                   onClick={() => {
                     toggleTheme();

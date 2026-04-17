@@ -60,6 +60,9 @@ src/
     (app)/tools/overwhelmed/page.tsx  # I'm Overwhelmed (guided reset + timers)
     (app)/tools/triggered/page.tsx    # I'm Triggered (structured trigger log)
     (app)/insights/page.tsx           # Insights tab (profile + blind spot + empty states)
+    (app)/history/page.tsx            # History page (per-module counts + latest entries + delete)
+    (app)/history/history-list.tsx    # Client: select + load more + delete confirm
+    (app)/history/actions.ts          # Server action: softDeleteEntries
     admin/layout.tsx                  # Admin gate (404 for non-admins)
     admin/page.tsx                    # Admin stats dashboard
     admin/actions.ts                  # Server action: toggleAccess
@@ -74,6 +77,7 @@ src/
     api/tools/overwhelmed/route.ts    # Overwhelmed entry save
     api/tools/triggered/route.ts      # Trigger log entry save
     api/persons/route.ts              # GET (search) + POST (create) persons
+    api/history/route.ts              # GET (paginated list) for Load More in /history
     api/subscribe/route.ts            # Mock subscribe (trial activation)
     api/transcribe/route.ts           # Whisper speech-to-text
     api/auth/callback/route.ts        # PKCE code exchange (email confirmation)

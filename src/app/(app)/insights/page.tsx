@@ -1,4 +1,5 @@
 // Pure EQ domain — replace in fork.
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import {
@@ -408,6 +409,13 @@ function ProfileCard({
           <p className="mt-0.5 text-sm text-zinc-700">{desc.willHelpMost}</p>
         </div>
       </div>
+
+      <Link
+        href="/onboarding?retake=1"
+        className="mt-5 inline-flex h-10 items-center justify-center rounded-full border border-zinc-200 px-4 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
+      >
+        Retake Communication Profile
+      </Link>
     </div>
   );
 }

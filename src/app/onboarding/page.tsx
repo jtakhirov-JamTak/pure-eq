@@ -1,8 +1,8 @@
 // Pure EQ domain — replace in fork.
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import type { ProfileResult } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import {
@@ -75,7 +75,33 @@ function safeRedirect(value: unknown): string {
 }
 
 export default function OnboardingPage() {
+  // useSearchParams triggers client-side bailout; Suspense wrapper is the
+  // standard Next.js 15+ pattern so static prerender doesn't choke on it.
+  return (
+    <Suspense fallback={<OnboardingSpinner />}>
+      <OnboardingPageInner />
+    </Suspense>
+  );
+}
+
+function OnboardingSpinner() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center bg-white px-6">
+      <div className="text-center">
+        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" />
+      </div>
+    </div>
+  );
+}
+
+function OnboardingPageInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // When the user comes from "Retake Communication Profile" on /insights,
+  // we bypass the "already has profile → forward to module" branch and
+  // land them directly on the quiz. user_profiles is append-only, so a
+  // retake submits a new snapshot without touching prior rows.
+  const isRetake = searchParams.get("retake") === "1";
 
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [answers, setAnswers] = useState<(QuizOption | null)[]>(
@@ -111,7 +137,9 @@ export default function OnboardingPage() {
         } = await supabase.auth.getUser();
 
         // Case 1: returning user with a saved profile → forward.
-        if (user) {
+        // Skipped entirely when ?retake=1 so the user can re-answer the
+        // quiz instead of being bounced back to their module.
+        if (user && !isRetake) {
           const { data: profile } = await supabase
             .from("user_profiles")
             .select("routing_output")
@@ -192,7 +220,7 @@ export default function OnboardingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, isRetake]);
 
   function handleAnswer(option: QuizOption) {
     const newAnswers: (QuizOption | null)[] = [...answers];
