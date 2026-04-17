@@ -66,46 +66,58 @@ server components, API routes, and server actions.
 
 ### Rules
 
-- Every API route MUST use an auth middleware (e.g., isAuthenticated)
-- Never trust client-provided userId — extract from session/token server-side
-- Access control decisions are server-side only; frontend checks are UX, not security
-- Default to denying access (fail closed)
+- Every API route, server action, and authenticated server component
+  calls `supabase.auth.getUser()` before any data access. No middleware
+  chain — it's three lines at the top of the handler.
+- Never trust a client-provided `userId`. Use only the `user.id` from
+  the auth call.
+- Access control decisions are server-side only; frontend checks are UX,
+  not security.
+- Default to denying access (fail closed) — if the auth call fails or
+  the user is missing, return 401 / redirect / `notFound()`.
+- Session management (cookie security, CSRF SameSite, httpOnly) is
+  Supabase Auth's responsibility. We configure nothing; the SSR
+  client sets cookies correctly by default.
 
-### Auth middleware pattern (Express example)
+### Auth check pattern (API route)
 
-    function isAuthenticated(req, res, next) {
-      if (!req.isAuthenticated || !req.isAuthenticated()) {
-        return res.status(401).json({ error: "Not authenticated" });
-      }
-      next();
-    }
-
-    app.get("/api/entries", isAuthenticated, handler);
-
-### Auth middleware pattern (Next.js / Supabase example)
-
+    import { NextResponse } from "next/server";
     import { createClient } from "@/lib/supabase/server";
 
-    export async function getAuthUser() {
+    export async function POST(req: Request) {
       const supabase = await createClient();
       const { data: { user }, error } = await supabase.auth.getUser();
-      if (error || !user) throw new Error("Not authenticated");
-      return user;
+      if (error || !user) {
+        return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      }
+      // ... scoped by user.id from here
     }
 
-### Session security (Express)
+### Auth check pattern (server component)
 
-    app.use(session({
-      secret: process.env.SESSION_SECRET,
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        secure: process.env.NODE_ENV === "production",
-        httpOnly: true,
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        sameSite: "lax",
-      },
-    }));
+    import { createClient } from "@/lib/supabase/server";
+    import { redirect } from "next/navigation";
+
+    export default async function Page() {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) redirect("/login");
+      // ...
+    }
+
+### Authenticated route-group gate
+
+The `(app)/layout.tsx` server component runs `getAuthUser()` once and
+redirects if no session. Every page inside `(app)/` inherits the gate —
+individual pages do not need their own redirect, but each still scopes
+its queries by `user.id` for defense in depth.
+
+### Admin check
+
+`isAdmin(user.email)` for fast sync checks in API routes.
+`checkAdmin(email, serviceClient, userId)` for DB-backed checks in admin
+pages (env var + `role` column). Admin layout returns `notFound()` on
+failure, hiding the route's existence.
 
 ### Supabase Row-Level Security
 
@@ -214,35 +226,57 @@ wildcards (`%`, `_`) inside a user-supplied pattern:
 
 ### Rules
 
-- Validate ALL inputs with Zod schemas before any DB operation
-- Validation schemas live in a single file (validation.ts), not scattered across routes
-- Never trust any field from the client — validate shape, type, and constraints
+- Validate ALL inputs with Zod schemas before any DB operation. This
+  applies to API route bodies, server action arguments, and query params.
+- Validation schemas live in `src/lib/validation.ts`, not scattered
+  across routes. AI output schemas live in `src/lib/ai/schemas.ts`.
+- Never trust any field from the client — validate shape, type, and
+  constraints before using `parsed.data`.
+- `z.string().min(1)` passes `"   "`. Chain `.trim()` before `.min(1)`
+  for any user-facing text field.
+- `z.number()` accepts floats. Chain `.int()` on any field backed by
+  an integer column (ratings, intensity scales).
+- `z.array(...).length(N)` does NOT enforce element uniqueness. Use
+  `.refine()` when array elements have a semantic key (e.g., unique
+  `questionIndex`).
+- Arrays of enums should be bounded with `.min()/.max()` too — otherwise
+  a client can submit 10,000-element arrays.
 
-### Pattern
+### Pattern (API route body validation)
 
+    // src/lib/validation.ts
     import { z } from "zod";
 
-    const createEntrySchema = z.object({
-      content: z.string().max(50000),
+    export const createEntrySchema = z.object({
+      content: z.string().trim().min(1).max(50000),
       category: z.enum(["morning", "evening", "trigger"]),
+      intensity: z.number().int().min(1).max(5),
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
     });
 
-    app.post("/api/entries", isAuthenticated, async (req, res) => {
-      const result = createEntrySchema.safeParse(req.body);
-      if (!result.success) {
-        return res.status(400).json({ error: "Invalid input" });
+    // src/app/api/entries/route.ts
+    import { NextResponse } from "next/server";
+    import { createEntrySchema } from "@/lib/validation";
+
+    export async function POST(req: Request) {
+      let body: unknown;
+      try { body = await req.json(); } catch {
+        return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
       }
-      // Use result.data — never req.body directly after this point
-    });
+      const parsed = createEntrySchema.safeParse(body);
+      if (!parsed.success) {
+        return NextResponse.json({ error: "Invalid input" }, { status: 400 });
+      }
+      const input = parsed.data;   // Never touch body after this point.
+      // ...
+    }
 
-### SQL injection prevention
+### SQL injection / LIKE metacharacters
 
-    // NEVER: string concatenation
-    const query = `SELECT * FROM users WHERE id = '${userId}'`;
-
-    // ALWAYS: parameterized via ORM (Drizzle, Prisma, etc.)
-    const user = await db.select().from(users).where(eq(users.id, userId));
+Supabase JS parameterizes every value passed to `.eq()`, `.insert()`,
+`.update()` etc. No string concatenation is possible through the client
+API. The only remaining risk is user input flowing into a LIKE/ILIKE
+pattern — see §3 for the escape rule.
 
 ---
 
@@ -276,29 +310,71 @@ wildcards (`%`, `_`) inside a user-supplied pattern:
 
 ### Rules
 
-- Rate limit all AI endpoints (expensive, abuse-prone)
-- Rate limit auth endpoints (brute-force prevention)
-- Rate limit export/download endpoints
+- Rate limit every mutating endpoint — including admin-only routes and
+  server actions. An admin session is still a browser session; CSRF and
+  cost abuse both apply.
+- Rate limit AI endpoints with TWO buckets: per-minute to block burst
+  abuse, per-day to block slow cost-bleed.
+- Rate limit auth endpoints by IP for routes where the user isn't
+  authenticated yet (signup, callback), by user id everywhere else.
+- Fall back to an in-memory limiter when the external (Upstash) backend
+  is unreachable — never let a rate-limit outage 500 the whole route.
 
-### Pattern (Express)
+### Implementation
 
-    import rateLimit from "express-rate-limit";
+    // src/lib/rate-limit.ts
+    //
+    // When UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN are set,
+    // uses Upstash Ratelimit (survives serverless restarts, works
+    // across instances). Otherwise falls back to in-memory sliding
+    // window. Upstash errors fall back to in-memory silently so the
+    // route still works.
+    export async function rateLimit(
+      key: string,
+      { limit, windowMs }: { limit: number; windowMs: number },
+    ): Promise<{ allowed: boolean; remaining: number; resetAt: number }>;
 
-    const aiLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 30,
-      message: { error: "Too many requests, please try again later" },
-    });
+### Pattern (AI / paid route, minute + day buckets)
 
-    app.use("/api/ai/", aiLimiter);
+    const rlMin = await rateLimit(`overwhelmed:min:${user.id}`,
+      { limit: 10, windowMs: 60_000 });
+    if (!rlMin.allowed) {
+      return NextResponse.json(
+        { error: "Too many requests" },
+        { status: 429,
+          headers: { "Retry-After": String(Math.ceil((rlMin.resetAt - Date.now()) / 1000)) } }
+      );
+    }
 
-    const authLimiter = rateLimit({
-      windowMs: 15 * 60 * 1000,
-      max: 10,
-      message: { error: "Too many login attempts" },
-    });
+    const rlDay = await rateLimit(`overwhelmed:day:${user.id}`,
+      { limit: 100, windowMs: 24 * 60 * 60 * 1000 });
+    if (!rlDay.allowed) {
+      return NextResponse.json(
+        { error: "Daily limit reached" }, { status: 429 }
+      );
+    }
 
-    app.use("/api/auth/", authLimiter);
+### Pattern (server action)
+
+    // src/app/<path>/actions.ts
+    const rl = await rateLimit(`status:${user.id}`, { limit: 20, windowMs: 60_000 });
+    if (!rl.allowed) throw new Error("Too many requests");
+
+### Pattern (auth callback, keyed by IP)
+
+    // src/app/api/auth/callback/route.ts
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+    const rl = await rateLimit(`auth-callback:${ip}`, { limit: 10, windowMs: 60_000 });
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+    }
+
+### Bucket sizing
+
+- AI coaching: 6/min + 60/day per user (Anthropic + Whisper are pricey)
+- Tools (non-AI writes): 10/min + 100/day (cost is DB rows, not API spend)
+- Auth: 10/min per IP
+- Admin actions / server actions: 20/min per user
 
 ---
 
@@ -307,23 +383,49 @@ wildcards (`%`, `_`) inside a user-supplied pattern:
 ### Rules
 
 - Never expose internal details (stack traces, SQL errors, file paths)
-- Never log user content (journals, emotions, triggers) in error messages
-- Never log API response bodies — they contain sensitive personal data
-- Log only: method, path, status code, duration
+  in API responses. Return a generic message, log the specifics
+  server-side.
+- Never log user content (journals, emotions, triggers, person names)
+  in error messages — `console.error("msg:", error)` with a full error
+  object often prints the failing payload.
+- Never log API response bodies. They contain sensitive data.
+- Log only: method, path, status code, duration, and for Supabase
+  errors the `error.code` (string like `23505` or `PGRST116`), never
+  `error.message` or the full error object.
+- Empty `catch {}` blocks on write paths silently lose user work. Every
+  catch must at minimum log the error code and surface an inline error
+  to the user.
 
-### Pattern
+### Pattern (route-level error handling)
 
-    // Route-level error
-    app.use((err, req, res, next) => {
-      console.error("Internal error:", (err as Error).message);
-      res.status(500).json({ error: "Something went wrong" });
+    const { error } = await supabase.from("entries").insert({ ... });
+    if (error) {
+      // WRONG — error.message can contain the failing value
+      // console.error("insert failed", error);
+
+      // RIGHT — error code is safe, enough for ops
+      console.error("entries insert failed", error.code);
+      return NextResponse.json({ error: "Could not save entry" }, { status: 500 });
+    }
+
+### Pattern (fire-and-forget with safe logging)
+
+    // Insights regeneration after a successful write — don't block the
+    // response on it, don't crash the route if it fails.
+    regenerateInsights(supabase, user.id).catch(() => {
+      console.error("overwhelmed: insight regeneration failed");
     });
 
-    // WRONG — leaks user content
-    console.error("Error saving:", error);
+### Pattern (client-side fetch)
 
-    // RIGHT — leaks nothing sensitive
-    console.error("Error saving entry:", (error as Error).message);
+    try {
+      const res = await fetch(...);
+      if (res.status === 403) return router.push("/paywall");
+      if (!res.ok) throw new Error(`status ${res.status}`);
+    } catch (err) {
+      console.error("entry submit failed", (err as Error).message);
+      setError("Could not save. Check your connection and try again.");
+    }
 
 ---
 
@@ -331,21 +433,36 @@ wildcards (`%`, `_`) inside a user-supplied pattern:
 
 ### Rules
 
-- App stores sensitive personal data (emotions, triggers, relationship info)
-- Only return necessary fields to the frontend — never the full DB row
-- Never include sensitive content in error logs
-- Mark sensitive columns in your schema documentation
-- Encrypt at rest if your DB supports it (Supabase does by default)
+- The app stores sensitive personal data (emotions, triggers, journal
+  text, person names, relationship info). Every surface that touches
+  this data is a privacy surface.
+- Only select the columns a caller actually needs — never `select("*")`
+  for rows that will be serialized to the client.
+- Admin surfaces must show metadata only (entry types, dates, counts).
+  Never display journal text, emotions, triggers, or person names in
+  admin views.
+- Never include sensitive content in error logs (see §7).
+- Encryption at rest is provided by Supabase by default.
 
-### Pattern
-
-    // WRONG — returns everything including internal fields
-    app.get("/api/user", (req, res) => res.json(req.user));
+### Pattern (server component — explicit column list)
 
     // RIGHT — explicit allowlist
-    app.get("/api/user", (req, res) => {
-      const { id, email, displayName } = req.user;
-      res.json({ id, email, displayName });
+    const { data: entries } = await supabase
+      .from("entries")
+      .select("entry_id, created_at, summary")    // not select("*")
+      .eq("user_id", user.id);
+
+### Pattern (API response — project before returning)
+
+    const { data: row } = await supabase
+      .from("user_profiles")
+      .select("primary_profile, secondary_profile, created_at")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    return NextResponse.json({
+      profile: row?.primary_profile ?? null,
+      secondary: row?.secondary_profile ?? null,
     });
 
 ---
@@ -541,18 +658,37 @@ Anti-patterns this rule forbids:
 
 ### Rules
 
-- Unit tests (Vitest) for storage methods and validation schemas
-- E2E tests (Playwright) for critical user flows
-- When adding a new route file, register it in BOTH the main app AND the
-  test app — forgetting the test app causes 404s in isolation tests
-- When adding a new IStorage method, also add it to memory-storage.ts
-- Golden-path e2e tests are mandatory whenever onboarding/auth flow changes
+- Unit tests (Vitest) live co-located at `src/lib/__tests__/*.test.ts`.
+  Cover validation schemas, scoring/extraction logic, and pure helpers.
+- E2E tests (Playwright) live in `e2e/<flow>.spec.ts`. Cover critical
+  user flows (login, onboarding, golden-path Prepare/Review).
+- Golden-path E2E tests are mandatory whenever onboarding or auth
+  flow changes.
+- Create E2E test users via the Supabase admin API, not through the
+  signup UI — the built-in SMTP rate-limits at ~3 confirmation emails
+  per hour, which blocks signup-UI tests.
+- Clean up E2E users in a `finally` block. FK cascades from
+  `auth.users` (`on delete cascade`) handle all downstream rows.
+- Until a separate test Supabase project exists, the E2E admin client
+  (`createAdminClient` in `e2e/helpers/auth.ts`) throws unless
+  `ALLOW_E2E_AGAINST_REMOTE=1` is set when the URL points at
+  `supabase.co`. Don't remove this guard; keep the seatbelt.
+- Locally, Playwright reuses a running dev server (`reuseExistingServer:
+  !process.env.CI`). A stale or HMR-broken dev server can produce a
+  green run that's validating yesterday's code — when in doubt, stop
+  the dev server and let Playwright boot a fresh one.
+- Run E2E with `ALLOW_E2E_AGAINST_REMOTE=1 npm run test:e2e`.
 
 ### Test data rules
 
-- Never use production data in tests
-- Test with edge cases: empty strings, max-length strings, special characters
-- Test auth: unauthenticated requests must return 401, cross-user access must return 403
+- Never use production data in tests.
+- Test users use `@pureeq-test.dev` emails and per-user random
+  passwords (`Test-${randomUUID()}!`) so an unclean teardown is still
+  recognizable and non-exploitable.
+- Test auth paths: unauthenticated requests must return 401,
+  cross-user access must return 403.
+- Test validation edge cases: empty strings, whitespace-only,
+  max-length, Unicode, SQL metacharacters, LIKE metacharacters.
 
 ---
 
@@ -756,40 +892,46 @@ This is the single source of truth for the AI coding agent.
 
 Mistakes from real production apps. Review before starting any new build.
 
-1. Unregistered route files without auth are a security hole — delete
-   dormant route files rather than leaving them in the codebase.
+1. Auth gates belong on the route-group layout (`(app)/layout.tsx`),
+   not inside individual pages. A page-level redirect only fires on
+   that page — every other page becomes a deep-link bypass. Each page
+   still scopes its queries by `user.id` for defense in depth.
 
-2. Setup/onboarding gates belong in the route layer, not inside pages.
-   A page-level redirect only fires on that page — every other page
-   becomes a deep-link bypass.
+2. `console.error("msg:", error)` with a full Supabase error object
+   can log the failing row to server logs. Use `error.code` only.
 
-3. console.error("msg:", error) in routes can log sensitive user content
-   to server logs. Always use (error as Error).message instead.
+3. Request logger must NEVER capture response bodies — a careless
+   middleware ends up logging API responses containing journals,
+   emotions, and identity data.
 
-4. Request logger must NEVER capture response bodies — found logging
-   API responses containing journals, emotions, and identity data.
-
-5. When a prompt restructures one page deeply but only lists surface
+4. When a prompt restructures one page deeply but only lists surface
    edits for a related page, ask whether the related page also needs
    structural changes.
 
-6. Deprecating schema fields: stop writing in storage + remove from Zod
-   validation, but keep columns in table definition. Never remove
-   columns without a migration.
+5. Deprecating schema fields: stop writing in route handlers + remove
+   from Zod validation, but keep columns in the table until a
+   migration drops them. Never remove columns without a migration.
 
-7. Partial PUT payloads can wipe fields. Always merge with existing
-   data before saving — use a builder pattern like
-   buildPayload(existing, overrides).
+6. Partial PATCH payloads can wipe fields. Either require the full
+   object in the schema or merge with the existing row before
+   `update()`.
 
-8. Range sliders on mobile need explicit height (h-10 or similar) —
-   native input[type="range"] track is ~4px, impossible to grab on touch.
+7. Range sliders on mobile need explicit height (`h-10` or similar) —
+   native `input[type="range"]` track is ~4px, impossible to grab on
+   touch.
 
-9. Pages with 30+ input fields need progressive disclosure — a single
+8. Pages with 30+ input fields need progressive disclosure — a single
    scroll of inputs overwhelms mobile users.
 
-10. React hooks must NEVER appear after early returns. This violates
-    rules of hooks and crashes the app. Put all hooks before any
-    conditional return statement.
+9. React hooks must NEVER appear after early returns. This violates
+   rules of hooks and crashes the app. Put all hooks before any
+   conditional return statement.
+
+10. `process.env.X!` with a misspelled name silently yields `undefined`.
+    The non-null assertion silences the TypeScript warning without
+    validating the value. Every server-only env read must either check
+    the value explicitly and throw a named error, or come from a
+    central config object that validates at startup.
 
 ---
 
@@ -799,17 +941,24 @@ Run through this before every deployment:
 
     [ ] All secrets in environment variables (none hardcoded)
     [ ] No secrets logged or exposed in API responses
-    [ ] Session/auth cookies are httpOnly and secure
-    [ ] Every route has auth middleware
-    [ ] Access control checked server-side
-    [ ] RLS enabled on every table with user data (if using Supabase)
-    [ ] Input validation (Zod) on every endpoint
-    [ ] Rate limiting on AI, auth, and export endpoints
+    [ ] Every API route / server action calls supabase.auth.getUser()
+        before any data access
+    [ ] Every mutating route calls checkOrigin() (CSRF) before writes
+    [ ] RLS enabled on every table with user data
+    [ ] Every query explicitly filters by user.id (defense in depth)
+    [ ] Input validation (Zod) on every endpoint + AI output schema
+    [ ] Rate limiting on AI, auth, and all mutating endpoints
+        (including admin + server actions)
     [ ] Error messages don't leak internals or user content
-    [ ] Users can only access their own data
-    [ ] npm run check passes
-    [ ] Tests pass (unit + e2e)
-    [ ] .env is in .gitignore
+        (error.code only, never error.message with payload)
+    [ ] Dev-only routes (/dev/*) are gated with NODE_ENV === "production"
+        → notFound()
+    [ ] npx tsc --noEmit passes
+    [ ] npm run lint passes
+    [ ] npm test passes
+    [ ] npm run build passes
+    [ ] ALLOW_E2E_AGAINST_REMOTE=1 npm run test:e2e passes
+    [ ] .env / .env.local in .gitignore
     [ ] No sensitive data in git history
 
 ---
@@ -831,34 +980,49 @@ Pattern: Client generates a UUID once per submission, holds it in a ref,
 sends it on every attempt of the same submission.
 
     // Client
-    const idempotencyKey = useRef(crypto.randomUUID());
+    const idempotencyKeyRef = useRef<string>("");
+    if (!idempotencyKeyRef.current) {
+      idempotencyKeyRef.current = crypto.randomUUID();
+    }
 
     async function submit() {
       await fetch("/api/entries", {
         method: "POST",
-        body: JSON.stringify({ ...payload, idempotencyKey: idempotencyKey.current }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...payload,
+          idempotencyKey: idempotencyKeyRef.current,
+        }),
       });
     }
 
-    // Server
-    const existing = await db
-      .select()
-      .from(entries)
-      .where(and(eq(entries.userId, user.id), eq(entries.sourceSessionId, input.idempotencyKey)))
-      .limit(1);
+    // Server — SELECT before INSERT, reuse on retry
+    const { data: existing } = await supabase
+      .from("raw_records")
+      .select("raw_record_id")
+      .eq("user_id", user.id)
+      .eq("source_session_id", input.idempotencyKey)
+      .maybeSingle();
 
-    if (existing.length > 0) {
+    if (existing) {
       // Reuse existing row — no duplicate insert
-      return existing[0];
+      rawRecordId = existing.raw_record_id;
+    } else {
+      const { data: inserted } = await supabase
+        .from("raw_records")
+        .insert({ user_id: user.id, source_session_id: input.idempotencyKey, ... })
+        .select("raw_record_id")
+        .single();
+      rawRecordId = inserted!.raw_record_id;
     }
-    // Otherwise insert normally
 
 Rules:
-- Never reset the key between retries of the same submission
-- Reset only after clean success or navigate-away
-- Server deduplicates on (userId, idempotencyKey), not on content
-- The clean long-term pattern is a UNIQUE constraint + ON CONFLICT DO
-  NOTHING, but SELECT-before-INSERT is sufficient at low concurrency
+- Never reset the key between retries of the same submission.
+- Reset only after clean success or navigate-away.
+- Server deduplicates on (user_id, source_session_id), not on content.
+- Back this with a UNIQUE constraint on (user_id, source_session_id)
+  in the migration — SELECT-before-INSERT is sufficient at low
+  concurrency, but the DB-level constraint catches races.
 
 ### 16.2 Raw-then-derived insert ordering with AI
 
@@ -873,30 +1037,57 @@ UPDATE derived with the AI result. This way AI failure is recoverable
 for a new source + derived insert).
 
     // 1. Insert raw record (source of truth)
-    const raw = await db.insert(rawRecords).values({ ... }).returning();
+    const { data: raw } = await supabase
+      .from("raw_records")
+      .insert({ user_id: user.id, source_session_id: idempotencyKey, ... })
+      .select("raw_record_id")
+      .single();
 
     // 2. Insert derived entry with null AI output
-    const derived = await db.insert(entries).values({
-      rawRecordId: raw.id,
-      aiOutput: null,
-      isComplete: false,
-    }).returning();
+    const { data: derived, error: derivedErr } = await supabase
+      .from("prepare_entries")
+      .insert({
+        user_id: user.id,
+        raw_record_id: raw.raw_record_id,
+        ai_plan_json: null,
+        is_complete: false,
+      })
+      .select("prepare_entry_id")
+      .single();
 
-    // 3. Call AI (slow, expensive)
+    // 3. Cleanup on derived-insert failure — only if we just wrote raw
+    if (derivedErr) {
+      if (!existingRaw) {
+        await supabase
+          .from("raw_records")
+          .delete()
+          .eq("user_id", user.id)
+          .eq("raw_record_id", raw.raw_record_id);
+      }
+      return NextResponse.json({ error: "Could not save" }, { status: 500 });
+    }
+
+    // 4. Call AI (slow, expensive) — outside retry loop, with timeout
     const aiResult = await callAI(prompt);
 
-    // 4. UPDATE derived with AI result
-    await db.update(entries)
-      .set({ aiOutput: aiResult, isComplete: true })
-      .where(eq(entries.id, derived.id));
+    // 5. UPDATE derived with AI result
+    await supabase
+      .from("prepare_entries")
+      .update({ ai_plan_json: aiResult, is_complete: true })
+      .eq("prepare_entry_id", derived.prepare_entry_id)
+      .eq("user_id", user.id);
 
-Cleanup on derived insert failure: delete the raw row ONLY if we just
-created it (not reused from a prior idempotent attempt). If the raw row
-was reused, deleting it destroys data the user already owns.
-
-    if (derivedInsertFailed && !existingRaw) {
-      await db.delete(rawRecords).where(eq(rawRecords.id, raw.id));
-    }
+Rules:
+- Cleanup-on-derived-failure must gate on `!existingRaw`. If the raw
+  row was reused from a prior idempotent attempt, deleting it destroys
+  data the user already owns (see §16.10 for the reverse bug).
+- The AI call goes AFTER both inserts, not between them. On AI
+  failure the derived row still exists; the user can retry the AI
+  side via the idempotency key without paying for another insert pair.
+- Construct the Anthropic/OpenAI client OUTSIDE any retry loop with an
+  explicit timeout (`new Anthropic({ timeout: 30_000 })`). Without a
+  timeout, a stuck socket hangs past Vercel's 504 after a raw row was
+  already written — orphan territory.
 
 ### 16.3 Stale-closure ref pattern for async callbacks
 
