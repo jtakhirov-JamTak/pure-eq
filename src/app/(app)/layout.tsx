@@ -21,14 +21,12 @@ export default async function AppLayout({
 
   // Admin bypass: admins skip the subscription gate entirely.
   if (!isAdmin(user.email)) {
-    // Subscription gate: if free Prepare is used and user isn't subscribed,
-    // redirect to paywall. Users who haven't used their free Prepare yet
-    // can access the app to do their one free Prepare.
-    // Note: unsubscribed users who haven't used their free Prepare can
-    // browse pages, but API routes will 403 on Review/Tools submissions.
-    // Client pages handle 403 by redirecting to /paywall.
+    // Subscription gate: users get a 3-day free period from signup to
+    // complete 1 Prepare + 1 Review. After that, paywall.
     const access = await checkSubscription(supabase, user.id);
-    if (access.freePrepareUsed && !access.hasAccess) {
+    const bothFreeUsed = access.freePrepareUsed && access.freeReviewUsed;
+    const freePeriodExpired = !access.freePeriodActive;
+    if (!access.hasAccess && (bothFreeUsed || freePeriodExpired)) {
       redirect("/paywall");
     }
   }

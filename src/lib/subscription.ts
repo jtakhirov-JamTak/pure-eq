@@ -2,10 +2,28 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { SubscriptionStatus } from "@/types";
+import { createServiceClient } from "@/lib/supabase/service";
+
+/**
+ * 3-day window to complete 1 Prepare + 1 Review for free. Anchored to
+ * onboarding completion (user_profiles.created_at), not signup, so a
+ * workshop attendee who signs up days in advance doesn't burn their
+ * window before they've tried the app.
+ */
+const FREE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
+
+export type FreeUsageField = "freePrepareUsed" | "freeReviewUsed";
+
+const FREE_USAGE_COLUMN: Record<FreeUsageField, "free_prepare_used_at" | "free_review_used_at"> = {
+  freePrepareUsed: "free_prepare_used_at",
+  freeReviewUsed: "free_review_used_at",
+};
 
 export interface SubscriptionAccess {
   hasAccess: boolean;
   freePrepareUsed: boolean;
+  freeReviewUsed: boolean;
+  freePeriodActive: boolean;
   status: SubscriptionStatus;
   trialEndsAt: string | null;
 }
@@ -14,39 +32,59 @@ export interface SubscriptionAccess {
  * Check a user's subscription status. Returns access info used by both
  * the (app) layout gate and individual API routes.
  *
- * Handles trial expiry lazily — if the trial has lapsed, updates the
- * status to 'trial_expired' inline so we don't need a cron job.
+ * The free period is anchored to onboarding completion (user_profiles),
+ * so the caller does not need to pass a date in.
+ *
+ * Handles trial expiry lazily — if a legacy trial has lapsed, updates
+ * the status to 'trial_expired' inline so we don't need a cron job.
  */
 export async function checkSubscription(
   supabase: SupabaseClient<Database>,
-  userId: string
+  userId: string,
 ): Promise<SubscriptionAccess> {
+  // Free-period anchor: onboarding completion. Users without a profile
+  // are caught by the routing hub upstream; fail closed if missing.
+  const { data: profileRow } = await supabase
+    .from("user_profiles")
+    .select("created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  const freePeriodActive = profileRow?.created_at
+    ? Date.now() - new Date(profileRow.created_at).getTime() < FREE_PERIOD_MS
+    : false;
+
   const { data: row, error } = await supabase
     .from("user_subscriptions")
-    .select("status, free_prepare_used_at, trial_ends_at")
+    .select("status, free_prepare_used_at, free_review_used_at, trial_ends_at")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (error) {
     console.error("subscription: lookup failed", error.code);
     // Fail closed — a DB hiccup must not grant free access.
-    // freePrepareUsed=true ensures both layout gate and Prepare gate block.
-    return { hasAccess: false, freePrepareUsed: true, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freePeriodActive: false, status: "none", trialEndsAt: null };
   }
 
   if (!row) {
-    return { hasAccess: false, freePrepareUsed: false, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freePeriodActive, status: "none", trialEndsAt: null };
   }
 
   const freePrepareUsed = row.free_prepare_used_at !== null;
+  const freeReviewUsed = row.free_review_used_at !== null;
   let status = row.status as SubscriptionStatus;
 
-  // Lazy trial expiry: if trial_active but past trial_ends_at, expire it.
+  // Lazy trial expiry: legacy trial_active rows are expired past trial_ends_at.
+  // New rows do not use trial_* columns (createSubscription activates directly).
+  // Uses service role since RLS pins `status` against user-initiated writes.
   if (status === "trial_active" && row.trial_ends_at) {
     const expired = new Date(row.trial_ends_at) < new Date();
     if (expired) {
       status = "trial_expired";
-      const { error: expiryErr } = await supabase
+      const service = createServiceClient();
+      const { error: expiryErr } = await service
         .from("user_subscriptions")
         .update({ status: "trial_expired", updated_at: new Date().toISOString() })
         .eq("user_id", userId);
@@ -61,113 +99,146 @@ export async function checkSubscription(
   return {
     hasAccess,
     freePrepareUsed,
+    freeReviewUsed,
+    freePeriodActive,
     status,
     trialEndsAt: row.trial_ends_at,
   };
 }
 
 /**
- * Mark the user's one free Prepare as consumed. Called after the first
- * Prepare's AI output succeeds. Upserts the subscription row so it
- * works even if no row existed before.
+ * Atomically reserve a user's one free use (Prepare or Review) BEFORE the
+ * Anthropic call. This closes the race where parallel requests all see
+ * "free use not consumed" and all proceed to consume paid API budget.
+ *
+ * Returns "reserved" if this call succeeded in claiming the free use,
+ * "already_used" if another path already consumed it (possibly a concurrent
+ * request that won the race).
+ *
+ * Does NOT revert on AI failure. Trade-off: a failed first attempt burns
+ * the free use, but the caller's idempotency key lets them retry the same
+ * submission against the same reservation.
  */
-export async function markFreePrepareUsed(
-  supabase: SupabaseClient<Database>,
-  userId: string
-): Promise<boolean> {
+export async function reserveFreeUse(
+  userId: string,
+  field: FreeUsageField,
+): Promise<"reserved" | "already_used"> {
+  const column = FREE_USAGE_COLUMN[field];
   const now = new Date().toISOString();
 
-  // Try update first (row may already exist from a prior subscribe).
-  const { data: updated, error: updateErr } = await supabase
+  // Service role: RLS pins these columns against user-initiated writes
+  // (so a compromised client can't PATCH free_*_used_at to null and
+  // reset their free uses). Reservation is a server-only operation.
+  const service = createServiceClient();
+
+  type SubRow = Database["public"]["Tables"]["user_subscriptions"];
+  const updatePayload: SubRow["Update"] =
+    column === "free_prepare_used_at"
+      ? { free_prepare_used_at: now, updated_at: now }
+      : { free_review_used_at: now, updated_at: now };
+  const insertPayload: SubRow["Insert"] =
+    column === "free_prepare_used_at"
+      ? { user_id: userId, status: "none", free_prepare_used_at: now }
+      : { user_id: userId, status: "none", free_review_used_at: now };
+
+  // Attempt 1: UPDATE if column is null. Atomic — only one concurrent
+  // request can match `.is(column, null)` and receive a row back.
+  const { data: u1, error: u1Err } = await service
     .from("user_subscriptions")
-    .update({ free_prepare_used_at: now, updated_at: now })
+    .update(updatePayload)
     .eq("user_id", userId)
-    .is("free_prepare_used_at", null)
+    .is(column, null)
     .select("subscription_id")
     .maybeSingle();
 
-  if (updateErr) {
-    console.error("subscription: mark free prepare failed", updateErr.code);
-    return false;
+  if (u1Err) {
+    console.error(`subscription: reserve ${column} update failed`, u1Err.code);
+    return "already_used"; // fail closed
+  }
+  if (u1) return "reserved";
+
+  // Attempt 2: row may not exist yet — try INSERT with the column set.
+  const { error: insErr } = await service
+    .from("user_subscriptions")
+    .insert(insertPayload);
+  if (!insErr) return "reserved";
+  if (insErr.code !== "23505") {
+    console.error(`subscription: reserve ${column} insert failed`, insErr.code);
+    return "already_used"; // fail closed
   }
 
-  // If no row was updated, insert a new one.
-  if (!updated) {
-    const { error: insertErr } = await supabase
-      .from("user_subscriptions")
-      .insert({
-        user_id: userId,
-        status: "none",
-        free_prepare_used_at: now,
-      });
-
-    // Unique constraint violation means another request beat us — fine.
-    if (insertErr && insertErr.code !== "23505") {
-      console.error("subscription: insert for free prepare failed", insertErr.code);
-      return false;
-    }
+  // Attempt 3: insert lost the race — row exists now. Retry the atomic UPDATE.
+  const { data: u2, error: u2Err } = await service
+    .from("user_subscriptions")
+    .update(updatePayload)
+    .eq("user_id", userId)
+    .is(column, null)
+    .select("subscription_id")
+    .maybeSingle();
+  if (u2Err) {
+    console.error(`subscription: reserve ${column} retry failed`, u2Err.code);
+    return "already_used";
   }
-
-  return true;
+  return u2 ? "reserved" : "already_used";
 }
 
 /**
- * Create a trial subscription (v0 mock). In production, this will be
+ * Create a subscription (v0 mock). In production, this will be
  * replaced by Stripe webhook handling.
+ *
+ * TODO(stripe): When Stripe ships, this endpoint must NOT be callable
+ * directly by the user. Only the Stripe webhook should set status='active'
+ * after verifying a successful checkout session. Cancelled → active
+ * must require a new Stripe checkout, not a re-POST to this endpoint.
  */
-export async function createTrialSubscription(
-  supabase: SupabaseClient<Database>,
-  userId: string
+export async function createSubscription(
+  userId: string,
+  _plan: "monthly" | "annual",
 ): Promise<{ success: boolean }> {
-  const now = new Date();
-  const trialEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-  const nowIso = now.toISOString();
-  const trialEndIso = trialEnd.toISOString();
+  const nowIso = new Date().toISOString();
 
-  // Upsert: update if exists, insert if not.
-  const { data: existing } = await supabase
+  // Service role: RLS pins status/role/free_*_used_at against user writes.
+  // Only the server can promote a row to status='active'.
+  const service = createServiceClient();
+
+  const { data: existing } = await service
     .from("user_subscriptions")
     .select("subscription_id, status")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (existing) {
-    // Don't downgrade an active subscription to trial.
     if (existing.status === "active") {
       return { success: true };
     }
-    // Block re-activation after trial expired or cancelled.
-    // In v0 mock this prevents infinite free trials.
-    if (existing.status === "trial_expired" || existing.status === "cancelled") {
-      return { success: false };
-    }
-    const { error } = await supabase
+    // Clear stale trial_ends_at so legacy trial_active rows don't keep
+    // reporting a trial end date after being promoted to 'active'.
+    const { error } = await service
       .from("user_subscriptions")
       .update({
-        status: "trial_active",
-        trial_started_at: nowIso,
-        trial_ends_at: trialEndIso,
+        status: "active",
+        activated_at: nowIso,
+        trial_ends_at: null,
         updated_at: nowIso,
       })
       .eq("user_id", userId);
 
     if (error) {
-      console.error("subscription: trial update failed", error.code);
+      console.error("subscription: activate update failed", error.code);
       return { success: false };
     }
   } else {
-    const { error } = await supabase
+    const { error } = await service
       .from("user_subscriptions")
       .insert({
         user_id: userId,
-        status: "trial_active",
-        trial_started_at: nowIso,
-        trial_ends_at: trialEndIso,
+        status: "active",
+        activated_at: nowIso,
       });
 
     // 23505 = unique constraint violation — another request beat us. That's fine.
     if (error && error.code !== "23505") {
-      console.error("subscription: trial insert failed", error.code);
+      console.error("subscription: activate insert failed", error.code);
       return { success: false };
     }
   }

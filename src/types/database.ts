@@ -780,6 +780,7 @@ export type Database = {
           cancelled_at: string | null
           created_at: string
           free_prepare_used_at: string | null
+          free_review_used_at: string | null
           role: string
           status: string
           stripe_customer_id: string | null
@@ -795,6 +796,7 @@ export type Database = {
           cancelled_at?: string | null
           created_at?: string
           free_prepare_used_at?: string | null
+          free_review_used_at?: string | null
           role?: string
           status?: string
           stripe_customer_id?: string | null
@@ -810,6 +812,7 @@ export type Database = {
           cancelled_at?: string | null
           created_at?: string
           free_prepare_used_at?: string | null
+          free_review_used_at?: string | null
           role?: string
           status?: string
           stripe_customer_id?: string | null

@@ -102,7 +102,9 @@ export const createPersonSchema = z.object({
 });
 
 // Subscribe (v0 mock — no payment fields yet)
-export const subscribeSchema = z.object({});
+export const subscribeSchema = z.object({
+  plan: z.enum(["monthly", "annual"]),
+});
 
 // Outcome tracking — Review
 export const immediateOutcomeSchema = z.object({

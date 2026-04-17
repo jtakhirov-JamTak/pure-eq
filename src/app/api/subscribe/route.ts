@@ -1,12 +1,12 @@
 // Pure EQ domain — replace in fork.
-// v0 mock: creates a trial subscription directly. When Stripe ships,
+// v0 mock: activates subscription directly. When Stripe ships,
 // this endpoint becomes the checkout-session creator and the row is
 // written by the webhook handler instead.
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
-import { createTrialSubscription } from "@/lib/subscription";
+import { createSubscription } from "@/lib/subscription";
 import { subscribeSchema } from "@/lib/validation";
 
 export const runtime = "nodejs";
@@ -70,11 +70,11 @@ export async function POST(req: Request) {
     );
   }
 
-  // Create trial subscription (mock — no Stripe).
-  const result = await createTrialSubscription(supabase, user.id);
+  // Create subscription (mock — no Stripe).
+  const result = await createSubscription(user.id, parsed.data.plan);
   if (!result.success) {
     return NextResponse.json(
-      { error: "Could not start trial" },
+      { error: "Could not activate subscription" },
       { status: 500 }
     );
   }

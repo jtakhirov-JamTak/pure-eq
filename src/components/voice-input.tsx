@@ -12,6 +12,8 @@ type Props = {
 
 type Status = "idle" | "recording" | "transcribing" | "error";
 
+const MAX_RECORDING_SECONDS = 45;
+
 const CODEC_PREFERENCE = [
   "audio/webm;codecs=opus",
   "audio/webm",
@@ -42,11 +44,14 @@ export function VoiceInput({
 }: Props) {
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [secondsLeft, setSecondsLeft] = useState(MAX_RECORDING_SECONDS);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAtRef = useRef<number>(0);
 
   // Fresh value + onChange refs so async callbacks never close over stale state.
   // Without these, a transcript returning after the parent re-renders would
@@ -60,6 +65,7 @@ export function VoiceInput({
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      clearTimer();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       abortRef.current?.abort();
       const r = recorderRef.current;
@@ -72,6 +78,13 @@ export function VoiceInput({
       }
     };
   }, []);
+
+  function clearTimer() {
+    if (timerRef.current !== null) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }
 
   function safeSetStatus(next: Status) {
     if (mountedRef.current) setStatus(next);
@@ -112,6 +125,25 @@ export function VoiceInput({
       };
 
       recorder.start();
+      startedAtRef.current = Date.now();
+      setSecondsLeft(MAX_RECORDING_SECONDS);
+
+      // Wall-clock timer — immune to iOS background throttling.
+      timerRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);
+        const remaining = Math.max(0, MAX_RECORDING_SECONDS - elapsed);
+        if (mountedRef.current) setSecondsLeft(remaining);
+        if (remaining <= 0) {
+          clearTimer();
+          // Auto-stop: no error, just transcribe what we have.
+          const r = recorderRef.current;
+          if (r && r.state !== "inactive") {
+            if (mountedRef.current) setStatus("transcribing");
+            try { r.stop(); } catch { /* ignore */ }
+          }
+        }
+      }, 500);
+
       safeSetStatus("recording");
     } catch (err) {
       console.error("mic access failed", (err as Error)?.name);
@@ -123,6 +155,7 @@ export function VoiceInput({
   }
 
   function stopRecording() {
+    clearTimer();
     const r = recorderRef.current;
     if (r && r.state !== "inactive") {
       safeSetStatus("transcribing");
@@ -229,13 +262,22 @@ export function VoiceInput({
           )}
         </button>
       </div>
-      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
-      {recording && !error && (
-        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-red-600">
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
-          Recording… tap to stop.
-        </p>
-      )}
+      {/* Reserve vertical space so the hint -> recording -> silent-typing
+          transitions don't cause a ~20px layout shift mid-interaction. */}
+      <div className="mt-1.5 min-h-[1.25rem]">
+        {error && <span className="text-sm text-red-600">{error}</span>}
+        {!error && recording && (
+          <span className="flex items-center gap-2 text-sm font-medium text-red-600">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
+            Recording… {secondsLeft}s remaining
+          </span>
+        )}
+        {!error && !recording && !transcribing && !value && (
+          <span className="text-xs text-zinc-500">
+            Speak up to 45 seconds — brief and clear works best.
+          </span>
+        )}
+      </div>
     </div>
   );
 }

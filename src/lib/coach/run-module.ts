@@ -9,7 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { verifyPersonOwnership } from "@/lib/verify-ownership";
-import { checkSubscription } from "@/lib/subscription";
+import { checkSubscription, reserveFreeUse } from "@/lib/subscription";
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { validateAIOutput } from "@/lib/ai/schemas";
@@ -72,19 +72,26 @@ export async function runCoachModule<
   }
 
   // 4. Subscription gate.
+  // - Admins: bypass.
+  // - Subscribed (hasAccess): always allow.
+  // - Otherwise, "free_one" modules allow one free use per module within
+  //   the 3-day free period. The actual atomic reservation happens at
+  //   step 9b (after idempotency check, before any writes), which closes
+  //   the parallel-request race. This gate is the cheap up-front filter.
   const adminUser = isAdmin(user.email);
-  let freePrepareUsed = false;
-  if (config.subscriptionGate === "free_one") {
-    const access = adminUser
-      ? { hasAccess: true, freePrepareUsed: false, status: "active" as const, trialEndsAt: null }
-      : await checkSubscription(supabase, user.id);
-    freePrepareUsed = access.freePrepareUsed;
-    if (access.freePrepareUsed && !access.hasAccess) {
-      return NextResponse.json({ error: "Subscription required" }, { status: 403 });
-    }
-  } else {
-    if (!adminUser) {
-      const access = await checkSubscription(supabase, user.id);
+  // Tracks whether this request needs to atomically reserve a free use.
+  // Admins and subscribed users skip the reservation entirely.
+  let needsReservation = false;
+  if (!adminUser) {
+    const access = await checkSubscription(supabase, user.id);
+    if (config.subscriptionGate === "free_one") {
+      const freeFieldUsed = access[config.freeUsageField];
+      const canUseFree = access.freePeriodActive && !freeFieldUsed;
+      if (!access.hasAccess && !canUseFree) {
+        return NextResponse.json({ error: "Subscription required" }, { status: 403 });
+      }
+      needsReservation = !access.hasAccess;
+    } else {
       if (!access.hasAccess) {
         return NextResponse.json({ error: "Subscription required" }, { status: 403 });
       }
@@ -230,6 +237,22 @@ export async function runCoachModule<
   if (existingRaw) {
     rawRecordId = existingRaw.raw_record_id;
   } else {
+    // 9b. Atomic free-use reservation — only on first attempt (not retries).
+    // Closes the race where N parallel first-attempts all see "free not
+    // used" at step 4 and all proceed. The UPDATE is atomic: only the
+    // first concurrent request flips free_X_used_at from null to a
+    // timestamp. Losers get a 403 here, before any writes happen.
+    //
+    // Does NOT revert on later failure. The idempotency key lets the
+    // user retry (hitting the existingRaw branch above), so a failed AI
+    // call doesn't burn a second free use.
+    if (needsReservation && config.subscriptionGate === "free_one") {
+      const result = await reserveFreeUse(user.id, config.freeUsageField);
+      if (result === "already_used") {
+        return NextResponse.json({ error: "Subscription required" }, { status: 403 });
+      }
+    }
+
     // Thread auto-create (write) stays inside idempotency guard.
     if (config.threadBehavior === "auto_create") {
       if (!effectiveThreadId && effectivePersonId && config.getThreadTitle) {
@@ -431,15 +454,7 @@ export async function runCoachModule<
     }
   }
 
-  // 15. Post-success hook.
-  if (aiOutput && config.onSuccess) {
-    await config.onSuccess(supabase, user.id, {
-      aiOutput,
-      freePrepareUsed,
-    });
-  }
-
-  // 15b. Regenerate cached insights (fire-and-forget).
+  // 15. Regenerate cached insights (fire-and-forget).
   regenerateInsights(supabase, user.id).catch(() => {
     console.error(`${name}: insight regeneration failed`);
   });

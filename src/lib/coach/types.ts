@@ -2,11 +2,21 @@ import type { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { ProfileType } from "@/types";
+import type { FreeUsageField } from "@/lib/subscription";
 
 export type AppSupabase = SupabaseClient<Database>;
 
-/** Per-module configuration that captures all differences between Prepare, Review, and Repair. */
-export interface CoachModuleConfig<
+/**
+ * Subscription gate config — discriminated union so TypeScript requires
+ * `freeUsageField` when `subscriptionGate === "free_one"`. Prevents the
+ * "silent default to freePrepareUsed" footgun if a future module is
+ * added without specifying which free-use column to check.
+ */
+type SubscriptionGateConfig =
+  | { subscriptionGate: "free_one"; freeUsageField: FreeUsageField }
+  | { subscriptionGate: "required"; freeUsageField?: never };
+
+interface BaseCoachModuleConfig<
   TInput extends Record<string, unknown>,
   TAiOutput extends { pattern_tag?: string },
 > {
@@ -26,11 +36,6 @@ export interface CoachModuleConfig<
   /** Zod schema for AI output validation. */
   aiOutputSchema: z.ZodType<TAiOutput>;
 
-  // -- Subscription --
-
-  /** "free_one" = Prepare (one free use), "required" = Review/Repair. */
-  subscriptionGate: "free_one" | "required";
-
   // -- Thread --
 
   /** "auto_create" = Prepare creates a new thread. "auto_link" = Review/Repair link to existing. */
@@ -47,9 +52,9 @@ export interface CoachModuleConfig<
   // -- Derived table --
 
   derivedTable: "prepare_entries" | "review_entries" | "repair_entries";
-  derivedIdColumn: string; // e.g. "prepare_entry_id"
-  aiJsonColumn: string; // e.g. "ai_plan_json"
-  aiVersionColumn: string; // e.g. "ai_plan_version"
+  derivedIdColumn: string;
+  aiJsonColumn: string;
+  aiVersionColumn: string;
   aiVersionValue: number;
 
   /** Build the payload_json.fields object for raw_records. */
@@ -85,12 +90,10 @@ export interface CoachModuleConfig<
 
   /** Extract a short title string from the input for thread auto-create. */
   getThreadTitle?: (input: TInput) => string;
-
-  // -- Post-success hook (e.g., markFreePrepareUsed) --
-
-  onSuccess?: (
-    supabase: AppSupabase,
-    userId: string,
-    context: { aiOutput: TAiOutput; freePrepareUsed: boolean },
-  ) => Promise<void>;
 }
+
+/** Per-module configuration that captures all differences between Prepare, Review, and Repair. */
+export type CoachModuleConfig<
+  TInput extends Record<string, unknown>,
+  TAiOutput extends { pattern_tag?: string },
+> = BaseCoachModuleConfig<TInput, TAiOutput> & SubscriptionGateConfig;

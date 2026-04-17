@@ -2,7 +2,6 @@ import { z } from "zod";
 import { createPrepareSchema } from "@/lib/validation";
 import { prepareOutputSchema } from "@/lib/ai/schemas";
 import { buildPreparePrompt } from "@/lib/ai/prompts";
-import { markFreePrepareUsed } from "@/lib/subscription";
 import { runCoachModule } from "@/lib/coach/run-module";
 import type { CoachModuleConfig } from "@/lib/coach/types";
 
@@ -76,11 +75,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     return truncated || input.situation.slice(0, 80);
   },
 
-  onSuccess: async (supabase, userId, { freePrepareUsed }) => {
-    if (!freePrepareUsed) {
-      await markFreePrepareUsed(supabase, userId);
-    }
-  },
+  freeUsageField: "freePrepareUsed",
 };
 
 export async function POST(req: Request) {
