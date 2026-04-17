@@ -68,16 +68,16 @@ export function PaywallContent() {
                   </span>
                 </div>
                 <p className="mt-0.5 text-sm text-zinc-500">
-                  $5.00/month, billed yearly
+                  $5.83/month, billed yearly
                 </p>
               </div>
               <div className="shrink-0 text-right">
-                <p className="text-2xl font-bold text-zinc-900">$59.99</p>
+                <p className="text-2xl font-bold text-zinc-900">$69.99</p>
                 <p className="text-xs text-zinc-500">/year</p>
               </div>
             </div>
             <p className="mt-2 text-xs font-medium text-green-700">
-              Save 44% vs monthly
+              Save 35% vs monthly
             </p>
           </button>
 
@@ -138,7 +138,7 @@ export function PaywallContent() {
           {submitting ? (
             <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
           ) : selectedPlan === "annual" ? (
-            "Subscribe — $59.99/year"
+            "Subscribe — $69.99/year"
           ) : (
             "Subscribe — $8.99/month"
           )}

@@ -11,8 +11,8 @@ When Claude makes a mistake, add the lesson to the "Lessons Learned" section bel
 
 ## Business Context
 
-- Revenue model: $0.99 for 7-day trial, then $9.99/month, cancel anytime
-- Onboarding produces a Communication Profile (9-question quiz) + one free AI output before paywall
+- Revenue model: 3-day free period (anchored to onboarding completion) with 1 free Prepare + 1 free Review, then $8.99/month or $69.99/year (cancel anytime)
+- Onboarding produces a Communication Profile (9-question quiz); free-period anchor starts when profile is saved
 - Product doc: docs/Pure_EQ_Final.txt (source of truth for all product decisions)
 - Engineering playbook: docs/Engineering_Playbook.txt (reusable security/architecture patterns)
 
