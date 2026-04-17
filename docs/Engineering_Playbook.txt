@@ -164,16 +164,16 @@ switching databases later, and auditing data access in one place.
 
     DATABASE_URL          — DB connection string
     SESSION_SECRET        — Session signing key (if using sessions)
-    SUPABASE_URL          — Supabase project URL (if using Supabase)
-    SUPABASE_ANON_KEY     — Supabase public key (client-safe)
-    SUPABASE_SERVICE_KEY  — Supabase admin key (server-only, NEVER expose)
-    ANTHROPIC_API_KEY     — AI provider key (server-only)
-    OPENAI_API_KEY        — Whisper / other AI key (server-only)
+    NEXT_PUBLIC_SUPABASE_URL            — Supabase project URL (if using Supabase)
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY — Supabase public key (client-safe, new API-key naming)
+    SUPABASE_SECRET_KEY                 — Supabase admin key (server-only, NEVER expose, new API-key naming)
+    ANTHROPIC_API_KEY                   — AI provider key (server-only)
+    OPENAI_API_KEY                      — Whisper / other AI key (server-only)
 
 ### Key distinction
 
-    Client-safe keys:   SUPABASE_ANON_KEY (designed to be public, RLS protects data)
-    Server-only keys:   SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, SESSION_SECRET
+    Client-safe keys:   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY (designed to be public, RLS protects data)
+    Server-only keys:   SUPABASE_SECRET_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, SESSION_SECRET
 
 ---
 
