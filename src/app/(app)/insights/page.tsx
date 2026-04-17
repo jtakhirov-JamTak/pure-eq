@@ -31,8 +31,10 @@ export default async function InsightsPage() {
     .eq("user_id", user.id)
     .limit(20);
 
+  // eslint-disable-next-line react-hooks/purity -- server component, Date.now() is stable per request
+  const nowMs = Date.now();
   const cacheAge = cachedInsights?.[0]?.generated_at
-    ? Date.now() - new Date(cachedInsights[0].generated_at).getTime()
+    ? nowMs - new Date(cachedInsights[0].generated_at).getTime()
     : Infinity;
   const useCache = cachedInsights && cachedInsights.length > 0 && cacheAge < ONE_HOUR_MS;
 

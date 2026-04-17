@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
+import ThreadPicker from "@/components/thread-picker";
 
 const DESIRED_OUTCOMES = [
   { value: "acknowledge_impact", label: "Acknowledge impact" },
@@ -126,6 +127,7 @@ export default function RepairPage() {
   const [step, setStep] = useState(0);
   const [data, setData] = useState<Record<string, string>>({});
   const [personId, setPersonId] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -169,6 +171,7 @@ export default function RepairPage() {
         body: JSON.stringify({
           ...payload,
           personId: personId || null,
+          threadId: threadId || null,
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
@@ -394,12 +397,19 @@ export default function RepairPage() {
       {/* Input */}
       <div className="mt-4">
         {currentStep.type === "person" ? (
-          <PersonPicker
-            value={value}
-            onChange={(next) => setFieldValue(currentStep.key, next)}
-            onPersonSelect={(id) => setPersonId(id)}
-            selectedPersonId={personId}
-          />
+          <>
+            <PersonPicker
+              value={value}
+              onChange={(next) => setFieldValue(currentStep.key, next)}
+              onPersonSelect={(id) => { setPersonId(id); setThreadId(null); }}
+              selectedPersonId={personId}
+            />
+            <ThreadPicker
+              personId={personId}
+              value={threadId}
+              onChange={setThreadId}
+            />
+          </>
         ) : currentStep.type === "select" ? (
           <div className="space-y-2">
             {currentStep.options?.map((opt) => (

@@ -1,7 +1,7 @@
 import type { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import type { ProfileType, ObservationTag } from "@/types";
+import type { ProfileType } from "@/types";
 
 export type AppSupabase = SupabaseClient<Database>;
 

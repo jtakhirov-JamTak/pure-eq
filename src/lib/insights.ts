@@ -347,8 +347,6 @@ export function getHowYouTendToLand(
     highFitEntries >= TEND_TO_LAND_THRESHOLDS.establishedHighFit &&
     reviewEntries >= TEND_TO_LAND_THRESHOLDS.establishedReviewEntries;
 
-  const nextThreshold = Math.ceil((totalEntries + 1) / 6) * 6;
-
   return {
     topPattern: top.tag,
     summary: OBSERVATION_TAG_DESCRIPTIONS[top.tag].summary,
@@ -441,8 +439,6 @@ export function getPersonPatterns(
       stats.distinctDays >= PERSON_PATTERN_THRESHOLDS.establishedDistinctDays &&
       stats.reviewEntries >= PERSON_PATTERN_THRESHOLDS.establishedReviewEntries &&
       stats.repairEntries >= PERSON_PATTERN_THRESHOLDS.establishedRepairEntries;
-
-    const nextThreshold = Math.ceil((stats.totalEntries + 1) / 3) * 3;
 
     results.push({
       personId,

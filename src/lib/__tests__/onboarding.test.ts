@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scoreProfile, QUESTIONS } from "@/lib/onboarding";
+import { scoreProfile } from "@/lib/onboarding";
 import type { QuizOption } from "@/lib/onboarding";
 
 describe("scoreProfile", () => {

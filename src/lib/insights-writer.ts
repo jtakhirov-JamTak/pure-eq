@@ -11,7 +11,6 @@ import {
   getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
   TEND_TO_LAND_HIGH_FIT,
-  OBSERVATION_TAG_DESCRIPTIONS,
 } from "@/lib/insights";
 
 const GENERATOR_VERSION = "v1";
@@ -193,7 +192,6 @@ export async function regenerateInsights(
     if (pp.topNegative) patternIds.push(pp.topNegative.tag);
     if (pp.topPositive) patternIds.push(pp.topPositive.tag);
 
-    const personDesc = OBSERVATION_TAG_DESCRIPTIONS[pp.topNegative?.tag ?? pp.topPositive?.tag ?? "defended_intent_early"];
     const summaryText = pp.topNegative?.summary ?? pp.topPositive?.summary ?? "";
 
     rows.push({
