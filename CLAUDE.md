@@ -18,15 +18,17 @@ When Claude makes a mistake, add the lesson to the "Lessons Learned" section bel
 
 ## Commands
 
-| Task              | Command            |
-|-------------------|--------------------|
-| Dev server        | `npm run dev`      |
-| Build             | `npm run build`    |
-| Type check        | `npx tsc --noEmit` |
-| Lint              | `npm run lint`     |
-| Tests             | `npm test`         |
+| Task              | Command                                             |
+|-------------------|-----------------------------------------------------|
+| Dev server        | `npm run dev`                                       |
+| Build             | `npm run build`                                     |
+| Type check        | `npx tsc --noEmit`                                  |
+| Lint              | `npm run lint`                                      |
+| Tests (unit)      | `npm test`                                          |
+| Tests (E2E)       | `ALLOW_E2E_AGAINST_REMOTE=1 npm run test:e2e`       |
 
 Environment: Requires `.env.local` with Supabase and Anthropic keys.
+E2E requires the `ALLOW_E2E_AGAINST_REMOTE=1` flag until a local/test Supabase project is set up — guards against accidentally creating users in live auth.
 
 ## Stack
 
@@ -104,6 +106,10 @@ docs/
 public/
   manifest.json                       # PWA manifest
   icon-192.svg, icon-512.svg          # Placeholder PWA icons
+e2e/
+  helpers/auth.ts                     # Service-role admin client + test user lifecycle
+  login.spec.ts                       # Login → onboarding smoke test
+playwright.config.ts                  # Playwright config (dev server reuse, dotenv)
 ```
 
 ## Adding an API Endpoint
@@ -218,3 +224,7 @@ public/
 - **Picker state must reset when its parent selection changes.** When a ThreadPicker is driven by personId, changing the person must reset the threadId to null. Otherwise the parent keeps a stale threadId from the previous person, and submit sends the wrong thread. Pattern: `onPersonSelect={(id) => { setPersonId(id); setThreadId(null); }}`.
 - **`resolved_at` must be cleared when un-resolving.** Setting `resolved_at` on "resolved"/"ended" but not clearing it on revert to "open" leaves a stale timestamp. Always explicitly set `resolved_at: null` in the non-terminal branch.
 - **`process.env.X!` with a misspelled name silently yields `undefined`.** `SECRET_KEY` vs `SUPABASE_SECRET_KEY` drifted between `.env.local` and `src/lib/supabase/service.ts`, so `createServiceClient()` had been passing `undefined` as the service key for weeks. TypeScript's non-null assertion doesn't validate the value — it just silences the "possibly undefined" warning. Every env read in a server-only module must either check the value explicitly and throw a named error, or come from a central config object that validates at startup. Never chain `!` on `process.env.X` and call it done.
+- **Supabase built-in SMTP rate-limits at ~3 emails/hour — blocks signup UI E2E tests.** Every `auth.signUp()` with email confirmation ON sends a confirmation email, which burns SMTP quota. Running more than 3 signup-UI tests in an hour fails with `email rate limit exceeded`. Workaround for E2E: create users via `admin.auth.admin.createUser({ email_confirm: true })` which skips email entirely. Signup-UI E2E testing has to wait for custom SMTP (SendGrid/Resend/Postmark).
+- **Playwright tests against a remote Supabase project need an explicit opt-in flag.** The dev and prod database are the same project in v0. Without a guard, a stray env flip or CI misconfig creates+deletes real users in live auth. Pattern: `createAdminClient()` throws unless `ALLOW_E2E_AGAINST_REMOTE=1` is set when the URL matches `supabase.co`. Three lines, real safety.
+- **Playwright `reuseExistingServer: true` can lie in local runs.** A green run against a stale dev server (HMR failed, branch switched) is still "PASS" — the test is validating yesterday's code. Safe for CI (webServer is skipped), risky locally. Either stop the dev server before E2E runs, or flip `reuseExistingServer` to false and accept the boot cost.
+- **FK cascades from `auth.users` make `admin.auth.admin.deleteUser()` data-safe.** Every Pure EQ table with `user_id uuid references auth.users(id)` uses `on delete cascade`, so deleting a test user via the admin API cleans up `user_profiles`, `raw_records`, `user_subscriptions`, `pattern_observations`, `derived_insights`, `persons`, `threads`, and all module-specific entry tables in one shot. Verified across migrations 0001–0013. Test cleanup helpers can rely on this.

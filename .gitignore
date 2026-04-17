@@ -150,5 +150,11 @@ scratch/
 # Claude Code per-user settings (personal to the developer, never commit)
 .claude/
 
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+
 # /save-context skill state — per-developer running context, not source code
 session-context.md
