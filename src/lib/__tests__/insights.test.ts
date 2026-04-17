@@ -38,17 +38,17 @@ describe("checkInsightThresholds", () => {
     });
     expect(needsDays.state).toBe("needs_more_days");
 
-    // threshold_met (needs 2+ event types)
+    // threshold_met (needs 3+ event types)
     const met = checkInsightThresholds({
       totalEntries: 8,
       distinctDays: 4,
-      eventTypes: ["review", "trigger_log"],
+      eventTypes: ["review", "trigger_log", "overwhelmed"],
       highFitEntries: 3,
     });
     expect(met.state).toBe("threshold_met");
   });
 
-  it("mixed event types (2+ modules) meet minEventTypes: 2", () => {
+  it("mixed event types (3+ modules) meet minEventTypes: 3", () => {
     // Integration test: realistic multi-module user
     const result = checkInsightThresholds({
       totalEntries: 7,
@@ -58,7 +58,17 @@ describe("checkInsightThresholds", () => {
     });
     expect(result.state).toBe("threshold_met");
 
-    // Single event type should NOT meet threshold (need 2)
+    // Two event types should NOT meet threshold (need 3)
+    const twoTypes = checkInsightThresholds({
+      totalEntries: 10,
+      distinctDays: 5,
+      eventTypes: ["review", "trigger_log"],
+      highFitEntries: 10,
+    });
+    expect(twoTypes.state).toBe("below_threshold");
+    expect(twoTypes.message).toContain("different modules");
+
+    // Single event type should NOT meet threshold
     const singleType = checkInsightThresholds({
       totalEntries: 10,
       distinctDays: 5,

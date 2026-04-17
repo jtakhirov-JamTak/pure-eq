@@ -12,6 +12,7 @@ import {
   OBSERVATION_TYPE_FOR_TAG,
   inferTriggerPatternTag,
 } from "@/lib/insights";
+import { regenerateInsights } from "@/lib/insights-writer";
 
 export const runtime = "nodejs";
 
@@ -244,6 +245,11 @@ export async function POST(req: Request) {
   } catch {
     console.error("triggered: pattern observation insert failed");
   }
+
+  // Regenerate cached insights (fire-and-forget).
+  regenerateInsights(supabase, user.id).catch(() => {
+    console.error("triggered: insight regeneration failed");
+  });
 
   return NextResponse.json({
     success: true,

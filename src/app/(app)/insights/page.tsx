@@ -12,6 +12,7 @@ import {
   getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
   TEND_TO_LAND_HIGH_FIT,
+  OBSERVATION_TAG_DESCRIPTIONS,
 } from "@/lib/insights";
 import type { ProfileType } from "@/types";
 
@@ -22,7 +23,20 @@ export default async function InsightsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Parallel fetches: profile, entry stats, pattern observations, persons
+  // Check for fresh cached insights first (< 1 hour old).
+  const ONE_HOUR_MS = 60 * 60 * 1000;
+  const { data: cachedInsights } = await supabase
+    .from("derived_insights")
+    .select("*")
+    .eq("user_id", user.id)
+    .limit(20);
+
+  const cacheAge = cachedInsights?.[0]?.generated_at
+    ? Date.now() - new Date(cachedInsights[0].generated_at).getTime()
+    : Infinity;
+  const useCache = cachedInsights && cachedInsights.length > 0 && cacheAge < ONE_HOUR_MS;
+
+  // Parallel fetches: profile + (if cache stale) entry stats, observations, persons
   const [profileRes, rawRecordsRes, observationsRes, personsRes] =
     await Promise.all([
       supabase
@@ -33,20 +47,25 @@ export default async function InsightsPage() {
         .limit(1)
         .maybeSingle(),
 
-      supabase
-        .from("raw_records")
-        .select("record_type, created_at, person_id")
-        .eq("user_id", user.id)
-        .eq("is_complete", true)
-        .is("deleted_at", null)
-        .limit(1000),
+      // Skip heavy queries if cache is fresh
+      useCache
+        ? Promise.resolve({ data: null, error: null })
+        : supabase
+            .from("raw_records")
+            .select("record_type, created_at, person_id")
+            .eq("user_id", user.id)
+            .eq("is_complete", true)
+            .is("deleted_at", null)
+            .limit(1000),
 
-      supabase
-        .from("pattern_observations")
-        .select("observation_tag, observed_at, observation_source, person_id")
-        .eq("user_id", user.id)
-        .order("observed_at", { ascending: false })
-        .limit(500),
+      useCache
+        ? Promise.resolve({ data: null, error: null })
+        : supabase
+            .from("pattern_observations")
+            .select("observation_tag, observed_at, observation_source, person_id")
+            .eq("user_id", user.id)
+            .order("observed_at", { ascending: false })
+            .limit(500),
 
       supabase
         .from("persons")
@@ -57,103 +76,183 @@ export default async function InsightsPage() {
     ]);
 
   const profile = profileRes.data;
-  const rawRecords = rawRecordsRes.data ?? [];
-  const observations = observationsRes.data ?? [];
   const persons = personsRes.data ?? [];
-
-  // Compute entry stats
-  const distinctDays = new Set(
-    rawRecords
-      .filter((r) => r.created_at)
-      .map((r) => r.created_at!.slice(0, 10))
-  ).size;
-  const eventTypes = [...new Set(rawRecords.map((r) => r.record_type))];
-  const highFitEntries = rawRecords.filter((r) =>
-    (HIGH_FIT_RECORD_TYPES as readonly string[]).includes(r.record_type)
-  ).length;
-
-  const thresholdResult = checkInsightThresholds({
-    totalEntries: rawRecords.length,
-    distinctDays,
-    eventTypes,
-    highFitEntries,
-  });
-
-  // Blind spot: only compute if threshold met
-  const blindSpot =
-    thresholdResult.state === "threshold_met"
-      ? getTopBlindSpot(observations, rawRecords.length)
-      : null;
-
-  // "How You Tend to Land" — stricter thresholds
-  const tendToLandHighFit = rawRecords.filter((r) =>
-    (TEND_TO_LAND_HIGH_FIT as readonly string[]).includes(r.record_type)
-  ).length;
-  const reviewEntries = rawRecords.filter(
-    (r) => r.record_type === "review"
-  ).length;
-
-  const tendToLand = getHowYouTendToLand(observations, {
-    totalEntries: rawRecords.length,
-    distinctDays,
-    eventTypes,
-    highFitEntries: tendToLandHighFit,
-    reviewEntries,
-  });
-
-  // Per-person patterns
   const personNameMap = new Map(
     persons.map((p) => [p.person_id, p.display_name])
   );
 
-  // Build per-person stats from raw_records
-  const personStatsAccum = new Map<
-    string,
-    {
-      totalEntries: number;
-      reviewEntries: number;
-      repairEntries: number;
-      displayName: string;
-      days: Set<string>;
+  // If cache is fresh, reconstruct results from derived_insights rows.
+  let blindSpot: ReturnType<typeof getTopBlindSpot> = null;
+  let tendToLand: ReturnType<typeof getHowYouTendToLand> = null;
+  let personPatterns: ReturnType<typeof getPersonPatterns> = [];
+  let thresholdResult: ReturnType<typeof checkInsightThresholds>;
+  let reviewEntries = 0;
+  let rawRecordCount = 0;
+  let finalPersonStats = new Map<string, { totalEntries: number; distinctDays: number; reviewEntries: number; repairEntries: number; displayName: string }>();
+
+  if (useCache) {
+    // Reconstruct from cache.
+    const blindSpotRow = cachedInsights.find((r) => r.insight_type === "blind_spot");
+    const tendToLandRow = cachedInsights.find((r) => r.insight_type === "tend_to_land");
+    const personRows = cachedInsights.filter((r) => r.insight_type === "person_pattern");
+
+    rawRecordCount = blindSpotRow?.evidence_count ?? tendToLandRow?.evidence_count ?? 0;
+
+    if (blindSpotRow) {
+      const tags = (blindSpotRow.supporting_pattern_ids as string[]) ?? [];
+      const tag = tags[0] as import("@/types").ObservationTag;
+      const desc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      if (desc) {
+        blindSpot = {
+          tag,
+          summary: blindSpotRow.summary_text,
+          count: blindSpotRow.evidence_count,
+          freshnessLabel: `Based on ${blindSpotRow.evidence_count} entries across ${blindSpotRow.distinct_days} days.`,
+        };
+      }
     }
-  >();
 
-  for (const r of rawRecords) {
-    if (!r.person_id) continue;
-    const name = personNameMap.get(r.person_id);
-    if (!name) continue;
+    if (tendToLandRow) {
+      const tags = (tendToLandRow.supporting_pattern_ids as string[]) ?? [];
+      const topTag = tags[0] as import("@/types").ObservationTag;
+      const counterTag = tags[1] as import("@/types").ObservationTag | undefined;
+      tendToLand = {
+        topPattern: topTag,
+        summary: tendToLandRow.summary_text,
+        counterPattern: counterTag && OBSERVATION_TAG_DESCRIPTIONS[counterTag]
+          ? { tag: counterTag, summary: OBSERVATION_TAG_DESCRIPTIONS[counterTag].summary }
+          : null,
+        confidenceLevel: tendToLandRow.confidence_level as "emerging" | "established",
+        freshnessLabel: `Based on ${tendToLandRow.evidence_count} entries across ${tendToLandRow.distinct_days} days.`,
+      };
+    }
 
-    let entry = personStatsAccum.get(r.person_id);
-    if (!entry) {
-      entry = {
-        totalEntries: 0,
+    for (const row of personRows) {
+      if (!row.person_id) continue;
+      const tags = (row.supporting_pattern_ids as string[]) ?? [];
+      const negTag = tags[0] as import("@/types").ObservationTag | undefined;
+      const posTag = tags[1] as import("@/types").ObservationTag | undefined;
+      const displayName = personNameMap.get(row.person_id) ?? "Someone";
+
+      personPatterns.push({
+        personId: row.person_id,
+        topNegative: negTag && OBSERVATION_TAG_DESCRIPTIONS[negTag]?.direction === "negative"
+          ? { tag: negTag, summary: OBSERVATION_TAG_DESCRIPTIONS[negTag].summary, count: row.evidence_count }
+          : null,
+        topPositive: posTag && OBSERVATION_TAG_DESCRIPTIONS[posTag]?.direction === "positive"
+          ? { tag: posTag, summary: OBSERVATION_TAG_DESCRIPTIONS[posTag].summary, count: row.evidence_count }
+          : null,
+        confidenceLevel: row.confidence_level as "emerging" | "established",
+        entryCount: row.evidence_count,
+        freshnessLabel: `${row.evidence_count} entries across ${row.distinct_days} days.`,
+      });
+
+      finalPersonStats.set(row.person_id, {
+        totalEntries: row.evidence_count,
+        distinctDays: row.distinct_days,
         reviewEntries: 0,
         repairEntries: 0,
-        displayName: name,
-        days: new Set(),
-      };
-      personStatsAccum.set(r.person_id, entry);
+        displayName,
+      });
     }
-    entry.totalEntries++;
-    if (r.created_at) entry.days.add(r.created_at.slice(0, 10));
-    if (r.record_type === "review") entry.reviewEntries++;
-    if (r.record_type === "repair") entry.repairEntries++;
-  }
 
-  const finalPersonStats = new Map(
-    [...personStatsAccum].map(([id, s]) => [
-      id,
+    // Threshold is "met" if we have cached insights.
+    thresholdResult = {
+      state: blindSpot || tendToLand ? "threshold_met" : "below_threshold",
+      message: "",
+      totalEntries: rawRecordCount,
+    };
+  } else {
+    // Live computation (cache miss or stale).
+    const rawRecords = rawRecordsRes.data ?? [];
+    const observations = observationsRes.data ?? [];
+    rawRecordCount = rawRecords.length;
+
+    const distinctDays = new Set(
+      rawRecords
+        .filter((r) => r.created_at)
+        .map((r) => r.created_at!.slice(0, 10))
+    ).size;
+    const eventTypes = [...new Set(rawRecords.map((r) => r.record_type))];
+    const highFitEntries = rawRecords.filter((r) =>
+      (HIGH_FIT_RECORD_TYPES as readonly string[]).includes(r.record_type)
+    ).length;
+
+    thresholdResult = checkInsightThresholds({
+      totalEntries: rawRecords.length,
+      distinctDays,
+      eventTypes,
+      highFitEntries,
+    });
+
+    blindSpot =
+      thresholdResult.state === "threshold_met"
+        ? getTopBlindSpot(observations, rawRecords.length)
+        : null;
+
+    const tendToLandHighFit = rawRecords.filter((r) =>
+      (TEND_TO_LAND_HIGH_FIT as readonly string[]).includes(r.record_type)
+    ).length;
+    reviewEntries = rawRecords.filter(
+      (r) => r.record_type === "review"
+    ).length;
+
+    tendToLand = getHowYouTendToLand(observations, {
+      totalEntries: rawRecords.length,
+      distinctDays,
+      eventTypes,
+      highFitEntries: tendToLandHighFit,
+      reviewEntries,
+    });
+
+    const personStatsAccum = new Map<
+      string,
       {
-        totalEntries: s.totalEntries,
-        distinctDays: s.days.size,
-        reviewEntries: s.reviewEntries,
-        repairEntries: s.repairEntries,
-        displayName: s.displayName,
-      },
-    ])
-  );
+        totalEntries: number;
+        reviewEntries: number;
+        repairEntries: number;
+        displayName: string;
+        days: Set<string>;
+      }
+    >();
 
-  const personPatterns = getPersonPatterns(observations, finalPersonStats);
+    for (const r of rawRecords) {
+      if (!r.person_id) continue;
+      const name = personNameMap.get(r.person_id);
+      if (!name) continue;
+
+      let entry = personStatsAccum.get(r.person_id);
+      if (!entry) {
+        entry = {
+          totalEntries: 0,
+          reviewEntries: 0,
+          repairEntries: 0,
+          displayName: name,
+          days: new Set(),
+        };
+        personStatsAccum.set(r.person_id, entry);
+      }
+      entry.totalEntries++;
+      if (r.created_at) entry.days.add(r.created_at.slice(0, 10));
+      if (r.record_type === "review") entry.reviewEntries++;
+      if (r.record_type === "repair") entry.repairEntries++;
+    }
+
+    finalPersonStats = new Map(
+      [...personStatsAccum].map(([id, s]) => [
+        id,
+        {
+          totalEntries: s.totalEntries,
+          distinctDays: s.days.size,
+          reviewEntries: s.reviewEntries,
+          repairEntries: s.repairEntries,
+          displayName: s.displayName,
+        },
+      ])
+    );
+
+    personPatterns = getPersonPatterns(observations, finalPersonStats);
+  }
 
   const primary = profile?.primary_profile as ProfileType | undefined;
   const secondary = profile?.secondary_profile as ProfileType | undefined;
@@ -209,7 +308,7 @@ export default async function InsightsPage() {
             How You Tend to Land
           </p>
           <p className="mt-1 text-sm text-zinc-500">
-            {rawRecords.length === 0
+            {rawRecordCount === 0
               ? "Not enough data yet"
               : reviewEntries < 2
               ? "Needs at least 2 Review entries to analyze how you come across."
@@ -240,7 +339,7 @@ export default async function InsightsPage() {
             People &amp; Relationships
           </p>
           <p className="mt-1 text-sm text-zinc-500">
-            {rawRecords.length === 0
+            {rawRecordCount === 0
               ? "Not enough data yet"
               : "Person-specific patterns will appear after more entries linked to the same person."}
           </p>

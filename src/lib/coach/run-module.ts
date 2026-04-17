@@ -17,6 +17,7 @@ import {
   OBSERVATION_TAG_DESCRIPTIONS,
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
+import { regenerateInsights } from "@/lib/insights-writer";
 import type { ProfileType, ObservationTag } from "@/types";
 import type { CoachModuleConfig } from "./types";
 
@@ -437,6 +438,11 @@ export async function runCoachModule<
       freePrepareUsed,
     });
   }
+
+  // 15b. Regenerate cached insights (fire-and-forget).
+  regenerateInsights(supabase, user.id).catch(() => {
+    console.error(`${name}: insight regeneration failed`);
+  });
 
   // 16. Response.
   return NextResponse.json({

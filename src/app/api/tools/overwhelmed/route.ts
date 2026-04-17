@@ -12,6 +12,7 @@ import {
   OBSERVATION_TAG_DESCRIPTIONS,
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
+import { regenerateInsights } from "@/lib/insights-writer";
 import type { ObservationTag } from "@/types";
 
 export const runtime = "nodejs";
@@ -232,6 +233,11 @@ export async function POST(req: Request) {
   } catch {
     console.error("overwhelmed: pattern observation insert failed");
   }
+
+  // Regenerate cached insights (fire-and-forget).
+  regenerateInsights(supabase, user.id).catch(() => {
+    console.error("overwhelmed: insight regeneration failed");
+  });
 
   return NextResponse.json({
     success: true,
