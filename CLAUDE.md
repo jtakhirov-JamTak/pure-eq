@@ -94,7 +94,7 @@ src/
     api/admin/backfill-observations/route.ts  # One-time observation backfill
   lib/
     supabase/client.ts                # Browser Supabase client
-    supabase/server.ts                # Server Supabase client + getAuthUser()
+    supabase/server.ts                # Server Supabase client (createClient)
     supabase/service.ts               # Service role client (admin + subscription writes + E2E, bypasses RLS)
     ai/prompts.ts                     # AI prompt templates (version-controlled)
     ai/schemas.ts                     # AI output Zod schemas + banned-phrase filter
@@ -130,7 +130,7 @@ playwright.config.ts                  # Playwright config (dev server reuse, dot
 
 1. Zod schema → `src/lib/validation.ts`
 2. Route handler → `src/app/api/{domain}/route.ts`
-3. Auth check → use `getAuthUser()` from `src/lib/supabase/server.ts`
+3. Auth check → `createClient()` then `supabase.auth.getUser()`, 401 if no user
 4. Always filter by userId from auth — never trust client-provided userId
 
 ## Adding a Page

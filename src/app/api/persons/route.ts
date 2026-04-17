@@ -50,7 +50,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await query;
   if (error) {
-    console.error("persons list error:", error.message);
+    console.error("persons list error", error.code);
     return NextResponse.json(
       { error: "Failed to load persons" },
       { status: 500 }
@@ -119,7 +119,7 @@ export async function POST(req: Request) {
     .single();
 
   if (error) {
-    console.error("person create error:", error.message);
+    console.error("person create error", error.code);
     return NextResponse.json(
       { error: "Failed to create person" },
       { status: 500 }

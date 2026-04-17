@@ -27,20 +27,3 @@ export async function createClient() {
   );
 }
 
-/**
- * Get the authenticated user or throw.
- * Use this at the top of every API route and server action.
- */
-export async function getAuthUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error || !user) {
-    throw new Error("Not authenticated");
-  }
-
-  return user;
-}

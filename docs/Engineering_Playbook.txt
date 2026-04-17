@@ -25,7 +25,7 @@ Pure EQ uses the Next.js App Router. One `src/` tree, no client/server split.
     src/components/                   # Shared React components (voice input, pickers, timer, ...)
     src/lib/                          # Server + client shared utilities
       supabase/client.ts              # Browser Supabase client (publishable key)
-      supabase/server.ts              # Server Supabase client + getAuthUser()
+      supabase/server.ts              # Server Supabase client (createClient)
       supabase/service.ts             # Service role client (bypasses RLS, server-only)
       ai/prompts.ts, ai/schemas.ts    # AI prompt templates + Zod output schemas
       validation.ts                   # Request Zod schemas (centralized)
@@ -107,10 +107,10 @@ server components, API routes, and server actions.
 
 ### Authenticated route-group gate
 
-The `(app)/layout.tsx` server component runs `getAuthUser()` once and
-redirects if no session. Every page inside `(app)/` inherits the gate —
-individual pages do not need their own redirect, but each still scopes
-its queries by `user.id` for defense in depth.
+The `(app)/layout.tsx` server component calls `supabase.auth.getUser()`
+once and redirects if no session. Every page inside `(app)/` inherits
+the gate — individual pages do not need their own redirect, but each
+still scopes its queries by `user.id` for defense in depth.
 
 ### Admin check
 
