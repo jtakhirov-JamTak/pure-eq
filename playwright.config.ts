@@ -22,15 +22,13 @@ export default defineConfig({
       use: { ...devices["Desktop Chrome"] },
     },
   ],
-  webServer: process.env.CI
-    ? undefined
-    : {
-        command: "npm run dev",
-        url: "http://localhost:3000",
-        // Local-only: a green run against a stale dev server can lie
-        // (HMR failed, branch switched, etc). If you've just edited code,
-        // stop the dev server before running E2E for a fresh boot.
-        reuseExistingServer: true,
-        timeout: 120_000,
-      },
+  webServer: {
+    command: "npm run dev",
+    url: "http://localhost:3000",
+    // Reuse locally for fast reruns (caveat: a stale dev server with HMR
+    // failures can produce false greens — stop the dev server if in doubt).
+    // CI has no existing server, so it always starts fresh.
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
 });
