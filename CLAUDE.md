@@ -81,7 +81,7 @@ src/
   lib/
     supabase/client.ts                # Browser Supabase client
     supabase/server.ts                # Server Supabase client + getAuthUser()
-    supabase/service.ts               # Service role client (admin only, bypasses RLS)
+    supabase/service.ts               # Service role client (admin + subscription writes + E2E, bypasses RLS)
     ai/prompts.ts                     # AI prompt templates (version-controlled)
     ai/schemas.ts                     # AI output Zod schemas + banned-phrase filter
     admin.ts                          # isAdmin() + checkAdmin()
