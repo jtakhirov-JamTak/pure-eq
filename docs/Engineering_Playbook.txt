@@ -842,15 +842,15 @@ This is the single source of truth for the AI coding agent.
     Tree view with one-line descriptions per directory.
 
     ## Adding an API Endpoint
-    Step-by-step checklist (validation → storage → route → register).
+    Step-by-step checklist (Zod schema → route handler → auth check).
 
     ## Adding a Page
     Step-by-step checklist (component → route → nav → guards).
 
     ## Do's
     - Run type check before considering work complete
-    - Use the storage interface
     - Validate with Zod on every endpoint
+    - Filter every Supabase query by user.id
 
     ## Don'ts
     - Don't rabbit-hole — 2-3 attempts then reassess
