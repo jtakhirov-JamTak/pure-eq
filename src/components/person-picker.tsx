@@ -63,6 +63,7 @@ export function PersonPicker({
   const [voiceSecondsLeft, setVoiceSecondsLeft] = useState(
     MAX_RECORDING_SECONDS_NAME,
   );
+  const [hasRedo, setHasRedo] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -72,6 +73,22 @@ export function PersonPicker({
   const voiceStartedAtRef = useRef<number>(0);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  // Fresh refs so sendBlob + redo always see current state, not closure state
+  // captured when the recorder was set up.
+  const valueRef = useRef(value);
+  const selectedPersonIdRef = useRef(selectedPersonId);
+  valueRef.current = value;
+  selectedPersonIdRef.current = selectedPersonId;
+  // Relationship is only observable at handleSelect time; track it so Redo
+  // can restore the parent's full state (id + relationship), not just the id.
+  const selectedRelationshipRef = useRef<RelationshipDomain | null>(null);
+  // Snapshot captured immediately before a voice commit. Restoring this
+  // (value + personId + relationship) is the whole redo payload.
+  const redoSnapshotRef = useRef<{
+    value: string;
+    personId: string | null;
+    relationship: RelationshipDomain | null;
+  } | null>(null);
 
   function clearVoiceTimer() {
     if (voiceTimerRef.current !== null) {
@@ -151,6 +168,11 @@ export function PersonPicker({
   }, [showDropdown]);
 
   function handleSelect(person: Person) {
+    selectedRelationshipRef.current = person.relationship_domain;
+    // A deliberate new selection replaces the voice outcome — tapping Redo
+    // afterward would clobber the user's chosen person with pre-voice state.
+    redoSnapshotRef.current = null;
+    setHasRedo(false);
     onChange(person.display_name);
     onPersonSelect(person.person_id, person.relationship_domain);
     setShowDropdown(false);
@@ -159,6 +181,13 @@ export function PersonPicker({
 
   function handleInputChange(next: string) {
     if (selectedPersonId) {
+      selectedRelationshipRef.current = null;
+      // Clearing a selection via typing is a parent-state mutation — drop
+      // the redo buffer so Redo can't silently re-select the cleared person.
+      // Plain typing without a selection does NOT clear the buffer (spec:
+      // snapshot-restore after typing is the correct undo behavior).
+      redoSnapshotRef.current = null;
+      setHasRedo(false);
       onPersonSelect(null);
     }
     onChange(next);
@@ -167,6 +196,14 @@ export function PersonPicker({
   // ---------- Voice recording ----------
   async function startRecording() {
     setVoiceError(null);
+    // Defensive: abort any still-in-flight transcribe from a previous cycle
+    // before we overwrite recorder/stream refs.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    // New recording invalidates any prior redo buffer. Re-arms on next
+    // successful voice commit.
+    redoSnapshotRef.current = null;
+    if (mountedRef.current) setHasRedo(false);
     const mimeType = pickMimeType();
     if (!mimeType) {
       setVoiceStatus("error");
@@ -269,9 +306,21 @@ export function PersonPicker({
       const text = (data.text ?? "").trim();
       if (!mountedRef.current) return;
       if (text) {
+        // Snapshot BEFORE the commit so Redo can fully restore value +
+        // personId + relationship for this specific mounted instance.
+        const preSelectedId = selectedPersonIdRef.current;
+        redoSnapshotRef.current = {
+          value: valueRef.current,
+          personId: preSelectedId,
+          relationship: selectedRelationshipRef.current,
+        };
         // For a name field, replace the current value (not append)
-        if (selectedPersonId) onPersonSelect(null);
+        if (preSelectedId) {
+          selectedRelationshipRef.current = null;
+          onPersonSelect(null);
+        }
         onChangeRef.current(text);
+        if (mountedRef.current) setHasRedo(true);
       }
       setVoiceStatus("idle");
     } catch (err) {
@@ -291,6 +340,27 @@ export function PersonPicker({
     } else if (voiceStatus === "idle" || voiceStatus === "error") {
       void startRecording();
     }
+  }
+
+  function handleRedoClick() {
+    if (disabled) return;
+    const snapshot = redoSnapshotRef.current;
+    if (snapshot === null) return;
+    // Restore both halves of the pre-commit state so the parent's
+    // selectedPersonId + relationship don't drift. Relationship may be null
+    // if the parent pre-seeded a personId outside of handleSelect — parents
+    // that rely on relationship (prepare) just skip the autofill in that case.
+    onPersonSelect(
+      snapshot.personId,
+      snapshot.relationship ?? undefined,
+    );
+    selectedRelationshipRef.current = snapshot.relationship;
+    onChangeRef.current(snapshot.value);
+    redoSnapshotRef.current = null;
+    setHasRedo(false);
+    // No input focus before starting — keeps the keyboard from popping up
+    // and competing with recording UI.
+    void startRecording();
   }
 
   const recording = voiceStatus === "recording";
@@ -360,6 +430,12 @@ export function PersonPicker({
             <button
               type="button"
               onClick={() => {
+                // X-clear is a deliberate parent-state mutation — drop the
+                // redo buffer so a subsequent Redo can't resurrect the
+                // person the user just cleared.
+                redoSnapshotRef.current = null;
+                setHasRedo(false);
+                selectedRelationshipRef.current = null;
                 onPersonSelect(null);
                 onChange("");
                 setSuggestions([]);
@@ -401,6 +477,35 @@ export function PersonPicker({
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
           Recording… {voiceSecondsLeft}s remaining
         </p>
+      )}
+
+      {/* Hide Redo while the suggestions dropdown is open — the dropdown
+          (absolute z-20) overlays the same slot, and picking a suggestion
+          is the more likely next action anyway. */}
+      {voiceStatus === "idle" && hasRedo && !showDropdown && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={handleRedoClick}
+            disabled={disabled}
+            aria-label="Redo voice input"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+            Redo
+          </button>
+        </div>
       )}
 
       {/* Suggestions dropdown */}

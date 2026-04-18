@@ -25,6 +25,7 @@ export function VoiceInput({
   const [status, setStatus] = useState<Status>("idle");
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(MAX_RECORDING_SECONDS);
+  const [hasRedo, setHasRedo] = useState(false);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -32,6 +33,11 @@ export function VoiceInput({
   const mountedRef = useRef(true);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const startedAtRef = useRef<number>(0);
+  // Snapshot of the field value immediately before the most recent voice
+  // commit. On Redo we restore exactly this — no diffing/splicing. If the
+  // user typed after commit, restoring the snapshot is the correct behavior
+  // for "undo last voice chunk."
+  const redoSnapshotRef = useRef<string | null>(null);
 
   // Fresh value + onChange refs so async callbacks never close over stale state.
   // Without these, a transcript returning after the parent re-renders would
@@ -75,6 +81,16 @@ export function VoiceInput({
 
   async function startRecording() {
     safeSetError(null);
+    // Defensive: abort any still-in-flight transcribe from a previous cycle
+    // before we overwrite recorder/stream refs. Redo only renders on idle,
+    // but state-machine changes elsewhere could let a recording start while
+    // a prior fetch is still racing.
+    abortRef.current?.abort();
+    abortRef.current = null;
+    // New recording invalidates any prior redo buffer. It will re-arm only
+    // on the next successful voice commit.
+    redoSnapshotRef.current = null;
+    if (mountedRef.current) setHasRedo(false);
     const mimeType = pickMimeType();
     if (!mimeType) {
       safeSetStatus("error");
@@ -185,9 +201,12 @@ export function VoiceInput({
       }
       // Read value via ref so we append to whatever the user has typed
       // since we started recording, not the captured render-time value.
-      const current = valueRef.current.trim();
+      const preCommit = valueRef.current;
+      const current = preCommit.trim();
       const next = current ? `${current} ${text}` : text;
+      redoSnapshotRef.current = preCommit;
       onChangeRef.current(next);
+      if (mountedRef.current) setHasRedo(true);
       safeSetStatus("idle");
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
@@ -204,6 +223,20 @@ export function VoiceInput({
     } else if (status === "idle" || status === "error") {
       void startRecording();
     }
+  }
+
+  function handleRedoClick() {
+    if (disabled) return;
+    const snapshot = redoSnapshotRef.current;
+    if (snapshot === null) return;
+    // Restore via ref so a concurrent parent re-render can't clobber this
+    // write via a stale onChange closure.
+    onChangeRef.current(snapshot);
+    redoSnapshotRef.current = null;
+    setHasRedo(false);
+    // No textarea focus before starting — keeps the keyboard from popping
+    // up and competing with recording UI while the user is walking.
+    void startRecording();
   }
 
   const recording = status === "recording";
@@ -271,6 +304,31 @@ export function VoiceInput({
           </span>
         )}
       </div>
+      {status === "idle" && hasRedo && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={handleRedoClick}
+            disabled={disabled}
+            aria-label="Redo voice input"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+          >
+            <svg
+              className="h-4 w-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <polyline points="1 4 1 10 7 10" />
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
+            </svg>
+            Redo
+          </button>
+        </div>
+      )}
     </div>
   );
 }
