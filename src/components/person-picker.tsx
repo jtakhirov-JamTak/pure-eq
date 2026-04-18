@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { pickMimeType, measureRms, MIN_RMS_FOR_SPEECH } from "@/lib/audio";
 import type { RelationshipDomain } from "@/types";
 
 type Person = {
@@ -35,29 +36,11 @@ const RELATIONSHIP_LABELS: Record<RelationshipDomain, string> = {
   other: "Other",
 };
 
-// ---------- Voice recording helpers (mirrors VoiceInput) ----------
-const CODEC_PREFERENCE = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/mp4",
-  "audio/mpeg",
-];
-
-function pickMimeType(): string | undefined {
-  if (typeof window === "undefined" || typeof MediaRecorder === "undefined") {
-    return undefined;
-  }
-  for (const t of CODEC_PREFERENCE) {
-    try {
-      if (MediaRecorder.isTypeSupported(t)) return t;
-    } catch {
-      /* skip */
-    }
-  }
-  return undefined;
-}
-
 type VoiceStatus = "idle" | "recording" | "transcribing" | "error";
+
+// Names are short — 15s is plenty for "Mom" or "Sarah from work" and bounds
+// the blast radius if a user taps record and walks away.
+const MAX_RECORDING_SECONDS_NAME = 15;
 
 export function PersonPicker({
   value,
@@ -77,18 +60,31 @@ export function PersonPicker({
   // Voice recording state
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [voiceSecondsLeft, setVoiceSecondsLeft] = useState(
+    MAX_RECORDING_SECONDS_NAME,
+  );
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mountedRef = useRef(true);
+  const voiceTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceStartedAtRef = useRef<number>(0);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+
+  function clearVoiceTimer() {
+    if (voiceTimerRef.current !== null) {
+      clearInterval(voiceTimerRef.current);
+      voiceTimerRef.current = null;
+    }
+  }
 
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
+      clearVoiceTimer();
       streamRef.current?.getTracks().forEach((t) => t.stop());
       abortRef.current?.abort();
       const r = recorderRef.current;
@@ -201,6 +197,29 @@ export function PersonPicker({
       };
 
       recorder.start();
+      voiceStartedAtRef.current = Date.now();
+      setVoiceSecondsLeft(MAX_RECORDING_SECONDS_NAME);
+
+      // Wall-clock timer — immune to iOS background throttling.
+      voiceTimerRef.current = setInterval(() => {
+        const elapsed = Math.floor(
+          (Date.now() - voiceStartedAtRef.current) / 1000,
+        );
+        const remaining = Math.max(
+          0,
+          MAX_RECORDING_SECONDS_NAME - elapsed,
+        );
+        if (mountedRef.current) setVoiceSecondsLeft(remaining);
+        if (remaining <= 0) {
+          clearVoiceTimer();
+          const r = recorderRef.current;
+          if (r && r.state !== "inactive") {
+            if (mountedRef.current) setVoiceStatus("transcribing");
+            try { r.stop(); } catch { /* ignore */ }
+          }
+        }
+      }, 500);
+
       if (mountedRef.current) setVoiceStatus("recording");
     } catch (err) {
       console.error("mic access failed", (err as Error)?.name);
@@ -212,6 +231,7 @@ export function PersonPicker({
   }
 
   function stopRecording() {
+    clearVoiceTimer();
     const r = recorderRef.current;
     if (r && r.state !== "inactive") {
       if (mountedRef.current) setVoiceStatus("transcribing");
@@ -225,6 +245,15 @@ export function PersonPicker({
   }
 
   async function sendBlob(blob: Blob) {
+    // Client-side silence gate — see src/lib/audio.ts for threshold rationale.
+    const rms = await measureRms(blob);
+    if (rms !== null && rms < MIN_RMS_FOR_SPEECH) {
+      if (!mountedRef.current) return;
+      setVoiceStatus("error");
+      setVoiceError("We didn't hear anything — try again.");
+      return;
+    }
+
     const controller = new AbortController();
     abortRef.current = controller;
     try {
@@ -370,7 +399,7 @@ export function PersonPicker({
       {recording && !voiceError && (
         <p className="mt-2 flex items-center gap-2 text-sm font-medium text-red-600">
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
-          Recording... tap to stop.
+          Recording… {voiceSecondsLeft}s remaining
         </p>
       )}
 
