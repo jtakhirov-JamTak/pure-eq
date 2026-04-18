@@ -25,7 +25,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  aiVersionValue: 1,
+  aiVersionValue: 2,
 
   buildPayloadFields: (input) => ({
     personName: input.personName,
@@ -61,11 +61,11 @@ const config: CoachModuleConfig<Input, AiOutput> = {
 
   observationConfidence: 0.5,
   observationSource: "predictive",
-  extractorVersion: "prepare_v1",
+  extractorVersion: "prepare_v2",
 
   buildSupportingEvidence: (aiOutput) => ({
-    likely_blind_spot: aiOutput.likely_blind_spot,
-    what_user_may_be_missing: aiOutput.what_user_may_be_missing,
+    reality_check_question: aiOutput.reality_check_question,
+    best_next_move: aiOutput.best_next_move,
   }),
 
   buildResponseExtras: () => ({}),

@@ -2,6 +2,18 @@
 // One-time admin endpoint to backfill pattern_observations from existing
 // review_entries that have ai_reflection_json with a pattern_tag.
 // Run once after deploying v0.5, then delete or leave dormant.
+//
+// LEGACY-SHAPE ONLY. This route reads `where_projecting` from
+// `ai_reflection_json`, which only exists on rows written at
+// PROMPT_VERSION <= "1.0.0" (ai_reflection_version = 1). Rows written at
+// PROMPT_VERSION >= "1.1.0" (ai_reflection_version = 2) do not carry that
+// field, and `buildSupportingEvidence` now writes a different shape to
+// `supporting_evidence_json` (`{ alternative_explanation }` instead of
+// `{ how_user_likely_came_across, where_projecting }`). DO NOT re-run this
+// backfill against new rows without adding a schema-version guard
+// (e.g. `WHERE ai_reflection_version = 1`) — a re-run would skip legitimate
+// rows, and a future variant that rewrites existing observations could
+// overwrite the new evidence shape with the legacy one.
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";

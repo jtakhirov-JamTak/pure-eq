@@ -1,31 +1,26 @@
 import { z } from "zod";
 import { BANNED_PHRASES, OBSERVATION_TAGS } from "@/types";
 
-// Prepare AI output schema
+// All string fields chain `.trim().min(1)` so a model returning "" or "   "
+// fails Zod parse server-side and the route retries or surfaces the
+// saved-but-no-ai fallback, rather than rendering an empty card in the UI.
 export const prepareOutputSchema = z.object({
-  likely_blind_spot: z.string().max(120),
-  reality_check_question: z.string().max(150),
-  thing_not_to_do: z.string().max(120),
-  user_read_accuracy: z.string().max(150),
-  what_user_may_be_missing: z.string().max(150),
-  best_next_move: z.string().max(120),
+  reality_check_question: z.string().trim().min(1).max(150),
+  thing_not_to_do: z.string().trim().min(1).max(120),
+  best_next_move: z.string().trim().min(1).max(120),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
-// Repair AI output schema
 export const repairOutputSchema = z.object({
-  repair_strategy: z.string().max(200),
-  thing_not_to_say: z.string().max(150),
-  recommended_timing: z.string().max(120),
-  next_move_if_poorly_received: z.string().max(150),
+  repair_strategy: z.string().trim().min(1).max(150),
+  thing_not_to_say: z.string().trim().min(1).max(150),
+  recommended_timing: z.string().trim().min(1).max(120),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
-// Review AI output schema
 export const reviewOutputSchema = z.object({
-  how_user_likely_came_across: z.string().max(200),
-  where_projecting: z.string().max(200),
-  alternative_explanation: z.string().max(200),
+  how_user_likely_came_across: z.string().trim().min(1).max(200),
+  alternative_explanation: z.string().trim().min(1).max(200),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 

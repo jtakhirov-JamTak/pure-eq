@@ -106,11 +106,12 @@ const OUTCOME_QUESTIONS = [
   },
 ] as const;
 
+// Field-presence-based render: payload shape varies by PROMPT_VERSION.
+// pattern_tag is on the server payload for extraction but never rendered,
+// so it's not modeled here.
 type AiOutput = {
-  how_user_likely_came_across: string;
-  where_projecting: string;
-  alternative_explanation: string;
-  pattern_tag: string;
+  how_user_likely_came_across?: string;
+  alternative_explanation?: string;
 };
 
 export default function ReviewPage() {
@@ -197,6 +198,7 @@ export default function ReviewPage() {
 
   function retryCoaching() {
     setSavedMessage(null);
+    setAiOutput(null);
     handleSubmit();
   }
 
@@ -227,38 +229,49 @@ export default function ReviewPage() {
 
   // AI output screen
   if (aiOutput) {
+    const REVIEW_FIELDS: { label: string; key: keyof AiOutput }[] = [
+      { label: "How you likely landed", key: "how_user_likely_came_across" },
+      { label: "What else may have been going on", key: "alternative_explanation" },
+    ];
+    const visible = REVIEW_FIELDS.filter(({ key }) => {
+      const v = aiOutput[key];
+      return typeof v === "string" && v.trim().length > 0;
+    });
+    if (visible.length === 0) {
+      return (
+        <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
+          <p className="mt-4 text-base text-zinc-700">
+            Your reflection is saved, but no coaching feedback is available to
+            show for this one.
+          </p>
+          <button
+            onClick={retryCoaching}
+            className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          >
+            Try again for coaching feedback
+          </button>
+          <button
+            onClick={() => router.push("/coach")}
+            className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          >
+            Back to Coach
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <h2 className="text-xl font-bold text-zinc-900">Your Review Reflection</h2>
         <div className="mt-6 space-y-5">
-          {[
-            {
-              label: "How you likely came across",
-              key: "how_user_likely_came_across",
-            },
-            { label: "Where you may be projecting", key: "where_projecting" },
-            {
-              label: "An alternative explanation",
-              key: "alternative_explanation",
-            },
-          ].map(({ label, key }) => (
+          {visible.map(({ label, key }) => (
             <div key={key}>
               <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                 {label}
               </p>
-              <p className="mt-1 text-base text-zinc-800">
-                {aiOutput[key as keyof AiOutput] || "\u2014"}
-              </p>
+              <p className="mt-1 text-base text-zinc-800">{aiOutput[key]}</p>
             </div>
           ))}
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Pattern noticed
-            </p>
-            <span className="mt-2 inline-flex items-center rounded-full bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-700">
-              {aiOutput.pattern_tag.replace(/_/g, " ")}
-            </span>
-          </div>
         </div>
 
         {/* Outcome Tracking — inline after AI output */}

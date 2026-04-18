@@ -26,7 +26,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "repair_entry_id",
   aiJsonColumn: "ai_strategy_json",
   aiVersionColumn: "ai_strategy_version",
-  aiVersionValue: 1,
+  aiVersionValue: 2,
 
   buildPayloadFields: (input) => ({
     whatNeedsRepair: input.whatNeedsRepair,

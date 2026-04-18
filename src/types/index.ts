@@ -87,20 +87,18 @@ export interface ReviewEntry {
   completedAt: string | null;
 }
 
-// AI output types — structured JSON, never free-form
+// AI output types — structured JSON, never free-form.
+// pattern_tag is carried on all three payloads for extraction into
+// pattern_observations, but never surfaced to the user in the UI.
 export interface PrepareAIOutput {
-  likely_blind_spot: string;
   reality_check_question: string;
   thing_not_to_do: string;
-  user_read_accuracy: string;
-  what_user_may_be_missing: string;
   best_next_move: string;
   pattern_tag: string;
 }
 
 export interface ReviewAIOutput {
   how_user_likely_came_across: string;
-  where_projecting: string;
   alternative_explanation: string;
   pattern_tag: string;
 }
@@ -109,7 +107,6 @@ export interface RepairAIOutput {
   repair_strategy: string;
   thing_not_to_say: string;
   recommended_timing: string;
-  next_move_if_poorly_received: string;
   pattern_tag: string;
 }
 

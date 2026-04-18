@@ -75,13 +75,11 @@ const STEPS = [
   },
 ];
 
+// Field-presence-based render: payload shape varies by PROMPT_VERSION.
 type AiOutput = {
-  likely_blind_spot: string;
-  reality_check_question: string;
-  thing_not_to_do: string;
-  user_read_accuracy: string;
-  what_user_may_be_missing: string;
-  best_next_move: string;
+  reality_check_question?: string;
+  thing_not_to_do?: string;
+  best_next_move?: string;
 };
 
 export default function PreparePage() {
@@ -161,30 +159,54 @@ export default function PreparePage() {
 
   function retryCoaching() {
     setSavedMessage(null);
+    setAiOutput(null);
     handleSubmit();
   }
 
   // AI output screen
   if (aiOutput) {
+    const PREPARE_FIELDS: { label: string; key: keyof AiOutput }[] = [
+      { label: "Reality-check question", key: "reality_check_question" },
+      { label: "Thing not to do", key: "thing_not_to_do" },
+      { label: "Best next move", key: "best_next_move" },
+    ];
+    const visible = PREPARE_FIELDS.filter(({ key }) => {
+      const v = aiOutput[key];
+      return typeof v === "string" && v.trim().length > 0;
+    });
+    if (visible.length === 0) {
+      return (
+        <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
+          <p className="mt-4 text-base text-zinc-700">
+            Your entry is saved, but no coaching feedback is available to show
+            for this one.
+          </p>
+          <button
+            onClick={retryCoaching}
+            className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          >
+            Try again for coaching feedback
+          </button>
+          <button
+            onClick={() => router.push("/coach")}
+            className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          >
+            Back to Coach
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <h2 className="text-xl font-bold text-zinc-900">Your Prepare Feedback</h2>
         <div className="mt-6 space-y-5">
-          {[
-            { label: "What your read gets right", key: "user_read_accuracy" },
-            { label: "What you may be missing", key: "what_user_may_be_missing" },
-            { label: "Likely blind spot", key: "likely_blind_spot" },
-            { label: "Reality-check question", key: "reality_check_question" },
-            { label: "One thing not to do", key: "thing_not_to_do" },
-            { label: "Best next move", key: "best_next_move" },
-          ].map(({ label, key }) => (
+          {visible.map(({ label, key }) => (
             <div key={key}>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
                 {label}
               </p>
-              <p className="mt-1 text-base text-zinc-800">
-                {aiOutput[key as keyof AiOutput] || "—"}
-              </p>
+              <p className="mt-1 text-base text-zinc-800">{aiOutput[key]}</p>
             </div>
           ))}
         </div>
