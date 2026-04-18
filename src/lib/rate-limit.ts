@@ -6,6 +6,7 @@
 
 import { Redis } from "@upstash/redis";
 import { Ratelimit } from "@upstash/ratelimit";
+import * as Sentry from "@sentry/nextjs";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -30,6 +31,12 @@ const redis = USE_UPSTASH
 
 // Cache Ratelimit instances by limit:windowMs combo (only ~5 unique combos).
 const upstashLimiters = new Map<string, Ratelimit>();
+
+// If Upstash credentials rotate in prod, every request fires a capture —
+// thousands per minute, blows Sentry quota and hides the real signal.
+// Latch: capture at most once per 5 min across the whole instance.
+const UPSTASH_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastUpstashCaptureAt = 0;
 
 function getUpstashLimiter(limit: number, windowMs: number): Ratelimit {
   const key = `${limit}:${windowMs}`;
@@ -64,6 +71,16 @@ async function rateLimitUpstash(
   } catch {
     // Upstash unreachable or credentials invalid — fall back to in-memory
     // so the route still works instead of 500-ing every request.
+    // Capture at most once per cooldown window. Wrap in a synthetic Error
+    // so we never ship Upstash's own error.message (which can embed the
+    // REST URL token hint).
+    const now = Date.now();
+    if (now - lastUpstashCaptureAt > UPSTASH_CAPTURE_COOLDOWN_MS) {
+      lastUpstashCaptureAt = now;
+      Sentry.captureException(new Error("upstash_unavailable"), {
+        tags: { area: "rate-limit", kind: "upstash-fallback" },
+      });
+    }
     console.error("rate-limit: Upstash failed, falling back to in-memory");
     return rateLimitInMemory(key, limit, windowMs);
   }

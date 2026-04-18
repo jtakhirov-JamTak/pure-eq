@@ -3,6 +3,7 @@
 // Insights page reads these cached results first, falls back to live computation if stale.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import * as Sentry from "@sentry/nextjs";
 import type { Database } from "@/types/database";
 import {
   checkInsightThresholds,
@@ -16,6 +17,20 @@ import {
 const GENERATOR_VERSION = "v1";
 
 export async function regenerateInsights(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<void> {
+  try {
+    await regenerateInsightsInner(supabase, userId);
+  } catch (err) {
+    Sentry.captureException(err, {
+      tags: { area: "insights", kind: "regenerate" },
+    });
+    throw err;
+  }
+}
+
+async function regenerateInsightsInner(
   supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<void> {

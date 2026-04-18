@@ -5,6 +5,7 @@
 
 import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
@@ -356,6 +357,7 @@ export async function runCoachModule<
   const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
   let aiOutput: TAiOutput | null = null;
   let lastFailureKind = "none";
+  let lastErr: unknown = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -392,12 +394,19 @@ export async function runCoachModule<
       aiOutput = validated.data;
       lastFailureKind = "none";
       break;
-    } catch {
+    } catch (err) {
+      lastErr = err;
       console.error(`${name}: AI attempt ${attempt + 1} failed kind=${lastFailureKind}`);
       if (attempt < MAX_RETRIES) {
         await new Promise((r) => setTimeout(r, 400));
       }
     }
+  }
+
+  if (!aiOutput) {
+    Sentry.captureException(lastErr, {
+      tags: { area: "coach", module: name, kind: lastFailureKind },
+    });
   }
 
   // 13. Update derived row with AI output.

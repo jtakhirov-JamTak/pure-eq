@@ -3,6 +3,7 @@
 // this endpoint becomes the checkout-session creator and the row is
 // written by the webhook handler instead.
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
@@ -73,6 +74,9 @@ export async function POST(req: Request) {
   // Create subscription (mock — no Stripe).
   const result = await createSubscription(user.id, parsed.data.plan);
   if (!result.success) {
+    Sentry.captureException(new Error("subscribe_activation_failed"), {
+      tags: { area: "subscribe", kind: "activate" },
+    });
     return NextResponse.json(
       { error: "Could not activate subscription" },
       { status: 500 }

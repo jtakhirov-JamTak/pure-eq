@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
@@ -165,6 +166,12 @@ export async function POST(req: Request) {
   } catch (err) {
     const status =
       (err as { status?: number })?.status ?? "unknown";
+    Sentry.captureException(err, {
+      tags: {
+        area: "transcribe",
+        kind: String(status),
+      },
+    });
     console.error("transcribe failed", status);
     return NextResponse.json(
       { error: "Transcription failed" },
