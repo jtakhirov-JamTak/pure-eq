@@ -399,6 +399,7 @@ export default function RepairPage() {
         {currentStep.type === "person" ? (
           <>
             <PersonPicker
+              key={currentStep.key}
               value={value}
               onChange={(next) => setFieldValue(currentStep.key, next)}
               onPersonSelect={(id) => { setPersonId(id); setThreadId(null); }}
@@ -435,6 +436,7 @@ export default function RepairPage() {
           </div>
         ) : (
           <VoiceInput
+            key={currentStep.key}
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}

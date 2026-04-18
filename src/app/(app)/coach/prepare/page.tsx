@@ -264,6 +264,7 @@ export default function PreparePage() {
       <div className="mt-4">
         {currentStep.type === "person" ? (
           <PersonPicker
+            key={currentStep.key}
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             onPersonSelect={(id, relationship) => {
@@ -296,6 +297,7 @@ export default function PreparePage() {
           </div>
         ) : (
           <VoiceInput
+            key={currentStep.key}
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}

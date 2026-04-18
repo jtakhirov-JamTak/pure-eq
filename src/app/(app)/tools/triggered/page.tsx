@@ -298,6 +298,7 @@ export default function TriggeredPage() {
       <div className="mt-4">
         {currentStep.type === "textarea" && (
           <VoiceInput
+            key={currentStep.key}
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}
@@ -308,6 +309,7 @@ export default function TriggeredPage() {
         {currentStep.type === "emotion" && (
           <div className="space-y-4">
             <VoiceInput
+              key={currentStep.key}
               value={data.emotion || ""}
               onChange={(next) => setFieldValue("emotion", next)}
               rows={2}
@@ -336,6 +338,7 @@ export default function TriggeredPage() {
         {currentStep.type === "urge" && (
           <div className="space-y-4">
             <VoiceInput
+              key={currentStep.key}
               value={data.urge || ""}
               onChange={(next) => setFieldValue("urge", next)}
               rows={2}

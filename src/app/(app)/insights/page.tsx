@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import {
   PROFILE_DESCRIPTIONS,
   PROFILE_AVATAR_CLASSES,
+  getLatestProfile,
 } from "@/lib/onboarding";
 import {
   checkInsightThresholds,
@@ -40,15 +41,9 @@ export default async function InsightsPage() {
   const useCache = cachedInsights && cachedInsights.length > 0 && cacheAge < ONE_HOUR_MS;
 
   // Parallel fetches: profile + (if cache stale) entry stats, observations, persons
-  const [profileRes, rawRecordsRes, observationsRes, personsRes] =
+  const [profile, rawRecordsRes, observationsRes, personsRes] =
     await Promise.all([
-      supabase
-        .from("user_profiles")
-        .select("primary_profile, secondary_profile")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+      getLatestProfile(supabase, user.id),
 
       // Skip heavy queries if cache is fresh
       useCache
@@ -77,8 +72,6 @@ export default async function InsightsPage() {
         .eq("is_active", true)
         .limit(100),
     ]);
-
-  const profile = profileRes.data;
   const persons = personsRes.data ?? [];
   const personNameMap = new Map(
     persons.map((p) => [p.person_id, p.display_name])

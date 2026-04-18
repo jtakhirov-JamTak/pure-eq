@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { Download } from "lucide-react";
 import { HistoryList, type HistoryEntry } from "./history-list";
 
 const PAGE_SIZE = 10;
@@ -99,6 +100,18 @@ export default async function HistoryPage() {
       <p className="mt-4 text-sm text-zinc-600">
         Total completed: <span className="font-semibold">{totalCount}</span>
       </p>
+
+      {/* Download all data as .txt. Plain <a download> lets the browser
+          handle the attachment with the Content-Disposition filename the
+          server sets — no JS needed. */}
+      <a
+        href="/api/export"
+        download
+        className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 active:bg-zinc-100"
+      >
+        <Download className="h-4 w-4" />
+        Download my data (.txt)
+      </a>
 
       {/* List with select + delete + load more */}
       <HistoryList initialEntries={initialEntries} pageSize={PAGE_SIZE} />

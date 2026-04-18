@@ -97,7 +97,7 @@ different rules. You need to know which version produced what.
     {
       output: { ... },
       prompt_version: PROMPT_VERSION,
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       generated_at: "2025-04-15T00:00:00Z"
     }
 
@@ -415,7 +415,7 @@ assign appropriate budgets.
     {
       output: { ... },
       prompt_version: "1.2.0",
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       generated_at: "2025-04-15T00:00:00Z"
     }
 

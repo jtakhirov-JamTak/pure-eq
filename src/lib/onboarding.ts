@@ -1,4 +1,6 @@
 // Pure EQ domain — replace in fork.
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 import type { ProfileType, ProfileResult, ImprovementGoal } from "@/types";
 
 export type QuizOption = "A" | "B" | "C" | "D" | "E";
@@ -283,3 +285,22 @@ export const MODULE_LABELS: Record<RecommendedModule, string> = {
   review: "Review",
   repair: "Repair",
 };
+
+// Fetches the user's latest Profile Snapshot (append-only per §6.2.A).
+// Shared by the onboarding server gate, root landing page, and /insights —
+// one source for "does this user have a profile". Selects only the fields
+// current callers read; add more to the select when a future caller needs
+// them (avoid "select everything" drift).
+export async function getLatestProfile(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+) {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("primary_profile, secondary_profile")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data;
+}

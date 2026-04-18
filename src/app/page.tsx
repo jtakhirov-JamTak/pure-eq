@@ -1,6 +1,20 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
+import { getLatestProfile } from "@/lib/onboarding";
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Authed users don't belong on the marketing page. With a profile they
+  // land on /coach (home); without one, they finish the quiz first.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const profile = await getLatestProfile(supabase, user.id);
+    redirect(profile ? "/coach" : "/onboarding");
+  }
+
   return (
     <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-6">
       <div className="w-full max-w-sm text-center">
@@ -22,9 +36,9 @@ export default function LandingPage() {
           Get your communication profile in 90 seconds
         </Link>
 
-        <p className="mt-6 text-xs text-zinc-400">
+        <p className="mt-6 text-xs text-zinc-500">
           Already have an account?{" "}
-          <Link href="/login" className="text-zinc-600 underline">
+          <Link href="/login" className="text-zinc-700 underline">
             Log in
           </Link>
         </p>

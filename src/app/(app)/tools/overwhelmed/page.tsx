@@ -313,6 +313,7 @@ export default function OverwhelmedPage() {
           </p>
           <div className="mt-4">
             <VoiceInput
+              key={step}
               value={feelingLabel}
               onChange={setFeelingLabel}
               rows={3}

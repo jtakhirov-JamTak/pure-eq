@@ -391,6 +391,7 @@ export default function ReviewPage() {
         {currentStep.type === "person" ? (
           <>
             <PersonPicker
+              key={currentStep.key}
               value={value}
               onChange={(next) => setFieldValue(currentStep.key, next)}
               onPersonSelect={(id) => { setPersonId(id); setThreadId(null); }}
@@ -404,6 +405,7 @@ export default function ReviewPage() {
           </>
         ) : (
           <VoiceInput
+            key={currentStep.key}
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
             rows={4}
