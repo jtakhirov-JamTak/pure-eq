@@ -747,6 +747,27 @@ export type Database = {
           },
         ]
       }
+      user_feature_flags: {
+        Row: {
+          created_at: string
+          show_comparator: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          show_comparator?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          show_comparator?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_profiles: {
         Row: {
           created_at: string
@@ -825,27 +846,6 @@ export type Database = {
           trial_started_at?: string | null
           updated_at?: string
           user_id?: string
-        }
-        Relationships: []
-      }
-      user_feature_flags: {
-        Row: {
-          user_id: string
-          show_comparator: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          user_id: string
-          show_comparator?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          user_id?: string
-          show_comparator?: boolean
-          created_at?: string
-          updated_at?: string
         }
         Relationships: []
       }
