@@ -1388,3 +1388,89 @@ Rules:
   level type safety. Accept the tradeoff, add comments
 - The extraction threshold is 3+ routes. Two duplicates = copy is
   fine. Three = extract
+
+§16.13 AI Output Length Caps + Prompt Guidance
+-----------------------------------------------
+Problem: A Zod `.max(N)` cap on an AI output string is a strict rejection
+boundary. When N is picked by intuition (not observed p99 output length +
+margin), substantive inputs produce outputs that exceed the cap. Schema
+validation fails, retries produce similarly-long output, and the user
+sees "saved but no AI feedback" — a dead-end UX masquerading as a
+transient error. Pure EQ shipped 120/150/200 caps that silently rejected
+a 268-char Claude output the first time a user wrote a rich Review
+entry.
+
+Pattern: Pair a unified cap with explicit prompt-level guidance on
+BOTH the HARD LIMIT and HOW the model should shorten when approaching
+it. The schema is the backstop; the prompt does the work.
+
+Zod side (one cap per module, unified across semantically similar
+fields, sized from observed output + margin):
+
+    export const outputSchema = z.object({
+      concrete_read_1: z.string().trim().min(1).max(300),
+      concrete_read_2: z.string().trim().min(1).max(300),
+      // ... unified cap across semantically similar fields
+      pattern_tag: z.enum(CONTROLLED_TAGS),
+    });
+
+Prompt side (shared rules block, included verbatim in every module's
+system prompt — goes BEFORE the per-module OUTPUT SCHEMA and REJECT
+examples):
+
+    BREVITY & PRECISION:
+    - HARD LIMIT: 300 characters per field. If a field does not fit,
+      rewrite it shorter — NEVER exceed 300 characters.
+    - Target lengths: phrase-level fields (specific openers, phrases
+      to avoid, timing recommendations, questions) should land in
+      80–150 chars; paragraph-level fields (behavior-level reads,
+      alternative explanations, strategies) should land in 200–280.
+      Use the full cap only when the concrete read genuinely needs it.
+    - Be mechanistically accurate: name the specific cause → effect or
+      move → likely reaction. Prefer a concrete opening phrase or
+      behavior-level read over a category label ("sounded dismissive"
+      beats "was dismissive").
+    - When approaching the character limit, shorten by cutting
+      qualifiers and hedging. KEEP the concrete behavior-level read.
+      NEVER fall back to a category label to save characters — a short
+      category label is worse than a truncated concrete read.
+    - Clarity over cleverness. Short sentences. No hedging filler.
+
+Rules:
+- Size the cap from observed output, not intuition. Run 5–10 real
+  inputs through the prompt before choosing N. Cap should be p99 +
+  20–30% margin. "Looks about right" is how 120/150/200 shipped.
+- Prompt must state BOTH (1) the HARD LIMIT and (2) how to shorten
+  when approaching it. Without (2), models under length pressure
+  default to collapsing to a category label, defeating every
+  specific-read directive elsewhere in the prompt.
+- The "NEVER fall back to a category label" clause is load-bearing.
+  Without it the BREVITY directive conflicts with any REJECT-
+  category-label instruction in the per-module prompt, and the model
+  resolves the conflict in whichever direction its training pulls it.
+- Prefer unified caps + prompt-level target ranges over per-field cap
+  differentiation. Differentiation adds 4+ numbers to maintain
+  alongside the prompt and rarely catches bugs the target-range
+  language doesn't already prevent.
+- Bump the DB version column (ai_plan_version, ai_reflection_version,
+  etc.) whenever the cap changes. Output distribution shifts enough
+  that future analytics need tight-cap and loose-cap rows to be
+  distinguishable. This is "cap change = shape change" even though
+  the schema's declared key set is unchanged.
+- Validate the fix empirically: re-run the exact input that surfaced
+  the bug against the new prompt + schema before shipping. Without
+  this you're guessing that the cap is now wide enough AND the
+  prompt guidance is working; with it you have evidence.
+
+Why this matters:
+- A cap set too tight silently degrades every user's experience on
+  their first substantive entry. Low-content inputs give false
+  confidence — they pass, so the cap looks fine.
+- A cap set too loose (without prompt-level guidance) lets the model
+  drift into paragraph-land even when a field is supposed to be a
+  single phrase. Target ranges in the prompt carry the "phrase, not
+  an essay" signal that a unified schema cap cannot.
+- Schema validation failure on length is indistinguishable from any
+  other schema failure in the route's retry logic — both attempts
+  fail the same way and the user hits the same dead-end screen. A
+  too-tight cap is a 100%-failure bug disguised as a transient.

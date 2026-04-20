@@ -27,7 +27,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "review_entry_id",
   aiJsonColumn: "ai_reflection_json",
   aiVersionColumn: "ai_reflection_version",
-  aiVersionValue: 2,
+  aiVersionValue: 3,
 
   buildPayloadFields: (input) => ({
     whatHappened: input.whatHappened,

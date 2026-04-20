@@ -25,7 +25,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  aiVersionValue: 2,
+  aiVersionValue: 3,
 
   buildPayloadFields: (input) => ({
     personName: input.personName,

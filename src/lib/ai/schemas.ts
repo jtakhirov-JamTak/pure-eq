@@ -4,23 +4,27 @@ import { BANNED_PHRASES, OBSERVATION_TAGS } from "@/types";
 // All string fields chain `.trim().min(1)` so a model returning "" or "   "
 // fails Zod parse server-side and the route retries or surfaces the
 // saved-but-no-ai fallback, rather than rendering an empty card in the UI.
+// 300-char cap unified across modules. Observed 268 chars on a concrete
+// behavior-level Review output (04-20 incident) — 200 was too tight;
+// 300 gives headroom while the BREVITY block in prompts.ts keeps typical
+// outputs well under the cap.
 export const prepareOutputSchema = z.object({
-  reality_check_question: z.string().trim().min(1).max(150),
-  thing_not_to_do: z.string().trim().min(1).max(120),
-  best_next_move: z.string().trim().min(1).max(120),
+  reality_check_question: z.string().trim().min(1).max(300),
+  thing_not_to_do: z.string().trim().min(1).max(300),
+  best_next_move: z.string().trim().min(1).max(300),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
 export const repairOutputSchema = z.object({
-  repair_strategy: z.string().trim().min(1).max(150),
-  thing_not_to_say: z.string().trim().min(1).max(150),
-  recommended_timing: z.string().trim().min(1).max(120),
+  repair_strategy: z.string().trim().min(1).max(300),
+  thing_not_to_say: z.string().trim().min(1).max(300),
+  recommended_timing: z.string().trim().min(1).max(300),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
 export const reviewOutputSchema = z.object({
-  how_user_likely_came_across: z.string().trim().min(1).max(200),
-  alternative_explanation: z.string().trim().min(1).max(200),
+  how_user_likely_came_across: z.string().trim().min(1).max(300),
+  alternative_explanation: z.string().trim().min(1).max(300),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
