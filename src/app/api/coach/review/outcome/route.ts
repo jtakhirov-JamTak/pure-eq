@@ -5,7 +5,7 @@ import { immediateOutcomeSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import {
-  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TAG_COPY,
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
 import type { ObservationTag } from "@/types";
@@ -124,7 +124,7 @@ export async function PATCH(req: Request) {
   if (input.usedPreparePlan === "no") {
     try {
       const tag: ObservationTag = "prepare_plan_not_used";
-      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      const tagDesc = OBSERVATION_TAG_COPY[tag];
 
       // Use the review's raw_record_id for observation linking
       const { data: existingObs } = await supabase

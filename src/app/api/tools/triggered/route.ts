@@ -8,7 +8,7 @@ import { checkOrigin } from "@/lib/check-origin";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import {
-  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TAG_COPY,
   OBSERVATION_TYPE_FOR_TAG,
   inferTriggerPatternTag,
 } from "@/lib/insights";
@@ -211,7 +211,7 @@ export async function POST(req: Request) {
     });
 
     if (tag) {
-      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      const tagDesc = OBSERVATION_TAG_COPY[tag];
       if (tagDesc) {
         const { data: existingObs } = await supabase
           .from("pattern_observations")

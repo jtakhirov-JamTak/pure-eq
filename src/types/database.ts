@@ -69,6 +69,7 @@ export type Database = {
           generated_at: string
           generator_version: string
           insight_type: string
+          metadata_json: Json | null
           period_end: string
           period_start: string
           person_id: string | null
@@ -87,6 +88,7 @@ export type Database = {
           generated_at?: string
           generator_version: string
           insight_type: string
+          metadata_json?: Json | null
           period_end: string
           period_start: string
           person_id?: string | null
@@ -105,6 +107,7 @@ export type Database = {
           generated_at?: string
           generator_version?: string
           insight_type?: string
+          metadata_json?: Json | null
           period_end?: string
           period_start?: string
           person_id?: string | null

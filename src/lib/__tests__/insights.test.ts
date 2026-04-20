@@ -1,12 +1,28 @@
 import { describe, it, expect } from "vitest";
 import {
   checkInsightThresholds,
-  getTopBlindSpot,
-  getHowYouTendToLand,
+  getTopPattern,
+  getPatternEvolution,
+  computePatternSnapshot,
   getPersonPatterns,
   inferTriggerPatternTag,
   inferOverwhelmedPatternTag,
+  type PatternObservation,
+  type PatternSnapshot,
 } from "@/lib/insights";
+
+// Small helper: build a PatternObservation with sensible defaults so each
+// test only declares what it cares about.
+function obs(
+  partial: Partial<PatternObservation> & Pick<PatternObservation, "observation_tag" | "observed_at">,
+): PatternObservation {
+  return {
+    observation_source: "observed",
+    source_raw_record_id: `r-${partial.observation_tag}-${partial.observed_at}`,
+    record_type: "review",
+    ...partial,
+  };
+}
 
 describe("checkInsightThresholds", () => {
   it("returns correct state for all four threshold conditions", () => {
@@ -80,140 +96,194 @@ describe("checkInsightThresholds", () => {
   });
 });
 
-describe("getTopBlindSpot", () => {
-  it("returns null for empty observations", () => {
-    expect(getTopBlindSpot([], 10)).toBeNull();
+describe("getTopPattern", () => {
+  it("returns null when no tag reaches 2 distinct source_raw_record_id values", () => {
+    const observations = [
+      // 1 distinct raw_record for this tag — below threshold
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r1" }),
+      // another tag with 1 distinct raw_record
+      obs({ observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-11T00:00:00Z", source_raw_record_id: "r2" }),
+    ];
+    expect(getTopPattern(observations)).toBeNull();
   });
 
-  it("filters positive tags and returns top negative with correct freshness", () => {
+  it("counts distinct source_raw_record_id, not raw observations", () => {
+    // 3 observations of same tag but all from 1 raw_record → should count as 1
+    // and NOT qualify (below emergingTagCount of 2).
     const observations = [
-      // 3x negative tag (should win)
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-11T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-12T00:00:00Z", observation_source: "observed" },
-      // 5x positive tag (should be filtered out)
-      { observation_tag: "validation_present", observed_at: "2026-04-10T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "validation_present", observed_at: "2026-04-11T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "validation_present", observed_at: "2026-04-12T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "validation_present", observed_at: "2026-04-13T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "validation_present", observed_at: "2026-04-14T00:00:00Z", observation_source: "observed" },
-      // 2x another negative tag (should lose to 3x)
-      { observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-10T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-11T00:00:00Z", observation_source: "observed" },
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "same-record" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:01Z", source_raw_record_id: "same-record" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:02Z", source_raw_record_id: "same-record" }),
     ];
+    expect(getTopPattern(observations)).toBeNull();
 
-    const result = getTopBlindSpot(observations, 10);
+    // Add a second distinct raw_record → now qualifies
+    const observations2 = [
+      ...observations,
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-11T00:00:00Z", source_raw_record_id: "another-record" }),
+    ];
+    const result = getTopPattern(observations2);
     expect(result).not.toBeNull();
     expect(result!.tag).toBe("withdrew_under_tension");
-    expect(result!.count).toBe(3);
-    // totalEntries=10 → nextThreshold = ceil(11/6)*6 = 12
-    expect(result!.freshnessLabel).toContain("10");
-    expect(result!.freshnessLabel).toContain("12");
+    expect(result!.distinctEntries).toBe(2);
+    expect(result!.totalObservations).toBe(4);
   });
 
-  it("returns null when only positive tags present", () => {
+  it("ignores observations with observation_source === 'predictive'", () => {
     const observations = [
-      { observation_tag: "validation_present", observed_at: "2026-04-10T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "validation_present", observed_at: "2026-04-11T00:00:00Z", observation_source: "observed" },
-      { observation_tag: "repair_attempt_helped", observed_at: "2026-04-12T00:00:00Z", observation_source: "observed" },
+      // 3 predictive → ignored
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r1", observation_source: "predictive" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-11T00:00:00Z", source_raw_record_id: "r2", observation_source: "predictive" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-12T00:00:00Z", source_raw_record_id: "r3", observation_source: "predictive" }),
+      // 1 observed — below threshold
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-13T00:00:00Z", source_raw_record_id: "r4" }),
     ];
-    expect(getTopBlindSpot(observations, 6)).toBeNull();
+    expect(getTopPattern(observations)).toBeNull();
   });
 
-  it("excludes predictive observations from blind spot count", () => {
+  it("ignores tags where direction is not 'negative'", () => {
     const observations = [
-      // 3x negative but predictive — should NOT count
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", observation_source: "predictive" },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-11T00:00:00Z", observation_source: "predictive" },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-12T00:00:00Z", observation_source: "predictive" },
-      // 1x negative observed — below emergingTagCount threshold (2)
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-13T00:00:00Z", observation_source: "observed" },
+      // 5 positive observations → filtered out
+      obs({ observation_tag: "validation_present", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r1" }),
+      obs({ observation_tag: "validation_present", observed_at: "2026-04-11T00:00:00Z", source_raw_record_id: "r2" }),
+      obs({ observation_tag: "validation_present", observed_at: "2026-04-12T00:00:00Z", source_raw_record_id: "r3" }),
+      // 2 neutral → filtered out
+      obs({ observation_tag: "recurring_trigger_criticism", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r4" }),
+      obs({ observation_tag: "recurring_trigger_criticism", observed_at: "2026-04-11T00:00:00Z", source_raw_record_id: "r5" }),
     ];
-    // Only 1 observed → doesn't meet emergingTagCount of 2 → null
-    expect(getTopBlindSpot(observations, 8)).toBeNull();
+    expect(getTopPattern(observations)).toBeNull();
   });
 });
 
-describe("getHowYouTendToLand", () => {
-  const baseStats = {
-    totalEntries: 10,
-    distinctDays: 4,
-    eventTypes: ["review", "trigger_log", "prepare"],
-    highFitEntries: 4, // Review count for this family
-    reviewEntries: 3,
-  };
+describe("getPatternEvolution", () => {
+  // now = 2026-04-20T12:00:00Z
+  //   current window: [2026-04-06T12, 2026-04-20T12]
+  //   prior window:   [2026-03-23T12, 2026-04-06T12)
+  const now = new Date("2026-04-20T12:00:00Z");
 
-  it("returns null when thresholds not met", () => {
-    expect(getHowYouTendToLand([], { ...baseStats, totalEntries: 3 })).toBeNull();
-    expect(getHowYouTendToLand([], { ...baseStats, reviewEntries: 1 })).toBeNull();
-    expect(getHowYouTendToLand([], { ...baseStats, highFitEntries: 2 })).toBeNull();
-    expect(getHowYouTendToLand([], { ...baseStats, eventTypes: ["review"] })).toBeNull();
+  it("returns 'new' when prior=0 and current>0", () => {
+    const observations = [
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-15T00:00:00Z", source_raw_record_id: "r1" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-18T00:00:00Z", source_raw_record_id: "r2" }),
+    ];
+    const ev = getPatternEvolution(observations, "withdrew_under_tension", now);
+    expect(ev.verdict).toBe("new");
+    expect(ev.currentWindow.count).toBe(2);
+    expect(ev.priorWindow.count).toBe(0);
   });
 
-  it("returns top negative interpersonal pattern with counter-pattern (needs 2+ positive)", () => {
+  it("returns 'gone' when current=0 and prior>0", () => {
     const observations = [
-      { observation_tag: "defended_intent_early", observed_at: "2026-04-10", observation_source: "observed" },
-      { observation_tag: "defended_intent_early", observed_at: "2026-04-11", observation_source: "observed" },
-      { observation_tag: "defended_intent_early", observed_at: "2026-04-12", observation_source: "observed" },
-      // 2x positive — meets emergingTagCount threshold
-      { observation_tag: "validation_present", observed_at: "2026-04-10", observation_source: "observed" },
-      { observation_tag: "validation_present", observed_at: "2026-04-11", observation_source: "observed" },
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-03-25T00:00:00Z", source_raw_record_id: "r1" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-03-30T00:00:00Z", source_raw_record_id: "r2" }),
     ];
-
-    const result = getHowYouTendToLand(observations, baseStats);
-    expect(result).not.toBeNull();
-    expect(result!.topPattern).toBe("defended_intent_early");
-    expect(result!.counterPattern).not.toBeNull();
-    expect(result!.counterPattern!.tag).toBe("validation_present");
-    expect(result!.confidenceLevel).toBe("emerging");
+    const ev = getPatternEvolution(observations, "withdrew_under_tension", now);
+    expect(ev.verdict).toBe("gone");
+    expect(ev.currentWindow.count).toBe(0);
+    expect(ev.priorWindow.count).toBe(2);
   });
 
-  it("does not show positive counter-pattern from n=1 evidence", () => {
+  it("returns 'steady' when |delta| <= 1", () => {
+    // current 3, prior 2 → delta 1 → steady
     const observations = [
-      { observation_tag: "defended_intent_early", observed_at: "2026-04-10", observation_source: "observed" },
-      { observation_tag: "defended_intent_early", observed_at: "2026-04-11", observation_source: "observed" },
-      // Only 1 positive — below emergingTagCount, should NOT show
-      { observation_tag: "validation_present", observed_at: "2026-04-10", observation_source: "observed" },
+      // prior: 2 observations
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-03-25T00:00:00Z", source_raw_record_id: "r1" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-03-28T00:00:00Z", source_raw_record_id: "r2" }),
+      // current: 3 observations
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r3" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-14T00:00:00Z", source_raw_record_id: "r4" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-18T00:00:00Z", source_raw_record_id: "r5" }),
     ];
-
-    const result = getHowYouTendToLand(observations, baseStats);
-    expect(result).not.toBeNull();
-    expect(result!.topPattern).toBe("defended_intent_early");
-    expect(result!.counterPattern).toBeNull();
+    const ev = getPatternEvolution(observations, "withdrew_under_tension", now);
+    expect(ev.verdict).toBe("steady");
   });
 
-  it("excludes trigger_pattern type tags", () => {
-    // recurring_trigger_criticism is trigger_pattern type — excluded from "tend to land"
+  it("returns 'dormant' when prior=0 and current=0 (tag qualified all-time but absent from both windows)", () => {
+    // Observation from outside the 28-day window — still counted by
+    // getTopPattern for all-time qualification, but evolution windows see 0.
     const observations = [
-      { observation_tag: "recurring_trigger_criticism", observed_at: "2026-04-10", observation_source: "observed" },
-      { observation_tag: "recurring_trigger_criticism", observed_at: "2026-04-11", observation_source: "observed" },
-      { observation_tag: "recurring_trigger_criticism", observed_at: "2026-04-12", observation_source: "observed" },
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-01-01T00:00:00Z", source_raw_record_id: "r-ancient" }),
     ];
-
-    const result = getHowYouTendToLand(observations, baseStats);
-    expect(result).toBeNull();
+    const ev = getPatternEvolution(observations, "withdrew_under_tension", now);
+    expect(ev.verdict).toBe("dormant");
+    expect(ev.currentWindow.count).toBe(0);
+    expect(ev.priorWindow.count).toBe(0);
   });
 
-  it("returns established confidence at 18+ entries", () => {
+  it("returns 'increasing' when current - prior >= 2", () => {
     const observations = [
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-10", observation_source: "observed" },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-11", observation_source: "observed" },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-12", observation_source: "observed" },
+      // prior: 1
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-03-30T00:00:00Z", source_raw_record_id: "r1" }),
+      // current: 4
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r2" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-12T00:00:00Z", source_raw_record_id: "r3" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-15T00:00:00Z", source_raw_record_id: "r4" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-18T00:00:00Z", source_raw_record_id: "r5" }),
     ];
+    const ev = getPatternEvolution(observations, "withdrew_under_tension", now);
+    expect(ev.verdict).toBe("increasing");
+    expect(ev.currentWindow.count).toBe(4);
+    expect(ev.priorWindow.count).toBe(1);
+  });
+});
 
-    const result = getHowYouTendToLand(observations, {
-      totalEntries: 20,
-      distinctDays: 10,
-      eventTypes: ["review", "trigger_log", "prepare"],
-      highFitEntries: 8,
-      reviewEntries: 4,
-    });
-    expect(result).not.toBeNull();
-    expect(result!.confidenceLevel).toBe("established");
+describe("computePatternSnapshot", () => {
+  it("returns null when getTopPattern returns null", () => {
+    const observations = [
+      // Only 1 distinct raw_record for this tag — below threshold
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r1" }),
+    ];
+    expect(computePatternSnapshot(observations, new Date("2026-04-20T12:00:00Z"))).toBeNull();
+  });
+
+  it("round-trips through JSON.stringify/parse with matching key structure", () => {
+    // Cache contract: what computePatternSnapshot returns is what lands in
+    // metadata_json and what the page reads back. A deep-equal check after
+    // round-trip guards against shape drift (e.g. Date objects or Sets that
+    // would serialize lossily).
+    const observations = [
+      // prior
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-03-25T00:00:00Z", source_raw_record_id: "r1", record_type: "review" }),
+      // current: 3 entries → qualifies (distinct >= 2)
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-10T00:00:00Z", source_raw_record_id: "r2", record_type: "review" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-14T00:00:00Z", source_raw_record_id: "r3", record_type: "trigger_log" }),
+      obs({ observation_tag: "withdrew_under_tension", observed_at: "2026-04-18T00:00:00Z", source_raw_record_id: "r4", record_type: "review" }),
+      // positive counter
+      obs({ observation_tag: "validation_present", observed_at: "2026-04-12T00:00:00Z", source_raw_record_id: "r5", record_type: "review" }),
+      obs({ observation_tag: "validation_present", observed_at: "2026-04-16T00:00:00Z", source_raw_record_id: "r6", record_type: "review" }),
+    ];
+    const snapshot = computePatternSnapshot(observations, new Date("2026-04-20T12:00:00Z"));
+    expect(snapshot).not.toBeNull();
+
+    const roundTripped = JSON.parse(JSON.stringify(snapshot)) as PatternSnapshot;
+    expect(roundTripped).toEqual(snapshot);
+    // Spot-check the specific load-bearing fields.
+    expect(roundTripped.tag).toBe("withdrew_under_tension");
+    expect(roundTripped.copy.direction).toBe("negative");
+    expect(roundTripped.distinctEntries).toBeGreaterThanOrEqual(2);
+    expect(roundTripped.evolution.currentWindow.count).toBeGreaterThan(0);
+    expect(Array.isArray(roundTripped.evolution.counterObservations)).toBe(true);
+    expect(Array.isArray(roundTripped.eventTypesContributing)).toBe(true);
   });
 });
 
 describe("getPersonPatterns", () => {
+  function personObs(p: {
+    tag: string;
+    date: string;
+    person_id: string;
+    source?: string;
+  }) {
+    return {
+      observation_tag: p.tag,
+      observed_at: p.date,
+      observation_source: p.source ?? "observed",
+      source_raw_record_id: `r-${p.tag}-${p.date}`,
+      record_type: "review" as string | null,
+      person_id: p.person_id,
+    };
+  }
+
   it("returns empty array when no person meets thresholds", () => {
     const result = getPersonPatterns([], new Map());
     expect(result).toEqual([]);
@@ -222,11 +292,11 @@ describe("getPersonPatterns", () => {
   it("returns pattern for person meeting thresholds (positive needs 2+ count)", () => {
     const personId = "person-1";
     const observations = [
-      { observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-10", observation_source: "observed", person_id: personId },
-      { observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-11", observation_source: "observed", person_id: personId },
+      personObs({ tag: "assumed_meaning_without_checking", date: "2026-04-10", person_id: personId }),
+      personObs({ tag: "assumed_meaning_without_checking", date: "2026-04-11", person_id: personId }),
       // 2x positive — meets emergingTagCount
-      { observation_tag: "validation_present", observed_at: "2026-04-12", observation_source: "observed", person_id: personId },
-      { observation_tag: "validation_present", observed_at: "2026-04-13", observation_source: "observed", person_id: personId },
+      personObs({ tag: "validation_present", date: "2026-04-12", person_id: personId }),
+      personObs({ tag: "validation_present", date: "2026-04-13", person_id: personId }),
     ];
 
     const personStats = new Map([
@@ -250,9 +320,9 @@ describe("getPersonPatterns", () => {
   it("excludes predictive observations", () => {
     const personId = "person-1";
     const observations = [
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-10", observation_source: "predictive", person_id: personId },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-11", observation_source: "predictive", person_id: personId },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-12", observation_source: "predictive", person_id: personId },
+      personObs({ tag: "withdrew_under_tension", date: "2026-04-10", person_id: personId, source: "predictive" }),
+      personObs({ tag: "withdrew_under_tension", date: "2026-04-11", person_id: personId, source: "predictive" }),
+      personObs({ tag: "withdrew_under_tension", date: "2026-04-12", person_id: personId, source: "predictive" }),
     ];
 
     const personStats = new Map([
@@ -272,8 +342,8 @@ describe("getPersonPatterns", () => {
   it("skips person without enough review entries", () => {
     const personId = "person-1";
     const observations = [
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-10", observation_source: "observed", person_id: personId },
-      { observation_tag: "withdrew_under_tension", observed_at: "2026-04-11", observation_source: "observed", person_id: personId },
+      personObs({ tag: "withdrew_under_tension", date: "2026-04-10", person_id: personId }),
+      personObs({ tag: "withdrew_under_tension", date: "2026-04-11", person_id: personId }),
     ];
 
     const personStats = new Map([
@@ -293,10 +363,10 @@ describe("getPersonPatterns", () => {
   it("does not show positive counter-pattern from n=1 evidence", () => {
     const personId = "person-1";
     const observations = [
-      { observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-10", observation_source: "observed", person_id: personId },
-      { observation_tag: "assumed_meaning_without_checking", observed_at: "2026-04-11", observation_source: "observed", person_id: personId },
+      personObs({ tag: "assumed_meaning_without_checking", date: "2026-04-10", person_id: personId }),
+      personObs({ tag: "assumed_meaning_without_checking", date: "2026-04-11", person_id: personId }),
       // Only 1 positive — below emergingTagCount, should NOT show
-      { observation_tag: "validation_present", observed_at: "2026-04-12", observation_source: "observed", person_id: personId },
+      personObs({ tag: "validation_present", date: "2026-04-12", person_id: personId }),
     ];
 
     const personStats = new Map([
@@ -384,8 +454,6 @@ describe("inferOverwhelmedPatternTag", () => {
   });
 
   it("criticism keyword in feeling → recurring_trigger_criticism (keyword before intensity)", () => {
-    // Keywords take priority over intensity heuristic — a user who writes
-    // "I was criticized" at high intensity should get the keyword tag.
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 5,
@@ -416,7 +484,6 @@ describe("inferOverwhelmedPatternTag", () => {
   });
 
   it("low overwhelm (beforeRating < 3) always returns null", () => {
-    // Low overwhelm entries shouldn't generate pattern tags even with keywords
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 2,

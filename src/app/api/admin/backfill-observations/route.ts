@@ -21,7 +21,7 @@ import { isAdmin } from "@/lib/admin";
 import { checkOrigin } from "@/lib/check-origin";
 import { rateLimit } from "@/lib/rate-limit";
 import {
-  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TAG_COPY,
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
 import type { ObservationTag } from "@/types";
@@ -110,7 +110,7 @@ export async function POST(req: Request) {
     }
 
     const observationTag = tag as ObservationTag;
-    const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[observationTag];
+    const tagDesc = OBSERVATION_TAG_COPY[observationTag];
 
     rowsToInsert.push({
       user_id: review.user_id,

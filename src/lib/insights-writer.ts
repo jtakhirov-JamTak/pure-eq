@@ -1,20 +1,38 @@
 // Regenerate cached insights and write to derived_insights table.
 // Called fire-and-forget after observation extraction in coach + tools routes.
-// Insights page reads these cached results first, falls back to live computation if stale.
+// Insights page reads these cached results first, falls back to live
+// computation if stale or missing.
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import * as Sentry from "@sentry/nextjs";
-import type { Database } from "@/types/database";
+import type { Database, Json } from "@/types/database";
 import {
   checkInsightThresholds,
-  getTopBlindSpot,
-  getHowYouTendToLand,
+  computePatternSnapshot,
+  enrichObservations,
   getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
-  TEND_TO_LAND_HIGH_FIT,
 } from "@/lib/insights";
 
-const GENERATOR_VERSION = "v1";
+export const GENERATOR_VERSION = "v1";
+
+// Cooldown latch: regenerate runs fire-and-forget from 4 call sites on every
+// coach/tool submission. If a structural issue starts throwing (schema drift,
+// DB outage), without this guard Sentry would ingest one event per request
+// and burn the quota before anyone noticed the underlying failure. Same
+// pattern as rate-limit.ts's Upstash fallback catch.
+const CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastCaptureAt = 0;
+
+function captureWithCooldown(
+  err: unknown,
+  tags: Record<string, string>,
+): void {
+  const now = Date.now();
+  if (now - lastCaptureAt < CAPTURE_COOLDOWN_MS) return;
+  lastCaptureAt = now;
+  Sentry.captureException(err, { tags });
+}
 
 export async function regenerateInsights(
   supabase: SupabaseClient<Database>,
@@ -23,9 +41,7 @@ export async function regenerateInsights(
   try {
     await regenerateInsightsInner(supabase, userId);
   } catch (err) {
-    Sentry.captureException(err, {
-      tags: { area: "insights", kind: "regenerate" },
-    });
+    captureWithCooldown(err, { area: "insights", kind: "regenerate" });
     throw err;
   }
 }
@@ -38,14 +54,16 @@ async function regenerateInsightsInner(
   const [rawRecordsRes, observationsRes, personsRes] = await Promise.all([
     supabase
       .from("raw_records")
-      .select("record_type, created_at, person_id")
+      .select("raw_record_id, record_type, created_at, person_id")
       .eq("user_id", userId)
       .eq("is_complete", true)
       .is("deleted_at", null)
       .limit(1000),
     supabase
       .from("pattern_observations")
-      .select("observation_tag, observed_at, observation_source, person_id")
+      .select(
+        "observation_tag, observed_at, observation_source, person_id, source_raw_record_id",
+      )
       .eq("user_id", userId)
       .order("observed_at", { ascending: false })
       .limit(500),
@@ -58,12 +76,18 @@ async function regenerateInsightsInner(
   ]);
 
   const rawRecords = rawRecordsRes.data ?? [];
-  const observations = observationsRes.data ?? [];
+  const rawObservations = observationsRes.data ?? [];
   const persons = personsRes.data ?? [];
 
   if (rawRecords.length === 0) return;
 
-  // 2. Compute entry stats.
+  // 2. Enrich observations (shared helper with the page).
+  const { observations, personObservations } = enrichObservations(
+    rawObservations,
+    rawRecords,
+  );
+
+  // 3. Compute entry stats.
   const distinctDays = new Set(
     rawRecords
       .filter((r) => r.created_at)
@@ -81,76 +105,56 @@ async function regenerateInsightsInner(
     highFitEntries,
   });
 
-  const now = new Date().toISOString();
+  const now = new Date();
+  const nowMs = now.getTime();
   const periodStart =
     rawRecords
       .filter((r) => r.created_at)
       .map((r) => r.created_at!)
-      .sort()[0] ?? now;
+      .sort()[0] ?? now.toISOString();
+  // Migration 0003 CHECK: period_end > period_start (strict >). A first-submit
+  // user's oldest created_at can equal now, or clock drift can land them
+  // equal. Guarantee at least 1ms separation so the INSERT never silently
+  // fails the CHECK.
+  const periodStartMs = new Date(periodStart).getTime();
+  const periodEndMs = Math.max(periodStartMs + 1, nowMs);
+  const periodEndIso = new Date(periodEndMs).toISOString();
 
   const baseRow = {
     user_id: userId,
     generator_version: GENERATOR_VERSION,
-    generated_at: now,
+    generated_at: now.toISOString(),
     period_start: periodStart,
-    period_end: now,
+    period_end: periodEndIso,
     time_window_type: "all_time",
     event_types_used: eventTypes,
   };
 
-  // 3. Compute all insight types.
+  // 4. Compute insights.
   const rows: Database["public"]["Tables"]["derived_insights"]["Insert"][] = [];
 
-  // 3a. Blind spot.
-  if (thresholdResult.state === "threshold_met") {
-    const blindSpot = getTopBlindSpot(observations, rawRecords.length);
-    if (blindSpot) {
-      rows.push({
-        ...baseRow,
-        insight_type: "blind_spot",
-        person_id: null,
-        summary_text: blindSpot.summary,
-        confidence_level: "emerging",
-        evidence_count: blindSpot.count,
-        distinct_days: distinctDays,
-        supporting_pattern_ids: [blindSpot.tag],
-      });
-    }
-  }
+  // 4a. Top pattern (replaces former blind_spot + tend_to_land).
+  const snapshot =
+    thresholdResult.state === "threshold_met"
+      ? computePatternSnapshot(observations, now)
+      : null;
 
-  // 3b. How You Tend to Land.
-  const tendToLandHighFit = rawRecords.filter((r) =>
-    (TEND_TO_LAND_HIGH_FIT as readonly string[]).includes(r.record_type),
-  ).length;
-  const reviewEntries = rawRecords.filter(
-    (r) => r.record_type === "review",
-  ).length;
-
-  const tendToLand = getHowYouTendToLand(observations, {
-    totalEntries: rawRecords.length,
-    distinctDays,
-    eventTypes,
-    highFitEntries: tendToLandHighFit,
-    reviewEntries,
-  });
-
-  if (tendToLand) {
-    const patternIds: string[] = [tendToLand.topPattern];
-    if (tendToLand.counterPattern) patternIds.push(tendToLand.counterPattern.tag);
-
+  if (snapshot) {
+    const counterTags = snapshot.evolution.counterObservations.map((c) => c.tag);
     rows.push({
       ...baseRow,
-      insight_type: "tend_to_land",
+      insight_type: "top_pattern",
       person_id: null,
-      summary_text: tendToLand.summary,
-      confidence_level: tendToLand.confidenceLevel,
-      evidence_count: rawRecords.length,
-      distinct_days: distinctDays,
-      supporting_pattern_ids: patternIds,
+      summary_text: snapshot.copy.pattern,
+      confidence_level: "emerging",
+      evidence_count: snapshot.distinctEntries,
+      distinct_days: snapshot.distinctDays,
+      supporting_pattern_ids: [snapshot.tag, ...counterTags],
+      metadata_json: snapshot as unknown as Json,
     });
   }
 
-  // 3c. Per-person patterns.
+  // 4b. Per-person patterns.
   const personNameMap = new Map(
     persons.map((p) => [p.person_id, p.display_name]),
   );
@@ -201,13 +205,19 @@ async function regenerateInsightsInner(
     ]),
   );
 
-  const personPatterns = getPersonPatterns(observations, finalPersonStats);
+  const personPatterns = getPersonPatterns(personObservations, finalPersonStats);
   for (const pp of personPatterns) {
-    const patternIds: string[] = [];
-    if (pp.topNegative) patternIds.push(pp.topNegative.tag);
-    if (pp.topPositive) patternIds.push(pp.topPositive.tag);
-
-    const summaryText = pp.topNegative?.summary ?? pp.topPositive?.summary ?? "";
+    // Positional encoding: always 2 slots — index 0 = negative, index 1 =
+    // positive, empty string when absent. Without the placeholder, a
+    // positive-only person's posTag lands at tags[0] and the page reads it
+    // as a negative tag, direction check fails, card renders empty.
+    const patternIds: string[] = [
+      pp.topNegative?.tag ?? "",
+      pp.topPositive?.tag ?? "",
+    ];
+    const summaryText =
+      pp.topNegative?.summary ?? pp.topPositive?.summary ?? "";
+    if (!summaryText) continue; // defensive: don't persist blank rows
 
     rows.push({
       ...baseRow,
@@ -221,17 +231,35 @@ async function regenerateInsightsInner(
     });
   }
 
-  if (rows.length === 0) return;
-
-  // 4. Upsert: delete existing rows for this user, then insert fresh.
-  // This is simpler than per-type upsert and avoids stale person_pattern rows
-  // when a person drops below threshold.
-  await supabase
+  // 5. Refresh cache. Wipe covers legacy rows plus stale person_pattern rows
+  // whose person dropped below threshold. If rows.length === 0 we still wipe
+  // so stale top_pattern rows don't keep rendering after the pattern
+  // dissolves. Both calls are error-checked — a silent delete failure would
+  // leave stale cache; a silent insert failure after a successful delete
+  // leaves the user with an empty /insights until the next regen (falls
+  // through to live compute, so UX is preserved but cache is cold).
+  const { error: deleteError } = await supabase
     .from("derived_insights")
     .delete()
     .eq("user_id", userId);
+  if (deleteError) {
+    throw new Error(`insights-writer delete failed: ${deleteError.message}`);
+  }
 
-  await supabase
+  if (rows.length === 0) return;
+
+  const { error: insertError } = await supabase
     .from("derived_insights")
     .insert(rows);
+  if (insertError) {
+    // Distinguishing tag: delete-succeeded-but-insert-failed leaves user in
+    // a temporarily blank cache state. Log once per cooldown.
+    captureWithCooldown(
+      new Error(
+        `insights-writer insert failed after successful delete: ${insertError.message}`,
+      ),
+      { area: "insights", kind: "insert_after_delete" },
+    );
+    throw insertError;
+  }
 }

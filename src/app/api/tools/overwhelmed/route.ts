@@ -9,7 +9,7 @@ import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import {
   inferOverwhelmedPatternTag,
-  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TAG_COPY,
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
 import { regenerateInsights } from "@/lib/insights-writer";
@@ -200,7 +200,7 @@ export async function POST(req: Request) {
     });
 
     if (tag) {
-      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag as ObservationTag];
+      const tagDesc = OBSERVATION_TAG_COPY[tag as ObservationTag];
       if (tagDesc) {
         const { data: existingObs } = await supabase
           .from("pattern_observations")

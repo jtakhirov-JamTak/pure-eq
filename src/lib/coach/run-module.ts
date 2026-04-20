@@ -15,7 +15,7 @@ import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { validateAIOutput } from "@/lib/ai/schemas";
 import {
-  OBSERVATION_TAG_DESCRIPTIONS,
+  OBSERVATION_TAG_COPY,
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
 import { regenerateInsights } from "@/lib/insights-writer";
@@ -432,7 +432,7 @@ export async function runCoachModule<
   if (aiOutput?.pattern_tag) {
     try {
       const tag = aiOutput.pattern_tag as ObservationTag;
-      const tagDesc = OBSERVATION_TAG_DESCRIPTIONS[tag];
+      const tagDesc = OBSERVATION_TAG_COPY[tag];
       if (tagDesc) {
         const { data: existingObs } = await supabase
           .from("pattern_observations")
