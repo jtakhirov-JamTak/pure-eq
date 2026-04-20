@@ -9,6 +9,8 @@ import type { Database, Json } from "@/types/database";
 import {
   checkInsightThresholds,
   computePatternSnapshot,
+  computeReflectionRegulationGap,
+  COMPARATOR_COPY,
   enrichObservations,
   getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
@@ -151,6 +153,37 @@ async function regenerateInsightsInner(
       distinct_days: snapshot.distinctDays,
       supporting_pattern_ids: [snapshot.tag, ...counterTags],
       metadata_json: snapshot as unknown as Json,
+    });
+  }
+
+  // 4a-bis. Reflection > Regulation comparator.
+  // Compute runs for every user with any raw_records; persists only when
+  // qualifies. The user_feature_flags.show_comparator flag gates the RENDER,
+  // not the COMPUTE — the writer stays flag-agnostic so flipping the flag
+  // reveals pre-existing rows rather than triggering a regeneration.
+  const comparator = computeReflectionRegulationGap(
+    observations,
+    rawRecords.map((r) => ({ record_type: r.record_type, created_at: r.created_at })),
+    now,
+  );
+
+  if (comparator.qualifies) {
+    // "established" tier: has material margin over threshold on all axes.
+    // Same two-tier shape as PatternCard (emerging | established).
+    const established =
+      comparator.reviewCount >= 5 &&
+      comparator.reactiveCount >= 5 &&
+      comparator.gap >= 0.45;
+    rows.push({
+      ...baseRow,
+      insight_type: "reflection_regulation_gap",
+      person_id: null,
+      summary_text: COMPARATOR_COPY.pattern,
+      confidence_level: established ? "established" : "emerging",
+      evidence_count: comparator.reviewCount + comparator.reactiveCount,
+      distinct_days: comparator.distinctDays,
+      supporting_pattern_ids: comparator.contributingTags,
+      metadata_json: comparator as unknown as Json,
     });
   }
 

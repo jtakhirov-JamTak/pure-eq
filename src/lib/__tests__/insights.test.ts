@@ -4,9 +4,12 @@ import {
   getTopPattern,
   getPatternEvolution,
   computePatternSnapshot,
+  computeReflectionRegulationGap,
+  gateComparatorRender,
   getPersonPatterns,
   inferTriggerPatternTag,
   inferOverwhelmedPatternTag,
+  isComparatorSnapshot,
   type PatternObservation,
   type PatternSnapshot,
 } from "@/lib/insights";
@@ -387,109 +390,444 @@ describe("getPersonPatterns", () => {
 });
 
 describe("inferTriggerPatternTag", () => {
-  it("high emotion + high urge → escalated_after_trigger", () => {
+  it("high emotion + high urge → includes escalated_after_trigger", () => {
     expect(
       inferTriggerPatternTag({
         emotionIntensity: 8,
         urgeIntensity: 9,
         emotion: "angry",
         trigger: "they interrupted me",
+        regulationStrategy: "took a breath",
       })
-    ).toBe("escalated_after_trigger");
+    ).toContain("escalated_after_trigger");
   });
 
-  it("high emotion + low urge → withdrew_under_tension", () => {
+  it("high emotion + low urge → includes withdrew_under_tension", () => {
     expect(
       inferTriggerPatternTag({
         emotionIntensity: 8,
         urgeIntensity: 3,
         emotion: "hurt",
         trigger: "they dismissed what I said",
+        regulationStrategy: "stepped away",
       })
-    ).toBe("withdrew_under_tension");
+    ).toContain("withdrew_under_tension");
   });
 
-  it("criticism keyword in trigger → recurring_trigger_criticism", () => {
-    expect(
-      inferTriggerPatternTag({
-        emotionIntensity: 5,
-        urgeIntensity: 5,
-        emotion: "frustrated",
-        trigger: "I was criticized in front of everyone",
-      })
-    ).toBe("recurring_trigger_criticism");
+  it("criticism keyword in trigger → includes recurring_trigger_criticism", () => {
+    const tags = inferTriggerPatternTag({
+      emotionIntensity: 5,
+      urgeIntensity: 5,
+      emotion: "frustrated",
+      trigger: "I was criticized in front of everyone",
+      regulationStrategy: "breathed deep",
+    });
+    expect(tags).toContain("recurring_trigger_criticism");
   });
 
-  it("ambiguous input returns null", () => {
+  it("ambiguous input returns empty array", () => {
     expect(
       inferTriggerPatternTag({
         emotionIntensity: 5,
         urgeIntensity: 5,
         emotion: "confused",
         trigger: "something happened at work",
+        regulationStrategy: "thought it through",
       })
-    ).toBeNull();
+    ).toEqual([]);
+  });
+
+  it("multiple rules firing → array contains all matching tags", () => {
+    // high emotion + high urge (escalated) + pressure keyword + urge >= 6
+    // (pushed_for_resolution) + pressure keyword also adds recurring_trigger_pressure
+    const tags = inferTriggerPatternTag({
+      emotionIntensity: 8,
+      urgeIntensity: 8,
+      emotion: "anxious",
+      trigger: "a hard deadline was forced on me",
+      regulationStrategy: "asked for an extension",
+    });
+    expect(tags).toContain("escalated_after_trigger");
+    expect(tags).toContain("pushed_for_resolution_when_activated");
+    expect(tags).toContain("recurring_trigger_pressure");
+  });
+
+  it("emotion >= 6 + non-empty regulation strategy → NOT late_regulation_in_the_moment", () => {
+    const tags = inferTriggerPatternTag({
+      emotionIntensity: 7,
+      urgeIntensity: 5,
+      emotion: "frustrated",
+      trigger: "a difficult moment at work",
+      regulationStrategy: "calm down",
+    });
+    expect(tags).not.toContain("late_regulation_in_the_moment");
+  });
+
+  it("emotion >= 6 + null regulation strategy → includes late_regulation_in_the_moment", () => {
+    const tags = inferTriggerPatternTag({
+      emotionIntensity: 6,
+      urgeIntensity: 5,
+      emotion: "overwhelmed",
+      trigger: "a difficult moment at work",
+      regulationStrategy: null,
+    });
+    expect(tags).toContain("late_regulation_in_the_moment");
+  });
+
+  it("emotion >= 6 + empty string regulation strategy → includes late_regulation_in_the_moment", () => {
+    const tags = inferTriggerPatternTag({
+      emotionIntensity: 8,
+      urgeIntensity: 5,
+      emotion: "overwhelmed",
+      trigger: "a difficult moment at work",
+      regulationStrategy: "   ",
+    });
+    expect(tags).toContain("late_regulation_in_the_moment");
+  });
+
+  it("emotion < 6 + null regulation strategy → does NOT include late_regulation_in_the_moment", () => {
+    const tags = inferTriggerPatternTag({
+      emotionIntensity: 5,
+      urgeIntensity: 5,
+      emotion: "mild frustration",
+      trigger: "a thing happened",
+      regulationStrategy: null,
+    });
+    expect(tags).not.toContain("late_regulation_in_the_moment");
   });
 });
 
 describe("inferOverwhelmedPatternTag", () => {
-  it("high overwhelm + no improvement → escalated_after_trigger", () => {
+  it("high overwhelm + no improvement → includes escalated_after_trigger", () => {
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 5,
         afterRating: 5,
         feelingLabel: "I feel terrible because everything is falling apart",
       })
-    ).toBe("escalated_after_trigger");
+    ).toContain("escalated_after_trigger");
   });
 
-  it("high overwhelm + slight improvement still escalation", () => {
+  it("high overwhelm + slight improvement still includes escalated_after_trigger", () => {
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 4,
         afterRating: 3,
         feelingLabel: "I feel anxious because of the meeting",
       })
-    ).toBe("escalated_after_trigger");
+    ).toContain("escalated_after_trigger");
   });
 
-  it("criticism keyword in feeling → recurring_trigger_criticism (keyword before intensity)", () => {
+  it("criticism keyword in feeling → includes recurring_trigger_criticism", () => {
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 5,
         afterRating: 5,
         feelingLabel: "I feel terrible because I was criticized by my boss",
       })
-    ).toBe("recurring_trigger_criticism");
+    ).toContain("recurring_trigger_criticism");
   });
 
-  it("pressure keyword in feeling → recurring_trigger_pressure", () => {
+  it("pressure keyword in feeling → includes recurring_trigger_pressure", () => {
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 3,
         afterRating: 1,
         feelingLabel: "I feel stressed because of the deadline",
       })
-    ).toBe("recurring_trigger_pressure");
+    ).toContain("recurring_trigger_pressure");
   });
 
-  it("effective regulation with no keywords → null", () => {
+  it("effective regulation with no keywords → empty array", () => {
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 4,
         afterRating: 1,
         feelingLabel: "I feel tense because of a difficult conversation",
       })
-    ).toBeNull();
+    ).toEqual([]);
   });
 
-  it("low overwhelm (beforeRating < 3) always returns null", () => {
+  it("low overwhelm (beforeRating < 3) always returns empty array", () => {
     expect(
       inferOverwhelmedPatternTag({
         beforeRating: 2,
         afterRating: 1,
         feelingLabel: "I feel a bit criticized today",
       })
-    ).toBeNull();
+    ).toEqual([]);
+  });
+
+  it("never returns late_regulation_in_the_moment under any input (rule removed from overwhelmed)", () => {
+    // The trigger-log route has the late-regulation rule; overwhelmed does
+    // not because a slow recovery on the coarser 1-5 scale would false-
+    // positive as "late regulation" even when the user regulated successfully.
+    const inputs = [
+      { beforeRating: 5, afterRating: 5, feelingLabel: "I feel stuck" },
+      { beforeRating: 4, afterRating: 4, feelingLabel: "I feel stuck because of pressure" },
+      { beforeRating: 5, afterRating: 2, feelingLabel: "I feel criticized" },
+      { beforeRating: 3, afterRating: 1, feelingLabel: "I feel anxious" },
+    ];
+    for (const input of inputs) {
+      expect(inferOverwhelmedPatternTag(input)).not.toContain(
+        "late_regulation_in_the_moment",
+      );
+    }
+  });
+});
+
+// ---------- computeReflectionRegulationGap ----------
+
+describe("computeReflectionRegulationGap", () => {
+  const now = new Date("2026-04-20T12:00:00Z");
+
+  // Helper to build a raw_record row in the shape the compute expects.
+  function rec(record_type: string, created_at: string) {
+    return { record_type, created_at };
+  }
+
+  it("returns not qualified when reviewCount < 3", () => {
+    const rawRecords = [
+      rec("review", "2026-04-10T00:00:00Z"),
+      rec("review", "2026-04-12T00:00:00Z"),
+      rec("trigger_log", "2026-04-10T00:00:00Z"),
+      rec("trigger_log", "2026-04-12T00:00:00Z"),
+      rec("trigger_log", "2026-04-14T00:00:00Z"),
+      rec("trigger_log", "2026-04-16T00:00:00Z"),
+    ];
+    const snap = computeReflectionRegulationGap([], rawRecords, now);
+    expect(snap.qualifies).toBe(false);
+    expect(snap.reviewCount).toBe(2);
+  });
+
+  it("returns not qualified when reactiveCount < 3", () => {
+    const rawRecords = [
+      rec("review", "2026-04-10T00:00:00Z"),
+      rec("review", "2026-04-12T00:00:00Z"),
+      rec("review", "2026-04-14T00:00:00Z"),
+      rec("review", "2026-04-15T00:00:00Z"),
+      rec("trigger_log", "2026-04-10T00:00:00Z"),
+      rec("trigger_log", "2026-04-12T00:00:00Z"),
+    ];
+    const snap = computeReflectionRegulationGap([], rawRecords, now);
+    expect(snap.qualifies).toBe(false);
+    expect(snap.reactiveCount).toBe(2);
+  });
+
+  it("returns not qualified when gap < 0.35 even with enough entries", () => {
+    // 3 reviews with no positive tags + 3 reactives with no regulation negatives
+    //  → reflectionScore = 0, regulationScore = 1, gap = -1 (much less than 0.35)
+    const rawRecords = [
+      rec("review", "2026-04-10T00:00:00Z"),
+      rec("review", "2026-04-12T00:00:00Z"),
+      rec("review", "2026-04-14T00:00:00Z"),
+      rec("trigger_log", "2026-04-11T00:00:00Z"),
+      rec("trigger_log", "2026-04-13T00:00:00Z"),
+      rec("trigger_log", "2026-04-15T00:00:00Z"),
+    ];
+    const snap = computeReflectionRegulationGap([], rawRecords, now);
+    expect(snap.gap).toBeLessThan(0.35);
+    expect(snap.qualifies).toBe(false);
+  });
+
+  it("qualifies on realistic qualifying input: high reflection + high regulation negatives", () => {
+    // 4 reviews, 4 reactives. 3 reviews fire validation_present (pos);
+    // 3 reactives fire escalated_after_trigger (neg regulation).
+    // distinctDays = 4+ (entries across 4 different days).
+    const rawRecords = [
+      rec("review", "2026-04-08T00:00:00Z"),
+      rec("review", "2026-04-10T00:00:00Z"),
+      rec("review", "2026-04-12T00:00:00Z"),
+      rec("review", "2026-04-14T00:00:00Z"),
+      rec("trigger_log", "2026-04-09T00:00:00Z"),
+      rec("trigger_log", "2026-04-11T00:00:00Z"),
+      rec("trigger_log", "2026-04-13T00:00:00Z"),
+      rec("trigger_log", "2026-04-15T00:00:00Z"),
+    ];
+    const observations: PatternObservation[] = [
+      {
+        observation_tag: "validation_present",
+        observed_at: "2026-04-08T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-1",
+        record_type: "review",
+      },
+      {
+        observation_tag: "validation_present",
+        observed_at: "2026-04-10T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-2",
+        record_type: "review",
+      },
+      {
+        observation_tag: "validation_present",
+        observed_at: "2026-04-12T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-3",
+        record_type: "review",
+      },
+      {
+        observation_tag: "escalated_after_trigger",
+        observed_at: "2026-04-09T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "t-1",
+        record_type: "trigger_log",
+      },
+      {
+        observation_tag: "escalated_after_trigger",
+        observed_at: "2026-04-11T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "t-2",
+        record_type: "trigger_log",
+      },
+      {
+        observation_tag: "escalated_after_trigger",
+        observed_at: "2026-04-13T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "t-3",
+        record_type: "trigger_log",
+      },
+    ];
+    const snap = computeReflectionRegulationGap(observations, rawRecords, now);
+    expect(snap.qualifies).toBe(true);
+    expect(snap.reflectionScore).toBeGreaterThan(0);
+    expect(snap.regulationScore).toBeLessThan(0.5);
+    expect(snap.gap).toBeGreaterThanOrEqual(0.35);
+    expect(snap.distinctDays).toBeGreaterThanOrEqual(4);
+    expect(snap.contributingTags).toContain("validation_present");
+    expect(snap.contributingTags).toContain("escalated_after_trigger");
+  });
+
+  it("reviewCount === 0 → not qualified and no NaN from division", () => {
+    const snap = computeReflectionRegulationGap(
+      [],
+      [rec("trigger_log", "2026-04-10T00:00:00Z")],
+      now,
+    );
+    expect(snap.reviewCount).toBe(0);
+    expect(snap.qualifies).toBe(false);
+    expect(Number.isNaN(snap.reflectionScore)).toBe(false);
+    expect(Number.isNaN(snap.regulationScore)).toBe(false);
+    expect(Number.isNaN(snap.gap)).toBe(false);
+  });
+
+  it("reflectionScore clamps to [-1, 1] when positives + negatives both fire on every review", () => {
+    // 2 reviews but 2 positive + 2 negative observations → raw numerator is 0
+    // after subtraction; bump the positive side to exceed review count to hit
+    // the upper clamp.
+    const rawRecords = [
+      rec("review", "2026-04-10T00:00:00Z"),
+      rec("review", "2026-04-12T00:00:00Z"),
+    ];
+    const observations: PatternObservation[] = [
+      // 4 positive observations on 2 reviews — pos - neg = 4, denom = 2 → 2.0 unclamped
+      {
+        observation_tag: "validation_present",
+        observed_at: "2026-04-10T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-1",
+        record_type: "review",
+      },
+      {
+        observation_tag: "repair_attempt_helped",
+        observed_at: "2026-04-10T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-1",
+        record_type: "review",
+      },
+      {
+        observation_tag: "validation_present",
+        observed_at: "2026-04-12T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-2",
+        record_type: "review",
+      },
+      {
+        observation_tag: "repair_attempt_helped",
+        observed_at: "2026-04-12T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: "rev-2",
+        record_type: "review",
+      },
+    ];
+    const snap = computeReflectionRegulationGap(observations, rawRecords, now);
+    expect(snap.reflectionScore).toBeLessThanOrEqual(1);
+    expect(snap.reflectionScore).toBeGreaterThanOrEqual(-1);
+  });
+
+  it("computed snapshot round-trips through JSON and passes isComparatorSnapshot", () => {
+    const rawRecords = [
+      rec("review", "2026-04-10T00:00:00Z"),
+      rec("trigger_log", "2026-04-11T00:00:00Z"),
+    ];
+    const snap = computeReflectionRegulationGap([], rawRecords, now);
+    const roundTripped = JSON.parse(JSON.stringify(snap));
+    expect(isComparatorSnapshot(roundTripped)).toBe(true);
+  });
+});
+
+// ---------- gateComparatorRender ----------
+
+describe("gateComparatorRender (4-state matrix)", () => {
+  it("(flag=false, qualifies=false) → false", () => {
+    expect(gateComparatorRender({ showComparator: false, qualifies: false })).toBe(
+      false,
+    );
+  });
+
+  it("(flag=false, qualifies=true) → false", () => {
+    expect(gateComparatorRender({ showComparator: false, qualifies: true })).toBe(
+      false,
+    );
+  });
+
+  it("(flag=true, qualifies=false) → false", () => {
+    expect(gateComparatorRender({ showComparator: true, qualifies: false })).toBe(
+      false,
+    );
+  });
+
+  it("(flag=true, qualifies=true) → true", () => {
+    expect(gateComparatorRender({ showComparator: true, qualifies: true })).toBe(
+      true,
+    );
+  });
+});
+
+// ---------- Multi-tag distinct-count regression ----------
+// Locks in the "one entry producing N tags counts as 1 distinct entry per
+// tag, not N" semantics. Prompt 1's getTopPattern already counts via
+// Set(source_raw_record_id); this test guards against a future refactor
+// that accidentally reintroduces row-level counting.
+
+describe("multi-tag distinct counting (getTopPattern regression)", () => {
+  it("single trigger entry with 3 tags → no tag reaches the 2-distinct-entry threshold", () => {
+    const sharedRawId = "shared-trigger-record";
+    const observations: PatternObservation[] = [
+      {
+        observation_tag: "escalated_after_trigger",
+        observed_at: "2026-04-15T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: sharedRawId,
+        record_type: "trigger_log",
+      },
+      {
+        observation_tag: "pushed_for_resolution_when_activated",
+        observed_at: "2026-04-15T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: sharedRawId,
+        record_type: "trigger_log",
+      },
+      {
+        observation_tag: "late_regulation_in_the_moment",
+        observed_at: "2026-04-15T00:00:00Z",
+        observation_source: "observed",
+        source_raw_record_id: sharedRawId,
+        record_type: "trigger_log",
+      },
+    ];
+    // emergingTagCount is 2. All 3 tags have distinctEntries = 1 (same raw
+    // record). Top pattern returns null.
+    expect(getTopPattern(observations)).toBeNull();
   });
 });

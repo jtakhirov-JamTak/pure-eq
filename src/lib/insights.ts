@@ -16,6 +16,11 @@ export interface TagCopy {
   eqImpact: string;
   tryInstead: string;
   direction: "positive" | "negative" | "neutral";
+  // Optional person-scoped re-voicing of the pattern line. When present,
+  // PersonPatternCard uses this verbatim; when absent, it falls back to
+  // prepending "With {name}, " + lowercased pattern. Authored only for the
+  // 4 tags that read most naturally in person-scoped form.
+  patternPerson?: string;
 }
 
 export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
@@ -23,29 +28,33 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
     pattern:
       "You tend to defend your intent before the other person has finished.",
     showsUpWhen:
-      "When a concern feels like an accusation of your motives rather than a reaction to the outcome.",
+      "a concern feels like an accusation of your motives rather than a reaction to the outcome.",
     eqImpact:
       "Others can feel they weren't actually heard — you responded to what you thought they'd say next.",
     tryInstead:
       "Let them finish. Then name what you heard before explaining what you meant.",
     direction: "negative",
+    patternPerson:
+      "With {name}, you tend to defend your intent before they've finished what they were saying.",
   },
   assumed_meaning_without_checking: {
     pattern:
       "You tend to fill in what someone means instead of checking with them.",
     showsUpWhen:
-      "When signals are ambiguous and a quick read feels safer than asking.",
+      "signals are ambiguous and a quick read feels safer than asking.",
     eqImpact:
       "Others can feel you're reacting to a version of them that isn't quite them.",
     tryInstead:
       "Ask a one-sentence check: \"When you said X, did you mean Y?\"",
     direction: "negative",
+    patternPerson:
+      "With {name}, you tend to fill in what they mean instead of checking with them.",
   },
   delayed_direct_ask: {
     pattern:
       "You tend to wait too long before asking directly for what you need.",
     showsUpWhen:
-      "When you're hoping the other person will notice what you need without being told.",
+      "you're hoping the other person will notice what you need without being told.",
     eqImpact:
       "Others can feel blindsided when the ask finally lands, or miss it entirely.",
     tryInstead:
@@ -55,17 +64,19 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
   withdrew_under_tension: {
     pattern: "You tend to pull back when a conversation heats up.",
     showsUpWhen:
-      "When a disagreement escalates faster than you can formulate a response.",
+      "a disagreement escalates faster than you can formulate a response.",
     eqImpact:
       "Others can read your silence as stonewalling, disapproval, or emotional shutdown.",
     tryInstead:
       "Name the pause out loud: \"I want to respond well — give me a minute.\"",
     direction: "negative",
+    patternPerson:
+      "With {name}, you tend to pull back when the conversation heats up instead of staying in it.",
   },
   over_explained_when_misunderstood: {
     pattern: "You tend to over-explain when you feel misunderstood.",
     showsUpWhen:
-      "When you sense the other person isn't tracking and your first instinct is to add more words.",
+      "you sense the other person isn't tracking and your first instinct is to add more words.",
     eqImpact:
       "Others can feel lectured or tune out — more words don't always land better.",
     tryInstead:
@@ -76,7 +87,7 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
     pattern:
       "You tend to move to solutions before the other person feels heard.",
     showsUpWhen:
-      "When the path forward feels obvious to you and sitting with the problem feels unproductive.",
+      "the path forward feels obvious to you and sitting with the problem feels unproductive.",
     eqImpact:
       "Others can feel their experience got skipped — solved rather than understood.",
     tryInstead:
@@ -87,7 +98,7 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
     pattern:
       "You tend to validate what the other person is feeling during hard moments.",
     showsUpWhen:
-      "When emotions are rising and the other person needs their experience acknowledged before anything else.",
+      "emotions are rising and the other person needs their experience acknowledged before anything else.",
     eqImpact:
       "Others can feel seen and less alone with what they're carrying.",
     tryInstead:
@@ -97,7 +108,7 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
   repair_attempt_helped: {
     pattern: "Your repair attempts tend to land and get received.",
     showsUpWhen:
-      "When you name what went wrong and take responsibility within the same move.",
+      "you name what went wrong and take responsibility within the same move.",
     eqImpact:
       "Others can let the moment go instead of carrying it forward.",
     tryInstead:
@@ -107,7 +118,7 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
   repair_attempt_missed_ownership: {
     pattern: "Your repair attempts tend to skip taking ownership.",
     showsUpWhen:
-      "When you explain the context or intent but don't name what you'd do differently.",
+      "you explain the context or intent but don't name what you'd do differently.",
     eqImpact:
       "Others can feel the repair was performed rather than meant — the unowned piece stays unresolved.",
     tryInstead:
@@ -118,18 +129,20 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
     pattern:
       "You tend to escalate after being triggered instead of pausing first.",
     showsUpWhen:
-      "When a strong reaction hits faster than your ability to choose how to respond.",
+      "a strong reaction hits faster than your ability to choose how to respond.",
     eqImpact:
       "Others can feel the volume jump and stop tracking the point underneath it.",
     tryInstead:
       "Name the trigger out loud: \"I'm activated — give me a minute before I respond.\"",
     direction: "negative",
+    patternPerson:
+      "With {name}, you tend to escalate once you're activated instead of pausing to reset first.",
   },
   recurring_trigger_criticism: {
     pattern:
       "Criticism is a recurring trigger that activates a strong reaction for you.",
     showsUpWhen:
-      "When feedback lands as a judgment of who you are rather than what you did.",
+      "feedback lands as a judgment of who you are rather than what you did.",
     eqImpact:
       "Others can feel they're walking a minefield when offering honest feedback.",
     tryInstead:
@@ -140,7 +153,7 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
     pattern:
       "Pressure is a recurring trigger that activates a strong reaction for you.",
     showsUpWhen:
-      "When stakes or timelines tighten and you feel cornered or rushed.",
+      "stakes or timelines tighten and you feel cornered or rushed.",
     eqImpact:
       "Others can feel their urgency is landing as an attack rather than a request.",
     tryInstead:
@@ -151,11 +164,44 @@ export const OBSERVATION_TAG_COPY: Record<ObservationTag, TagCopy> = {
     pattern:
       "You tend to prepare a plan but not follow through with it when the conversation starts.",
     showsUpWhen:
-      "When the moment arrives and the prepared plan feels wrong or too stiff for the real conversation.",
+      "the moment arrives and the prepared plan feels wrong or too stiff for the real conversation.",
     eqImpact:
       "You lose the benefit of your own preparation — the conversation drifts back to default patterns.",
     tryInstead:
       "Read your one-liner opening verbatim. Once the first sentence is out, the rest comes easier.",
+    direction: "negative",
+  },
+  jumped_to_conclusion_under_ambiguity: {
+    pattern:
+      "You tend to conclude what the other person meant before you've actually checked it.",
+    showsUpWhen:
+      "a signal is ambiguous and a quick interpretation feels faster than asking.",
+    eqImpact:
+      "Others can feel you're reacting to a story you already wrote, not the thing they said.",
+    tryInstead:
+      "Check the interpretation first: \"I heard X — was that what you meant?\"",
+    direction: "negative",
+  },
+  pushed_for_resolution_when_activated: {
+    pattern:
+      "You tend to push for the conversation to end when you're already activated.",
+    showsUpWhen:
+      "pressure is rising and staying with the uncertainty feels harder than forcing a decision.",
+    eqImpact:
+      "Others can feel cornered into an answer they didn't fully mean — the decision doesn't hold after.",
+    tryInstead:
+      "Name that you're activated and ask to return to it: \"I'm too activated to land this well — can we come back in 20?\"",
+    direction: "negative",
+  },
+  late_regulation_in_the_moment: {
+    pattern:
+      "You tend to understand the state you were in only after the moment is over.",
+    showsUpWhen:
+      "the emotion rises faster than you can interrupt it — the pause only lands in the replay.",
+    eqImpact:
+      "Others experience the unregulated version of you; the repair shows up later but the impact already landed.",
+    tryInstead:
+      "Catch the body state first: tight chest, clenched jaw, quick breath. Name it out loud before you respond.",
     direction: "negative",
   },
 };
@@ -184,6 +230,9 @@ export const OBSERVATION_TYPE_FOR_TAG: Record<ObservationTag, ObservationType> =
   recurring_trigger_criticism: "trigger_pattern",
   recurring_trigger_pressure: "trigger_pattern",
   prepare_plan_not_used: "outcome_linked_behavior",
+  jumped_to_conclusion_under_ambiguity: "communication_move",
+  pushed_for_resolution_when_activated: "stress_response",
+  late_regulation_in_the_moment: "stress_response",
 };
 
 // ---------- Insight Thresholds ----------
@@ -712,17 +761,27 @@ function topFromMap(
 }
 
 // ---------- Trigger Heuristic Extractor ----------
-// Maps structured trigger entry fields to observation tags without an AI call.
-// Returns null for ambiguous cases — "no weak/fake insight" rule.
+// Maps structured trigger entry fields to a set of observation tags without an
+// AI call. Multiple rules can fire on the same input — one entry can produce
+// several tags. Idempotency is enforced by the DB unique index on
+// (user_id, source_raw_record_id, observation_tag), so emitting the same tag
+// twice is a no-op at the DB layer.
 
 const CRITICISM_KEYWORDS = [
   "criticized", "criticism", "judged", "blamed", "attacked", "called out",
   "put down", "mocked", "ridiculed", "belittled",
 ];
 
+// Intentional omissions:
+// - "overwhelmed" — the Overwhelmed tool's central word; users describing
+//   their internal state will say it on most entries, false-positiving every
+//   submission as a pressure trigger and polluting top-pattern aggregation.
+// - "had to" — too generic ("I had to take a walk", "She said I had to").
+//   Re-add only if a more scoped phrase pattern (e.g. "had to <verb>") is
+//   implemented.
 const PRESSURE_KEYWORDS = [
-  "pressure", "deadline", "demanded", "rushed", "forced", "overwhelmed",
-  "cornered", "ultimatum", "no choice", "had to",
+  "pressure", "deadline", "demanded", "rushed", "forced",
+  "cornered", "ultimatum", "no choice",
 ];
 
 export function inferTriggerPatternTag(input: {
@@ -730,64 +789,333 @@ export function inferTriggerPatternTag(input: {
   urgeIntensity: number;
   emotion: string;
   trigger: string;
-}): ObservationTag | null {
+  // Absent / null / empty string is a clean signal for
+  // late_regulation_in_the_moment at emotion >= 6. A short non-empty strategy
+  // ("calm down") is not — length-based inference would false-positive.
+  regulationStrategy?: string | null;
+}): ObservationTag[] {
+  const tags: ObservationTag[] = [];
+  const triggerLower = input.trigger.toLowerCase();
+  const hasPressureKeyword = PRESSURE_KEYWORDS.some((k) => triggerLower.includes(k));
+  const hasCriticismKeyword = CRITICISM_KEYWORDS.some((k) => triggerLower.includes(k));
+
   // High emotion + high urge = escalation pattern
   if (input.emotionIntensity >= 7 && input.urgeIntensity >= 7) {
-    return "escalated_after_trigger";
+    tags.push("escalated_after_trigger");
   }
 
   // High emotion but controlled urge = withdrawal under tension
   if (input.emotionIntensity >= 7 && input.urgeIntensity <= 4) {
-    return "withdrew_under_tension";
+    tags.push("withdrew_under_tension");
   }
 
-  // Check for criticism/pressure keywords in the trigger text
-  const triggerLower = input.trigger.toLowerCase();
-
-  if (CRITICISM_KEYWORDS.some((k) => triggerLower.includes(k))) {
-    return "recurring_trigger_criticism";
+  // Pressure keyword + high urge = pushed for resolution while activated
+  if (hasPressureKeyword && input.urgeIntensity >= 6) {
+    tags.push("pushed_for_resolution_when_activated");
   }
 
-  if (PRESSURE_KEYWORDS.some((k) => triggerLower.includes(k))) {
-    return "recurring_trigger_pressure";
+  // emotion >= 6 AND regulation strategy is truly absent (not short).
+  const rs = input.regulationStrategy;
+  const strategyAbsent =
+    rs === undefined || rs === null || (typeof rs === "string" && rs.trim() === "");
+  if (input.emotionIntensity >= 6 && strategyAbsent) {
+    tags.push("late_regulation_in_the_moment");
   }
 
-  // Ambiguous: can't confidently assign a tag. Skip observation entirely.
-  return null;
+  if (hasCriticismKeyword) tags.push("recurring_trigger_criticism");
+  if (hasPressureKeyword) tags.push("recurring_trigger_pressure");
+
+  return tags;
 }
 
 // ---------- Overwhelmed Heuristic Extractor ----------
-// Maps structured overwhelmed entry fields to observation tags.
-// Weaker signal than trigger_log (coarser 1-5 scale vs 1-10).
-// Returns null for ambiguous cases — "silence over garbage."
+// Multi-tag variant. Coarser 1-5 scale vs 1-10 on trigger_log, so the only
+// rules that qualify are keyword-driven plus the escalation case.
+// Intentionally does NOT include late_regulation_in_the_moment — a slow
+// recovery on the 1-5 scale would false-positive as "late regulation" even
+// when the user regulated successfully, just slowly.
 
 export function inferOverwhelmedPatternTag(input: {
   beforeRating: number; // 1-5 overwhelm level before regulation
   afterRating: number; // 1-5 overwhelm level after regulation
   feelingLabel: string; // free text "I feel X because Y"
-}): ObservationTag | null {
+}): ObservationTag[] {
   // Only extract from meaningful overwhelm (3+ on 1-5 scale).
   // Low-overwhelm entries with keyword matches are noise, not pattern.
-  if (input.beforeRating < 3) return null;
+  if (input.beforeRating < 3) return [];
 
-  // Check feeling text for trigger pattern keywords FIRST.
-  // A user who writes "I was criticized" at intensity 5 should get
-  // recurring_trigger_criticism, not escalated_after_trigger.
+  const tags: ObservationTag[] = [];
   const feelingLower = input.feelingLabel.toLowerCase();
 
   if (CRITICISM_KEYWORDS.some((k) => feelingLower.includes(k))) {
-    return "recurring_trigger_criticism";
+    tags.push("recurring_trigger_criticism");
   }
-
   if (PRESSURE_KEYWORDS.some((k) => feelingLower.includes(k))) {
-    return "recurring_trigger_pressure";
+    tags.push("recurring_trigger_pressure");
   }
 
-  // High overwhelm that didn't improve = stuck in high arousal
+  // High overwhelm that didn't improve = stuck in high arousal.
+  // Fires alongside keyword tags — "criticized by boss + stuck high" should
+  // surface both so either pattern can qualify for the top-pattern aggregation.
   if (input.beforeRating >= 4 && input.afterRating >= input.beforeRating - 1) {
-    return "escalated_after_trigger";
+    tags.push("escalated_after_trigger");
   }
 
-  // Ambiguous or effective regulation: skip observation entirely.
-  return null;
+  return tags;
+}
+
+// ---------- Reflection > Regulation Comparator ----------
+// Written to derived_insights as insight_type = "reflection_regulation_gap".
+// Surfaces users whose Review entries show they understand interactions well
+// on the replay, but whose trigger_log / overwhelmed entries show they don't
+// regulate well in the moment. The value add is naming the gap, not scoring it.
+// Render gated behind user_feature_flags.show_comparator until the 0.35
+// threshold has been validated against real data.
+
+export const COMPARATOR_COPY: TagCopy = {
+  pattern: "You understand better on the replay than in the live moment.",
+  showsUpWhen: "Emotions rise faster than you interrupt them.",
+  eqImpact: "You often see the pattern after the impact is already done.",
+  tryInstead: "Catch the body state earlier and pause there first.",
+  direction: "negative",
+};
+
+// Tag sets that drive the comparator math. Kept as constants so tests and
+// callers can introspect without importing the whole compute function.
+const REFLECTION_POSITIVE_TAGS: ObservationTag[] = [
+  "validation_present",
+  "repair_attempt_helped",
+];
+const REFLECTION_NEGATIVE_TAGS: ObservationTag[] = [
+  "repair_attempt_missed_ownership",
+];
+const REGULATION_NEGATIVE_TAGS: ObservationTag[] = [
+  "escalated_after_trigger",
+  "late_regulation_in_the_moment",
+];
+const REACTIVE_RECORD_TYPES = new Set(["trigger_log", "overwhelmed"]);
+
+export interface ComparatorSnapshot {
+  reflectionScore: number;
+  regulationScore: number;
+  gap: number;
+  reviewCount: number;
+  reactiveCount: number;
+  distinctDays: number;
+  qualifies: boolean;
+  // null when prior window lacked enough entries to compute a gap. When
+  // non-null, both prior and current are numeric gap values and verdict
+  // derives from their delta.
+  evolution: {
+    priorGap: number | null;
+    currentGap: number;
+    verdict: PatternVerdict;
+  } | null;
+  // Which supporting tags contributed to the score this period. Stable order
+  // (positive reflection, negative reflection, negative regulation) so repeat
+  // writes produce the same supporting_pattern_ids array.
+  contributingTags: ObservationTag[];
+}
+
+function clamp(n: number, lo: number, hi: number): number {
+  if (Number.isNaN(n)) return lo;
+  return Math.max(lo, Math.min(hi, n));
+}
+
+interface GapMath {
+  reflectionScore: number;
+  regulationScore: number;
+  gap: number;
+  reviewCount: number;
+  reactiveCount: number;
+  contributingTags: ObservationTag[];
+}
+
+function computeGapForWindow(
+  observations: PatternObservation[],
+  rawRecords: Array<{ record_type: string; created_at: string | null }>,
+): GapMath {
+  const reviewCount = rawRecords.filter((r) => r.record_type === "review").length;
+  const reactiveCount = rawRecords.filter((r) =>
+    REACTIVE_RECORD_TYPES.has(r.record_type),
+  ).length;
+
+  let reflectionPositive = 0;
+  let reflectionNegative = 0;
+  let regulationNegative = 0;
+  const contributing = new Set<ObservationTag>();
+
+  for (const o of observations) {
+    if (o.observation_source !== "observed") continue;
+    const tag = o.observation_tag as ObservationTag;
+    if (
+      o.record_type === "review" &&
+      REFLECTION_POSITIVE_TAGS.includes(tag)
+    ) {
+      reflectionPositive++;
+      contributing.add(tag);
+    } else if (
+      o.record_type === "review" &&
+      REFLECTION_NEGATIVE_TAGS.includes(tag)
+    ) {
+      reflectionNegative++;
+      contributing.add(tag);
+    } else if (
+      o.record_type &&
+      REACTIVE_RECORD_TYPES.has(o.record_type) &&
+      REGULATION_NEGATIVE_TAGS.includes(tag)
+    ) {
+      regulationNegative++;
+      contributing.add(tag);
+    }
+  }
+
+  // max(1, denom) guards division and clamps [-1,1] handles the edge where
+  // every review fires both positive AND negative observations (sum > count).
+  const reflectionScore = clamp(
+    (reflectionPositive - reflectionNegative) / Math.max(1, reviewCount),
+    -1,
+    1,
+  );
+  const regulationScore = 1 - regulationNegative / Math.max(1, reactiveCount);
+  const gap = reflectionScore - regulationScore;
+
+  const contributingTags: ObservationTag[] = [
+    ...REFLECTION_POSITIVE_TAGS.filter((t) => contributing.has(t)),
+    ...REFLECTION_NEGATIVE_TAGS.filter((t) => contributing.has(t)),
+    ...REGULATION_NEGATIVE_TAGS.filter((t) => contributing.has(t)),
+  ];
+
+  return {
+    reflectionScore,
+    regulationScore,
+    gap,
+    reviewCount,
+    reactiveCount,
+    contributingTags,
+  };
+}
+
+function verdictFromGapDelta(prior: number | null, current: number): PatternVerdict {
+  if (prior === null) return "new";
+  const delta = current - prior;
+  if (Math.abs(delta) < 0.15) return "steady";
+  // Gap widening (current > prior) is bad for a negative-direction metric.
+  return delta > 0 ? "increasing" : "decreasing";
+}
+
+export function computeReflectionRegulationGap(
+  observations: PatternObservation[],
+  rawRecords: Array<{ record_type: string; created_at: string | null }>,
+  now: Date,
+): ComparatorSnapshot {
+  const nowMs = now.getTime();
+  const currentCutoff = nowMs - FOURTEEN_DAYS_MS;
+  const priorCutoff = nowMs - 2 * FOURTEEN_DAYS_MS;
+
+  // All-time computation.
+  const allTime = computeGapForWindow(observations, rawRecords);
+
+  // distinctDays across qualifying entries (review + reactive only).
+  const qualifyingRecords = rawRecords.filter(
+    (r) => r.record_type === "review" || REACTIVE_RECORD_TYPES.has(r.record_type),
+  );
+  const distinctDays = new Set(
+    qualifyingRecords
+      .filter((r) => r.created_at)
+      .map((r) => r.created_at!.slice(0, 10)),
+  ).size;
+
+  const qualifies =
+    allTime.reviewCount >= 3 &&
+    allTime.reactiveCount >= 3 &&
+    allTime.gap >= 0.35 &&
+    distinctDays >= 4;
+
+  // Evolution: compute gap for the current 14d window + prior 14d window.
+  // A window's gap is only meaningful when it has at least 1 review + 1
+  // reactive entry — otherwise the score reverts to the max(1,denom) guard
+  // and renders a misleading gap. Return null for such windows.
+  const windowFilter = (lo: number, hi: number) => {
+    const obsFiltered = observations.filter((o) => {
+      const ts = new Date(o.observed_at).getTime();
+      return ts >= lo && ts < hi;
+    });
+    const recFiltered = rawRecords.filter((r) => {
+      if (!r.created_at) return false;
+      const ts = new Date(r.created_at).getTime();
+      return ts >= lo && ts < hi;
+    });
+    return { obsFiltered, recFiltered };
+  };
+
+  const currentSlice = windowFilter(currentCutoff, nowMs + 1);
+  const priorSlice = windowFilter(priorCutoff, currentCutoff);
+
+  const currentMath = computeGapForWindow(
+    currentSlice.obsFiltered,
+    currentSlice.recFiltered,
+  );
+  const priorMath = computeGapForWindow(
+    priorSlice.obsFiltered,
+    priorSlice.recFiltered,
+  );
+
+  const currentValid =
+    currentMath.reviewCount >= 1 && currentMath.reactiveCount >= 1;
+  const priorValid = priorMath.reviewCount >= 1 && priorMath.reactiveCount >= 1;
+
+  const evolution = currentValid
+    ? {
+        priorGap: priorValid ? priorMath.gap : null,
+        currentGap: currentMath.gap,
+        verdict: verdictFromGapDelta(
+          priorValid ? priorMath.gap : null,
+          currentMath.gap,
+        ),
+      }
+    : null;
+
+  return {
+    reflectionScore: allTime.reflectionScore,
+    regulationScore: allTime.regulationScore,
+    gap: allTime.gap,
+    reviewCount: allTime.reviewCount,
+    reactiveCount: allTime.reactiveCount,
+    distinctDays,
+    qualifies,
+    evolution,
+    contributingTags: allTime.contributingTags,
+  };
+}
+
+export function isComparatorSnapshot(value: unknown): value is ComparatorSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const v = value as Record<string, unknown>;
+  if (typeof v.reflectionScore !== "number") return false;
+  if (typeof v.regulationScore !== "number") return false;
+  if (typeof v.gap !== "number") return false;
+  if (typeof v.reviewCount !== "number") return false;
+  if (typeof v.reactiveCount !== "number") return false;
+  if (typeof v.distinctDays !== "number") return false;
+  if (typeof v.qualifies !== "boolean") return false;
+  if (!Array.isArray(v.contributingTags)) return false;
+  if (v.evolution !== null) {
+    if (!v.evolution || typeof v.evolution !== "object") return false;
+    const ev = v.evolution as Record<string, unknown>;
+    if (typeof ev.currentGap !== "number") return false;
+    if (ev.priorGap !== null && typeof ev.priorGap !== "number") return false;
+    if (typeof ev.verdict !== "string") return false;
+  }
+  return true;
+}
+
+// Gating for comparator render. Extracted so the 4-state matrix
+// (flag × qualifies) can be unit-tested at the compute layer without
+// page-render infra.
+export function gateComparatorRender(params: {
+  showComparator: boolean;
+  qualifies: boolean;
+}): boolean {
+  return params.showComparator === true && params.qualifies === true;
 }

@@ -156,6 +156,9 @@ export const OBSERVATION_TAGS = [
   "recurring_trigger_criticism",
   "recurring_trigger_pressure",
   "prepare_plan_not_used",
+  "jumped_to_conclusion_under_ambiguity",
+  "pushed_for_resolution_when_activated",
+  "late_regulation_in_the_moment",
 ] as const;
 
 export type ObservationTag = (typeof OBSERVATION_TAGS)[number];

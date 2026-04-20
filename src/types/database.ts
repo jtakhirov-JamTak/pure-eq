@@ -828,6 +828,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_feature_flags: {
+        Row: {
+          user_id: string
+          show_comparator: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          show_comparator?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          show_comparator?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

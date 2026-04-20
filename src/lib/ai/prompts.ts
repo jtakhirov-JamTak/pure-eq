@@ -166,8 +166,13 @@ OUTPUT SCHEMA (JSON object):
 {
   "how_user_likely_came_across": "string, max 300 chars — a SPECIFIC, behavior-level read of how the user likely came across in the moment, NOT a category label",
   "alternative_explanation": "string, max 300 chars — a CONCRETE alternative read of what was going on for the other person, NOT a one-word emotion label",
-  "pattern_tag": "one of: defended_intent_early, assumed_meaning_without_checking, delayed_direct_ask, withdrew_under_tension, over_explained_when_misunderstood, moved_to_solution_too_fast, validation_present, repair_attempt_helped, repair_attempt_missed_ownership, escalated_after_trigger, recurring_trigger_criticism, recurring_trigger_pressure, prepare_plan_not_used"
+  "pattern_tag": "one of: defended_intent_early, assumed_meaning_without_checking, delayed_direct_ask, withdrew_under_tension, over_explained_when_misunderstood, moved_to_solution_too_fast, validation_present, repair_attempt_helped, repair_attempt_missed_ownership, escalated_after_trigger, recurring_trigger_criticism, recurring_trigger_pressure, prepare_plan_not_used, jumped_to_conclusion_under_ambiguity"
 }
+
+PATTERN TAG GUIDANCE:
+- Pick exactly ONE tag that best matches the primary pattern in this entry.
+- Use jumped_to_conclusion_under_ambiguity when the user describes concluding something about the other person's motive, feeling, or meaning WITHOUT having checked it first (e.g., "I assumed they were upset because..." with no evidence of asking).
+- assumed_meaning_without_checking is closely related but fires on filling in specific words/meanings; jumped_to_conclusion_under_ambiguity fires on broader inferences about state or intent.
 
 alternative_explanation MUST be a concrete, behaviorally-grounded alternative read the user can actually consider.
 REJECT one-word category labels. Bad examples (do NOT produce these):

@@ -1,6 +1,7 @@
 // Pure EQ domain — replace in fork.
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { createTriggerSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
@@ -15,6 +16,12 @@ import {
 import { regenerateInsights } from "@/lib/insights-writer";
 
 export const runtime = "nodejs";
+
+// Cooldown latch on observation upsert error captures. Matches the pattern in
+// rate-limit.ts and insights-writer.ts: a recurring DB-layer failure (RLS
+// drift, schema drift) would burn the Sentry quota before anyone notices.
+const OBS_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastObsCaptureAt = 0;
 
 const requestSchema = createTriggerSchema.extend({
   idempotencyKey: z.string().uuid(),
@@ -199,29 +206,30 @@ export async function POST(req: Request) {
     }
   }
 
-  // 6. Extract pattern observation (fire-and-forget, heuristic).
+  // 6. Extract pattern observations (fire-and-forget, heuristic, multi-tag).
   // No AI call — map from structured intensity fields and keywords.
-  // Returns null for ambiguous cases (skip observation entirely).
+  // Idempotency via DB unique index on (user_id, source_raw_record_id,
+  // observation_tag). All N rows share the same source_raw_record_id;
+  // distinct-count-by-source-raw-record-id keeps Pattern Card counts correct.
   try {
-    const tag = inferTriggerPatternTag({
+    const tags = inferTriggerPatternTag({
       emotionIntensity: input.emotionIntensity,
       urgeIntensity: input.urgeIntensity,
       emotion: input.emotion,
       trigger: input.trigger,
+      // regulation strategy in the Trigger Log flow isn't a dedicated
+      // field — `reflection` is the closest proxy (what the user wrote
+      // about the moment after it passed). If blank, the
+      // late_regulation_in_the_moment rule fires when emotion >= 6.
+      regulationStrategy: input.reflection,
     });
 
-    if (tag) {
-      const tagDesc = OBSERVATION_TAG_COPY[tag];
-      if (tagDesc) {
-        const { data: existingObs } = await supabase
-          .from("pattern_observations")
-          .select("pattern_observation_id")
-          .eq("user_id", user.id)
-          .eq("source_raw_record_id", rawRecordId)
-          .maybeSingle();
-
-        if (!existingObs) {
-          await supabase.from("pattern_observations").insert({
+    if (tags.length > 0) {
+      const rows = tags
+        .map((tag) => {
+          const tagDesc = OBSERVATION_TAG_COPY[tag];
+          if (!tagDesc) return null;
+          return {
             user_id: user.id,
             source_raw_record_id: rawRecordId,
             source_interaction_entry_id: null,
@@ -232,13 +240,36 @@ export async function POST(req: Request) {
             direction: tagDesc.direction,
             confidence_score: 0.6, // Heuristic, not AI-assigned
             observation_source: "observed",
-            extractor_version: "trigger_v1",
+            extractor_version: "trigger_v2",
             supporting_evidence_json: {
               emotion_intensity: input.emotionIntensity,
               urge_intensity: input.urgeIntensity,
               emotion: input.emotion,
             },
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      if (rows.length > 0) {
+        const { error: obsErr } = await supabase
+          .from("pattern_observations")
+          .upsert(rows, {
+            onConflict: "user_id,source_raw_record_id,observation_tag",
+            ignoreDuplicates: true,
           });
+        if (obsErr) {
+          // Supabase JS does NOT throw on PostgREST errors — the wrapping
+          // try/catch only catches thrown exceptions. Inspect .error explicitly
+          // and capture, otherwise an RLS/schema drift silently stops all
+          // observation writes.
+          console.error("triggered: pattern observation upsert failed", obsErr.code);
+          const now = Date.now();
+          if (now - lastObsCaptureAt >= OBS_CAPTURE_COOLDOWN_MS) {
+            lastObsCaptureAt = now;
+            Sentry.captureException(new Error("observation_upsert_failed"), {
+              tags: { area: "tools", kind: "observation_upsert", route: "triggered" },
+            });
+          }
         }
       }
     }

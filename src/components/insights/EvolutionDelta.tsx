@@ -53,13 +53,19 @@ export function EvolutionDelta({
     );
   }
 
+  // Float inputs (e.g. ComparatorCard's gap values) need formatting; integer
+  // inputs (PatternCard's counts) render as-is. Detecting at render time keeps
+  // both call sites simple.
+  const fmt = (n: number): string =>
+    Number.isInteger(n) ? String(n) : n.toFixed(2);
+
   if (verdict === "increasing") {
     return (
       <span
         className={`inline-flex items-center gap-1 text-xs ${style.evolutionUpColor}`}
       >
         <ArrowUp className="h-3 w-3" />
-        {priorCount} → {currentCount}
+        {fmt(priorCount)} → {fmt(currentCount)}
       </span>
     );
   }
@@ -70,7 +76,7 @@ export function EvolutionDelta({
       className={`inline-flex items-center gap-1 text-xs ${style.evolutionDownColor}`}
     >
       <ArrowDown className="h-3 w-3" />
-      {priorCount} → {currentCount}
+      {fmt(priorCount)} → {fmt(currentCount)}
     </span>
   );
 }

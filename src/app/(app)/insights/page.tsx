@@ -9,12 +9,16 @@ import {
 import {
   checkInsightThresholds,
   computePatternSnapshot,
+  computeReflectionRegulationGap,
   enrichObservations,
+  gateComparatorRender,
   getPatternEvolution,
   getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
+  isComparatorSnapshot,
   isPatternSnapshot,
   OBSERVATION_TAG_COPY,
+  type ComparatorSnapshot,
   type PatternSnapshot,
 } from "@/lib/insights";
 import { GENERATOR_VERSION } from "@/lib/insights-writer";
@@ -22,6 +26,8 @@ import type { ObservationTag, ProfileType } from "@/types";
 import { PatternCard } from "@/components/insights/PatternCard";
 import { PeriodSummaryRow } from "@/components/insights/PeriodSummaryRow";
 import { ProfileCardCollapsed } from "@/components/insights/ProfileCardCollapsed";
+import { ComparatorCard } from "@/components/insights/ComparatorCard";
+import { PersonPatternCard } from "@/components/insights/PersonPatternCard";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000;
@@ -35,7 +41,7 @@ export default async function InsightsPage() {
 
   // 1. Fetch cache + all live inputs. Period summary always lives so we need
   // raw_records + observations regardless of cache state.
-  const [cachedRes, profile, rawRecordsRes, observationsRes, personsRes] =
+  const [cachedRes, profile, rawRecordsRes, observationsRes, personsRes, flagRes] =
     await Promise.all([
       supabase
         .from("derived_insights")
@@ -65,12 +71,20 @@ export default async function InsightsPage() {
         .eq("user_id", user.id)
         .eq("is_active", true)
         .limit(100),
+      // Feature flag row for this user. Missing row = false (default).
+      // RLS policy allows user to SELECT own row; writes are service-role only.
+      supabase
+        .from("user_feature_flags")
+        .select("show_comparator")
+        .eq("user_id", user.id)
+        .maybeSingle(),
     ]);
 
   const cachedInsights = cachedRes.data ?? [];
   const rawRecords = rawRecordsRes.data ?? [];
   const rawObservations = observationsRes.data ?? [];
   const persons = personsRes.data ?? [];
+  const showComparator = flagRes.data?.show_comparator === true;
 
   const personNameMap = new Map(
     persons.map((p) => [p.person_id, p.display_name]),
@@ -139,15 +153,64 @@ export default async function InsightsPage() {
     }
   }
 
-  // 5. Person patterns (cache or live). Spec 1 keeps existing shape — the
-  // card gets a pill strip only; data pipeline unchanged.
+  // 4b. Comparator snapshot (Reflection > Regulation gap). Compute runs for
+  // all users; render is gated by user_feature_flags.show_comparator (below).
+  // Cache-first with the same two-layer guard as top_pattern:
+  //   (a) generator_version match, (b) isComparatorSnapshot shape check.
+  // Fall through to live compute on any mismatch.
+  //
+  // Cache-fresh + no gap row = the writer just decided this user doesn't
+  // qualify; trust it and skip recompute (saves CPU on every page load for
+  // the majority of users who won't qualify).
+  let comparator: ComparatorSnapshot | null = null;
+  if (cacheIsFresh) {
+    const gapRow = cachedInsights.find(
+      (r) => r.insight_type === "reflection_regulation_gap",
+    );
+    if (gapRow) {
+      const versionOk = gapRow.generator_version === GENERATOR_VERSION;
+      if (versionOk && isComparatorSnapshot(gapRow.metadata_json)) {
+        comparator = gapRow.metadata_json;
+      } else {
+        comparator = computeReflectionRegulationGap(
+          observations,
+          rawRecords.map((r) => ({
+            record_type: r.record_type,
+            created_at: r.created_at,
+          })),
+          nowDate,
+        );
+      }
+    }
+    // else: writer's authoritative — non-qualifying user, no recompute.
+  } else {
+    comparator = computeReflectionRegulationGap(
+      observations,
+      rawRecords.map((r) => ({
+        record_type: r.record_type,
+        created_at: r.created_at,
+      })),
+      nowDate,
+    );
+  }
+  const renderComparator =
+    comparator !== null &&
+    gateComparatorRender({
+      showComparator,
+      qualifies: comparator.qualifies,
+    });
+
+  // 5. Person patterns (cache or live). Spec 2 renders via PersonPatternCard
+  // using TagCopy lookups — distinctEntries + distinctDays piped through so
+  // the card can render its proof line directly.
   type PersonPatternDisplay = {
     personId: string;
     displayName: string;
     topNegative: { tag: ObservationTag; summary: string; count: number } | null;
     topPositive: { tag: ObservationTag; summary: string; count: number } | null;
     confidenceLevel: "emerging" | "established";
-    freshnessLabel: string;
+    distinctEntries: number;
+    distinctDays: number;
   };
 
   let personPatterns: PersonPatternDisplay[] = [];
@@ -190,7 +253,8 @@ export default async function InsightsPage() {
               }
             : null,
         confidenceLevel: row.confidence_level as "emerging" | "established",
-        freshnessLabel: `${entries} ${entries === 1 ? "entry" : "entries"} across ${days} ${days === 1 ? "day" : "days"}.`,
+        distinctEntries: entries,
+        distinctDays: days,
       });
     }
   } else {
@@ -239,15 +303,18 @@ export default async function InsightsPage() {
     );
 
     const liveResults = getPersonPatterns(personObservations, finalPersonStats);
-    personPatterns = liveResults.map((pp) => ({
-      personId: pp.personId,
-      displayName:
-        finalPersonStats.get(pp.personId)?.displayName ?? "Someone",
-      topNegative: pp.topNegative,
-      topPositive: pp.topPositive,
-      confidenceLevel: pp.confidenceLevel,
-      freshnessLabel: pp.freshnessLabel,
-    }));
+    personPatterns = liveResults.map((pp) => {
+      const stats = finalPersonStats.get(pp.personId);
+      return {
+        personId: pp.personId,
+        displayName: stats?.displayName ?? "Someone",
+        topNegative: pp.topNegative,
+        topPositive: pp.topPositive,
+        confidenceLevel: pp.confidenceLevel,
+        distinctEntries: stats?.totalEntries ?? pp.entryCount,
+        distinctDays: stats?.distinctDays ?? 0,
+      };
+    });
   }
 
   // 6. Period summary (always live).
@@ -350,19 +417,44 @@ export default async function InsightsPage() {
         </div>
       )}
 
-      {/* Per-person patterns (Spec 1: pill stripped, otherwise unchanged) */}
+      {/* Reflection > Regulation comparator (flag-gated). Compute already
+          persisted for qualifying users regardless of flag; this surface is
+          the render-side gate. renderComparator implies comparator !== null. */}
+      {renderComparator ? (
+        <ComparatorCard
+          reflectionScore={comparator!.reflectionScore}
+          regulationScore={comparator!.regulationScore}
+          reviewCount={comparator!.reviewCount}
+          reactiveCount={comparator!.reactiveCount}
+          distinctDays={comparator!.distinctDays}
+          evolution={comparator!.evolution}
+        />
+      ) : null}
+
+      {/* Per-person patterns (Spec 2: refreshed to 5-field visual language) */}
       {personPatterns.length > 0 ? (
         <div className="mt-4 space-y-3">
           <p className="text-sm font-medium text-zinc-700">
             People &amp; Relationships
           </p>
-          {personPatterns.map((pp) => (
-            <PersonPatternCard
-              key={pp.personId}
-              result={pp}
-              displayName={pp.displayName}
-            />
-          ))}
+          {personPatterns.map((pp) => {
+            const negCopy = pp.topNegative
+              ? OBSERVATION_TAG_COPY[pp.topNegative.tag] ?? null
+              : null;
+            const posCopy = pp.topPositive
+              ? OBSERVATION_TAG_COPY[pp.topPositive.tag] ?? null
+              : null;
+            return (
+              <PersonPatternCard
+                key={pp.personId}
+                displayName={pp.displayName}
+                copy={negCopy}
+                positiveCopy={posCopy}
+                distinctEntries={pp.distinctEntries}
+                distinctDays={pp.distinctDays}
+              />
+            );
+          })}
         </div>
       ) : thresholdResult.state === "threshold_met" ? (
         <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
@@ -398,48 +490,3 @@ export default async function InsightsPage() {
   );
 }
 
-// ---------- Person Pattern Card (pill stripped per Spec 1) ----------
-// Full refresh to the new visual language lives in Spec 2. Border no longer
-// encodes confidenceLevel — the pill carried that semantic and both are gone
-// together. Pre-existing "However, you also" phrasing patched to avoid the
-// "you also you tend to..." double-you when positive summary starts with
-// "You tend to".
-
-function PersonPatternCard({
-  result,
-  displayName,
-}: {
-  result: {
-    topNegative: { summary: string; count: number } | null;
-    topPositive: { summary: string } | null;
-    freshnessLabel: string;
-  };
-  displayName: string;
-}) {
-  return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-5">
-      <p className="text-sm font-medium text-zinc-700">With {displayName}</p>
-
-      {result.topNegative && (
-        <p className="mt-2 text-sm text-zinc-800">
-          {result.topNegative.summary}
-        </p>
-      )}
-
-      {result.topPositive && (
-        <p className="mt-2 text-sm text-zinc-600">
-          {result.topNegative
-            ? `At the same time, ${lowercaseFirst(result.topPositive.summary)}`
-            : result.topPositive.summary}
-        </p>
-      )}
-
-      <p className="mt-3 text-xs text-zinc-600">{result.freshnessLabel}</p>
-    </div>
-  );
-}
-
-function lowercaseFirst(s: string): string {
-  if (s.length === 0) return s;
-  return s.charAt(0).toLowerCase() + s.slice(1);
-}

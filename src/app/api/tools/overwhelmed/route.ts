@@ -1,6 +1,7 @@
 // Pure EQ domain — replace in fork.
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { createOverwhelmedSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
@@ -13,9 +14,13 @@ import {
   OBSERVATION_TYPE_FOR_TAG,
 } from "@/lib/insights";
 import { regenerateInsights } from "@/lib/insights-writer";
-import type { ObservationTag } from "@/types";
 
 export const runtime = "nodejs";
+
+// Cooldown latch on observation upsert error captures. Same pattern as the
+// triggered route — see comment there for rationale.
+const OBS_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastObsCaptureAt = 0;
 
 const requestSchema = createOverwhelmedSchema.extend({
   idempotencyKey: z.string().uuid(),
@@ -191,42 +196,56 @@ export async function POST(req: Request) {
     }
   }
 
-  // 6. Extract pattern observation (fire-and-forget, heuristic).
+  // 6. Extract pattern observations (fire-and-forget, heuristic, multi-tag).
+  // Same DB-enforced idempotency pattern as the trigger route.
   try {
-    const tag = inferOverwhelmedPatternTag({
+    const tags = inferOverwhelmedPatternTag({
       beforeRating: input.beforeRating,
       afterRating: input.afterRating,
       feelingLabel: input.feelingLabel,
     });
 
-    if (tag) {
-      const tagDesc = OBSERVATION_TAG_COPY[tag as ObservationTag];
-      if (tagDesc) {
-        const { data: existingObs } = await supabase
-          .from("pattern_observations")
-          .select("pattern_observation_id")
-          .eq("user_id", user.id)
-          .eq("source_raw_record_id", rawRecordId)
-          .maybeSingle();
-
-        if (!existingObs) {
-          await supabase.from("pattern_observations").insert({
+    if (tags.length > 0) {
+      const rows = tags
+        .map((tag) => {
+          const tagDesc = OBSERVATION_TAG_COPY[tag];
+          if (!tagDesc) return null;
+          return {
             user_id: user.id,
             source_raw_record_id: rawRecordId,
             source_interaction_entry_id: null,
             person_id: null,
             thread_id: null,
-            observation_type: OBSERVATION_TYPE_FOR_TAG[tag as ObservationTag],
+            observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
             observation_tag: tag,
             direction: tagDesc.direction,
             confidence_score: 0.5,
             observation_source: "observed",
-            extractor_version: "overwhelmed_v1",
+            extractor_version: "overwhelmed_v2",
             supporting_evidence_json: {
               before_rating: input.beforeRating,
               after_rating: input.afterRating,
             },
+          };
+        })
+        .filter((r): r is NonNullable<typeof r> => r !== null);
+
+      if (rows.length > 0) {
+        const { error: obsErr } = await supabase
+          .from("pattern_observations")
+          .upsert(rows, {
+            onConflict: "user_id,source_raw_record_id,observation_tag",
+            ignoreDuplicates: true,
           });
+        if (obsErr) {
+          console.error("overwhelmed: pattern observation upsert failed", obsErr.code);
+          const now = Date.now();
+          if (now - lastObsCaptureAt >= OBS_CAPTURE_COOLDOWN_MS) {
+            lastObsCaptureAt = now;
+            Sentry.captureException(new Error("observation_upsert_failed"), {
+              tags: { area: "tools", kind: "observation_upsert", route: "overwhelmed" },
+            });
+          }
         }
       }
     }
