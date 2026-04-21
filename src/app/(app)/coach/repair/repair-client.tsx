@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import ThreadPicker from "@/components/thread-picker";
+import { isLegacyV1 } from "@/lib/coach/output-shape";
 
 const DESIRED_OUTCOMES = [
   { value: "acknowledge_impact", label: "Acknowledge impact" },
@@ -123,6 +124,140 @@ const REPAIR_OUTCOME_QUESTIONS = [
   },
 ] as const;
 
+// Renders legacy v1 Repair output — the current shape until Coach v2
+// ships. Extracted from the parent's aiOutput-truthy branch so the
+// parent can dispatch to a v2 renderer once that shape lands. Visual
+// output unchanged.
+function LegacyV1RepairCard({
+  output,
+  repairEntryId,
+  outcomeData,
+  onOutcomeChange,
+  outcomeSaved,
+  outcomeError,
+  allOutcomeAnswered,
+  onSaveOutcome,
+  onRetryCoaching,
+  onBack,
+}: {
+  output: AiOutput;
+  repairEntryId: string | null;
+  outcomeData: Record<string, string>;
+  onOutcomeChange: (key: string, value: string) => void;
+  outcomeSaved: boolean;
+  outcomeError: boolean;
+  allOutcomeAnswered: boolean;
+  onSaveOutcome: () => void;
+  onRetryCoaching: () => void;
+  onBack: () => void;
+}) {
+  const REPAIR_FIELDS: { label: string; key: keyof AiOutput }[] = [
+    { label: "Repair strategy", key: "repair_strategy" },
+    { label: "Thing not to say", key: "thing_not_to_say" },
+    { label: "Timing", key: "recommended_timing" },
+  ];
+  const visible = REPAIR_FIELDS.filter(({ key }) => {
+    const v = output[key];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+  if (visible.length === 0) {
+    return (
+      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
+        <p className="mt-4 text-base text-zinc-700">
+          Your entry is saved, but no repair strategy is available to show
+          for this one.
+        </p>
+        <button
+          onClick={onRetryCoaching}
+          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+        >
+          Try again for repair strategy
+        </button>
+        <button
+          onClick={onBack}
+          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+        >
+          Back to Coach
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <h2 className="text-xl font-bold text-zinc-900">Your Repair Strategy</h2>
+      <div className="mt-6 space-y-5">
+        {visible.map(({ label, key }) => (
+          <div key={key}>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              {label}
+            </p>
+            <p className="mt-1 text-base text-zinc-800">{output[key]}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Repair Outcome Tracking */}
+      {repairEntryId && !outcomeSaved && (
+        <div className="mt-8 border-t border-zinc-200 pt-6">
+          <p className="text-sm font-medium text-zinc-700">
+            How did the repair go?
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Optional — helps track what works over time.
+          </p>
+          <div className="mt-4 space-y-4">
+            {REPAIR_OUTCOME_QUESTIONS.map((q) => (
+              <div key={q.key}>
+                <p className="text-sm text-zinc-700">{q.title}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {q.options.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => onOutcomeChange(q.key, opt.value)}
+                      className={`rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
+                        outcomeData[q.key] === opt.value
+                          ? "bg-zinc-900 text-white"
+                          : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {allOutcomeAnswered && (
+            <button
+              onClick={onSaveOutcome}
+              className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-800 text-base font-medium text-white"
+            >
+              Save Outcome
+            </button>
+          )}
+          {outcomeError && (
+            <p className="mt-2 text-sm text-red-600">
+              Could not save outcome. Try again.
+            </p>
+          )}
+        </div>
+      )}
+
+      {outcomeSaved && (
+        <p className="mt-6 text-sm text-zinc-500">Outcome saved.</p>
+      )}
+
+      <button
+        onClick={onBack}
+        className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+      >
+        Done
+      </button>
+    </div>
+  );
+}
+
 export default function RepairClient() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -237,115 +372,30 @@ export default function RepairClient() {
     (q) => outcomeData[q.key]
   );
 
-  // AI output screen
+  // AI output screen — dispatch by output shape.
   if (aiOutput) {
-    const REPAIR_FIELDS: { label: string; key: keyof AiOutput }[] = [
-      { label: "Repair strategy", key: "repair_strategy" },
-      { label: "Thing not to say", key: "thing_not_to_say" },
-      { label: "Timing", key: "recommended_timing" },
-    ];
-    const visible = REPAIR_FIELDS.filter(({ key }) => {
-      const v = aiOutput[key];
-      return typeof v === "string" && v.trim().length > 0;
-    });
-    if (visible.length === 0) {
+    if (isLegacyV1(aiOutput)) {
       return (
-        <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
-          <p className="mt-4 text-base text-zinc-700">
-            Your entry is saved, but no repair strategy is available to show
-            for this one.
-          </p>
-          <button
-            onClick={retryCoaching}
-            className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
-          >
-            Try again for repair strategy
-          </button>
-          <button
-            onClick={() => router.push("/coach")}
-            className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
-          >
-            Back to Coach
-          </button>
-        </div>
+        <LegacyV1RepairCard
+          output={aiOutput}
+          repairEntryId={repairEntryId}
+          outcomeData={outcomeData}
+          onOutcomeChange={(key, val) =>
+            setOutcomeData((d) => ({ ...d, [key]: val }))
+          }
+          outcomeSaved={outcomeSaved}
+          outcomeError={outcomeError}
+          allOutcomeAnswered={allOutcomeAnswered}
+          onSaveOutcome={submitOutcome}
+          onRetryCoaching={retryCoaching}
+          onBack={() => router.push("/coach")}
+        />
       );
     }
-    return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Your Repair Strategy</h2>
-        <div className="mt-6 space-y-5">
-          {visible.map(({ label, key }) => (
-            <div key={key}>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                {label}
-              </p>
-              <p className="mt-1 text-base text-zinc-800">{aiOutput[key]}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Repair Outcome Tracking */}
-        {repairEntryId && !outcomeSaved && (
-          <div className="mt-8 border-t border-zinc-200 pt-6">
-            <p className="text-sm font-medium text-zinc-700">
-              How did the repair go?
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Optional — helps track what works over time.
-            </p>
-            <div className="mt-4 space-y-4">
-              {REPAIR_OUTCOME_QUESTIONS.map((q) => (
-                <div key={q.key}>
-                  <p className="text-sm text-zinc-700">{q.title}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {q.options.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() =>
-                          setOutcomeData((d) => ({ ...d, [q.key]: opt.value }))
-                        }
-                        className={`rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
-                          outcomeData[q.key] === opt.value
-                            ? "bg-zinc-900 text-white"
-                            : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {allOutcomeAnswered && (
-              <button
-                onClick={submitOutcome}
-                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-800 text-base font-medium text-white"
-              >
-                Save Outcome
-              </button>
-            )}
-            {outcomeError && (
-              <p className="mt-2 text-sm text-red-600">
-                Could not save outcome. Try again.
-              </p>
-            )}
-          </div>
-        )}
-
-        {outcomeSaved && (
-          <p className="mt-6 text-sm text-zinc-500">Outcome saved.</p>
-        )}
-
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
-        >
-          Done
-        </button>
-      </div>
-    );
+    // Coach v2 (mode: "normal" / "refusal") rendering lands in a later
+    // commit. Today no stored output carries `mode`, so this branch is
+    // unreachable.
+    return null;
   }
 
   // Saved but no AI feedback screen

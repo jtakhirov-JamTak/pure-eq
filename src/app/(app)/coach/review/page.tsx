@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import ThreadPicker from "@/components/thread-picker";
+import { isLegacyV1 } from "@/lib/coach/output-shape";
 
 const STEPS = [
   {
@@ -113,6 +114,139 @@ type AiOutput = {
   how_user_likely_came_across?: string;
   alternative_explanation?: string;
 };
+
+// Renders legacy v1 Review output — the current shape until Coach v2
+// ships. Extracted from the parent's aiOutput-truthy branch so the
+// parent can dispatch to a v2 renderer once that shape lands. Visual
+// output unchanged.
+function LegacyV1ReviewCard({
+  output,
+  reviewEntryId,
+  outcomeData,
+  onOutcomeChange,
+  outcomeSaved,
+  outcomeError,
+  allOutcomeAnswered,
+  onSaveOutcome,
+  onRetryCoaching,
+  onBack,
+}: {
+  output: AiOutput;
+  reviewEntryId: string | null;
+  outcomeData: Record<string, string>;
+  onOutcomeChange: (key: string, value: string) => void;
+  outcomeSaved: boolean;
+  outcomeError: boolean;
+  allOutcomeAnswered: boolean;
+  onSaveOutcome: () => void;
+  onRetryCoaching: () => void;
+  onBack: () => void;
+}) {
+  const REVIEW_FIELDS: { label: string; key: keyof AiOutput }[] = [
+    { label: "How you likely landed", key: "how_user_likely_came_across" },
+    { label: "What else may have been going on", key: "alternative_explanation" },
+  ];
+  const visible = REVIEW_FIELDS.filter(({ key }) => {
+    const v = output[key];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+  if (visible.length === 0) {
+    return (
+      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
+        <p className="mt-4 text-base text-zinc-700">
+          Your reflection is saved, but no coaching feedback is available to
+          show for this one.
+        </p>
+        <button
+          onClick={onRetryCoaching}
+          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+        >
+          Try again for coaching feedback
+        </button>
+        <button
+          onClick={onBack}
+          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+        >
+          Back to Coach
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <h2 className="text-xl font-bold text-zinc-900">Your Review Reflection</h2>
+      <div className="mt-6 space-y-5">
+        {visible.map(({ label, key }) => (
+          <div key={key}>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              {label}
+            </p>
+            <p className="mt-1 text-base text-zinc-800">{output[key]}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Outcome Tracking — inline after AI output */}
+      {reviewEntryId && !outcomeSaved && (
+        <div className="mt-8 border-t border-zinc-200 pt-6">
+          <p className="text-sm font-medium text-zinc-700">
+            Rate this conversation
+          </p>
+          <p className="mt-1 text-xs text-zinc-500">
+            Optional — helps build your patterns over time.
+          </p>
+          <div className="mt-4 space-y-4">
+            {OUTCOME_QUESTIONS.map((q) => (
+              <div key={q.key}>
+                <p className="text-sm text-zinc-700">{q.title}</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {q.options.map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => onOutcomeChange(q.key, opt.value)}
+                      className={`rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
+                        outcomeData[q.key] === opt.value
+                          ? "bg-zinc-900 text-white"
+                          : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+          {allOutcomeAnswered && (
+            <button
+              onClick={onSaveOutcome}
+              className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-800 text-base font-medium text-white"
+            >
+              Save Outcome
+            </button>
+          )}
+          {outcomeError && (
+            <p className="mt-2 text-sm text-red-600">
+              Could not save outcome. Try again.
+            </p>
+          )}
+        </div>
+      )}
+
+      {outcomeSaved && (
+        <p className="mt-6 text-sm text-zinc-500">Outcome saved.</p>
+      )}
+
+      <button
+        onClick={onBack}
+        className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+      >
+        Done
+      </button>
+    </div>
+  );
+}
 
 export default function ReviewPage() {
   const router = useRouter();
@@ -227,114 +361,30 @@ export default function ReviewPage() {
     (q) => outcomeData[q.key]
   );
 
-  // AI output screen
+  // AI output screen — dispatch by output shape.
   if (aiOutput) {
-    const REVIEW_FIELDS: { label: string; key: keyof AiOutput }[] = [
-      { label: "How you likely landed", key: "how_user_likely_came_across" },
-      { label: "What else may have been going on", key: "alternative_explanation" },
-    ];
-    const visible = REVIEW_FIELDS.filter(({ key }) => {
-      const v = aiOutput[key];
-      return typeof v === "string" && v.trim().length > 0;
-    });
-    if (visible.length === 0) {
+    if (isLegacyV1(aiOutput)) {
       return (
-        <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
-          <p className="mt-4 text-base text-zinc-700">
-            Your reflection is saved, but no coaching feedback is available to
-            show for this one.
-          </p>
-          <button
-            onClick={retryCoaching}
-            className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
-          >
-            Try again for coaching feedback
-          </button>
-          <button
-            onClick={() => router.push("/coach")}
-            className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
-          >
-            Back to Coach
-          </button>
-        </div>
+        <LegacyV1ReviewCard
+          output={aiOutput}
+          reviewEntryId={reviewEntryId}
+          outcomeData={outcomeData}
+          onOutcomeChange={(key, val) =>
+            setOutcomeData((d) => ({ ...d, [key]: val }))
+          }
+          outcomeSaved={outcomeSaved}
+          outcomeError={outcomeError}
+          allOutcomeAnswered={allOutcomeAnswered}
+          onSaveOutcome={submitOutcome}
+          onRetryCoaching={retryCoaching}
+          onBack={() => router.push("/coach")}
+        />
       );
     }
-    return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Your Review Reflection</h2>
-        <div className="mt-6 space-y-5">
-          {visible.map(({ label, key }) => (
-            <div key={key}>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                {label}
-              </p>
-              <p className="mt-1 text-base text-zinc-800">{aiOutput[key]}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Outcome Tracking — inline after AI output */}
-        {reviewEntryId && !outcomeSaved && (
-          <div className="mt-8 border-t border-zinc-200 pt-6">
-            <p className="text-sm font-medium text-zinc-700">
-              Rate this conversation
-            </p>
-            <p className="mt-1 text-xs text-zinc-500">
-              Optional — helps build your patterns over time.
-            </p>
-            <div className="mt-4 space-y-4">
-              {OUTCOME_QUESTIONS.map((q) => (
-                <div key={q.key}>
-                  <p className="text-sm text-zinc-700">{q.title}</p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {q.options.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() =>
-                          setOutcomeData((d) => ({ ...d, [q.key]: opt.value }))
-                        }
-                        className={`rounded-full px-4 py-2.5 text-sm font-medium transition-colors ${
-                          outcomeData[q.key] === opt.value
-                            ? "bg-zinc-900 text-white"
-                            : "bg-zinc-100 text-zinc-700 hover:bg-zinc-200"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {allOutcomeAnswered && (
-              <button
-                onClick={submitOutcome}
-                className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-800 text-base font-medium text-white"
-              >
-                Save Outcome
-              </button>
-            )}
-            {outcomeError && (
-              <p className="mt-2 text-sm text-red-600">
-                Could not save outcome. Try again.
-              </p>
-            )}
-          </div>
-        )}
-
-        {outcomeSaved && (
-          <p className="mt-6 text-sm text-zinc-500">Outcome saved.</p>
-        )}
-
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
-        >
-          Done
-        </button>
-      </div>
-    );
+    // Coach v2 (mode: "normal" / "refusal") rendering lands in a later
+    // commit. Today no stored output carries `mode`, so this branch is
+    // unreachable.
+    return null;
   }
 
   // Saved but no AI feedback screen

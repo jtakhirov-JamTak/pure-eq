@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
+import { isLegacyV1 } from "@/lib/coach/output-shape";
 import type { RelationshipDomain } from "@/types";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
@@ -81,6 +82,74 @@ type AiOutput = {
   thing_not_to_do?: string;
   best_next_move?: string;
 };
+
+// Renders legacy v1 Prepare output — the current (and, until Coach v2
+// ships across the rollout, only) shape. Extracted from the parent's
+// aiOutput-truthy branch so the parent can dispatch to a v2 renderer
+// once that shape lands. Visual output unchanged.
+function LegacyV1PrepareCard({
+  output,
+  onRetryCoaching,
+  onBack,
+}: {
+  output: AiOutput;
+  onRetryCoaching: () => void;
+  onBack: () => void;
+}) {
+  const PREPARE_FIELDS: { label: string; key: keyof AiOutput }[] = [
+    { label: "Reality-check question", key: "reality_check_question" },
+    { label: "Thing not to do", key: "thing_not_to_do" },
+    { label: "Best next move", key: "best_next_move" },
+  ];
+  const visible = PREPARE_FIELDS.filter(({ key }) => {
+    const v = output[key];
+    return typeof v === "string" && v.trim().length > 0;
+  });
+  if (visible.length === 0) {
+    return (
+      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
+        <p className="mt-4 text-base text-zinc-700">
+          Your entry is saved, but no coaching feedback is available to show
+          for this one.
+        </p>
+        <button
+          onClick={onRetryCoaching}
+          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+        >
+          Try again for coaching feedback
+        </button>
+        <button
+          onClick={onBack}
+          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+        >
+          Back to Coach
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <h2 className="text-xl font-bold text-zinc-900">Your Prepare Feedback</h2>
+      <div className="mt-6 space-y-5">
+        {visible.map(({ label, key }) => (
+          <div key={key}>
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              {label}
+            </p>
+            <p className="mt-1 text-base text-zinc-800">{output[key]}</p>
+          </div>
+        ))}
+      </div>
+      <button
+        onClick={onBack}
+        className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+      >
+        Done
+      </button>
+    </div>
+  );
+}
 
 export default function PreparePage() {
   const router = useRouter();
@@ -163,61 +232,21 @@ export default function PreparePage() {
     handleSubmit();
   }
 
-  // AI output screen
+  // AI output screen — dispatch by output shape.
   if (aiOutput) {
-    const PREPARE_FIELDS: { label: string; key: keyof AiOutput }[] = [
-      { label: "Reality-check question", key: "reality_check_question" },
-      { label: "Thing not to do", key: "thing_not_to_do" },
-      { label: "Best next move", key: "best_next_move" },
-    ];
-    const visible = PREPARE_FIELDS.filter(({ key }) => {
-      const v = aiOutput[key];
-      return typeof v === "string" && v.trim().length > 0;
-    });
-    if (visible.length === 0) {
+    if (isLegacyV1(aiOutput)) {
       return (
-        <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-          <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
-          <p className="mt-4 text-base text-zinc-700">
-            Your entry is saved, but no coaching feedback is available to show
-            for this one.
-          </p>
-          <button
-            onClick={retryCoaching}
-            className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
-          >
-            Try again for coaching feedback
-          </button>
-          <button
-            onClick={() => router.push("/coach")}
-            className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
-          >
-            Back to Coach
-          </button>
-        </div>
+        <LegacyV1PrepareCard
+          output={aiOutput}
+          onRetryCoaching={retryCoaching}
+          onBack={() => router.push("/coach")}
+        />
       );
     }
-    return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Your Prepare Feedback</h2>
-        <div className="mt-6 space-y-5">
-          {visible.map(({ label, key }) => (
-            <div key={key}>
-              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-                {label}
-              </p>
-              <p className="mt-1 text-base text-zinc-800">{aiOutput[key]}</p>
-            </div>
-          ))}
-        </div>
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
-        >
-          Done
-        </button>
-      </div>
-    );
+    // Coach v2 (mode: "normal" / "refusal") rendering lands in a later
+    // commit. Today no stored output carries `mode`, so this branch is
+    // unreachable. Null render until the v2 renderer is wired.
+    return null;
   }
 
   // Saved but no AI feedback screen
