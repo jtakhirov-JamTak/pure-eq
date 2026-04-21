@@ -21,7 +21,7 @@ Not this: dumping everything into CLAUDE.md. Long CLAUDE.md means signal gets bu
 
 ## Business Context
 
-- Revenue model: 3-day free period (anchored to onboarding completion) with 1 free Prepare + 1 free Review, then $8.99/month or $69.99/year (cancel anytime)
+- Revenue model: 3-day free Coach window (1 free Prepare + 1 free Review) plus 7-day free Tools window (unlimited Overwhelmed + Triggered), both anchored to onboarding completion. After each window, $8.99/month or $69.99/year (cancel anytime). Insights is paid-only.
 - Onboarding produces a Communication Profile (9-question quiz); free-period anchor starts when profile is saved
 - Product doc: docs/Pure_EQ_Final.txt (source of truth for all product decisions)
 - Engineering playbook: docs/Engineering_Playbook.txt (reusable security/architecture patterns)
@@ -57,9 +57,9 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 
 - `src/app/(auth)/{login,signup}/page.tsx` — public auth pages
 - `src/app/(app)/layout.tsx` — auth gate for every authenticated page
-- `src/app/(app)/app-shell.tsx` — top bar + bottom tabs + menu
+- `src/components/app-shell.tsx` — top bar + bottom tabs + menu (shared across `(app)` and `/tools` segments)
 - `src/app/(app)/coach/{prepare,review}/page.tsx` — core coach flows (multi-step + AI)
-- `src/app/(app)/tools/{overwhelmed,triggered}/page.tsx` — tools (guided reset, trigger log)
+- `src/app/tools/{page,layout,tools-hub-locked}.tsx` + `src/app/tools/{overwhelmed,triggered}/{page,*-client}.tsx` — tools subtree lives outside `(app)` so its 7-day free window can gate without triggering the broad `(app)` paywall redirect
 - `src/app/(app)/insights/page.tsx` — profile + blind-spot insights
 - `src/app/(app)/history/{page,history-list,actions}.tsx` — history list + soft delete action
 - `src/app/admin/{page,users,users/[id]}/page.tsx` — admin dashboard + user management
@@ -68,7 +68,7 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 - `src/app/api/coach/{prepare,review}/route.ts` — AI-backed coach endpoints
 - `src/app/api/tools/{overwhelmed,triggered}/route.ts` — tool write endpoints
 - `src/app/api/{persons,history,subscribe,transcribe,auth/callback}/route.ts`
-- `src/lib/{validation,check-origin,rate-limit,subscription,admin,insights,onboarding,verify-ownership,utils}.ts`
+- `src/lib/{validation,check-origin,rate-limit,subscription,require-access,admin,insights,onboarding,verify-ownership,utils}.ts`
 - `src/lib/{supabase/{client,server,service},ai/{prompts,schemas},coach/run-module}.ts`
 - `src/components/{voice-input,person-picker,countdown-timer}.tsx`
 - `src/types/{database,index}.ts` — generated Supabase types + app taxonomy
@@ -122,11 +122,20 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 - Rate limit AI and auth endpoints
 - Never log response bodies or user content
 - Validate all AI output against schema + banned phrases before displaying
+- Paid-only gates use helpers in `src/lib/require-access.ts` — `requirePaidAccessPage/Api`, `requireToolsAccessPage/Api`, `hasToolsAccess`. Do NOT inline the `isAdmin + checkSubscription + redirect/403` block; policy drift is the whole reason the helpers exist
 - Gate `/dev/*` routes with `if (process.env.NODE_ENV === "production") notFound();`
 
 ## Lessons Learned
 
 Universal traps (Zod `.min(1)`/`.int()`/length-uniqueness, auth/rate-limit/origin-check/magic-byte patterns, idempotency keys, raw+derived + AI-after-both-inserts, stale-closure refs, wall-clock timers, fetch `res.ok`, external service fallback, `process.env.X!`, etc.) live in `docs/Engineering_Playbook.txt` §3–§16 — don't re-document them here. Entries below are Pure-EQ-specific repo rules or lessons not yet generalized.
+
+### Access gates & monetization
+
+- **`src/lib/require-access.ts` is the single source of truth for paid-only and Tools gates.** Five helpers: `requirePaidAccessPage/Api`, `requireToolsAccessPage/Api`, `hasToolsAccess`. Do not inline the `isAdmin + checkSubscription + redirect/403` block — drift between the paid-only policy (`!hasAccess`) and the Tools policy (`!hasAccess && !toolsWindowActive`) is exactly what the helpers prevent.
+- **`checkSubscription` takes a single `userId` arg and is wrapped in `React.cache()`.** Creates its own `supabase` inside (request-scoped via cookies). Dedupes across layout + page + helper within one server render — if you add a caller that passes a supabase client, it breaks the cache silently. Always call `checkSubscription(user.id)`, never `checkSubscription(supabase, user.id)`.
+- **Admin detection in gates uses sync `isAdmin(user.email)` (env var `ADMIN_EMAIL`), not DB-role-aware `checkAdmin`.** Consistent with `(app)/layout.tsx`. If DB-role admins are ever supported, switch `src/lib/require-access.ts` AND the layout at the same time — asymmetry would paywall a DB-role admin.
+- **The `(app)/layout.tsx` broad gate is now a Coach-specific backstop, not the primary paid-only enforcement.** It fires only on `!hasAccess && (bothFreeUsed || freePeriodExpired)`, which covers `/coach`, `/coach/prepare`, `/coach/review`. Every other paid surface (`/insights`, `/history`, `/coach/repair`, `/coach/threads*`) now gates itself via `requirePaidAccessPage`. Don't delete the layout gate — it stops unpaid day-4+ users from reaching Coach hub / free-used Prepare or Review, which the page helpers don't cover.
+- **Access anchor column (`user_profiles.created_at`) must stay user-unwritable.** Migration 0020 dropped `user_profiles_delete_own` — delete + retake would have reset the 7-day Tools window. If retake ever needs to clear old profile rows, go through the service-role client. Same rule as migration 0017 for `free_*_used_at` / `status` / `role`.
 
 ### Validation & data shape
 

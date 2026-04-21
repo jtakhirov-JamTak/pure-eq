@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { requirePaidAccessPage } from "@/lib/require-access";
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   open: { label: "Open", color: "bg-blue-100 text-blue-700" },
@@ -17,6 +18,9 @@ export default async function ThreadsPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Paid-only surface.
+  await requirePaidAccessPage(user);
 
   const [threadsRes, personsRes] = await Promise.all([
     supabase

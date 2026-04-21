@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
+import { requirePaidAccessPage } from "@/lib/require-access";
 import { HistoryList, type HistoryEntry } from "./history-list";
 
 const PAGE_SIZE = 10;
@@ -30,6 +31,9 @@ export default async function HistoryPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Paid-only surface.
+  await requirePaidAccessPage(user);
 
   // Counts per module type. Five parallel `head + count: exact` queries —
   // fine for v0 on a low-traffic page. Swap for a GROUP BY RPC if load grows.

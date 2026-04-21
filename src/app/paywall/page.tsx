@@ -25,7 +25,7 @@ export default async function PaywallPage() {
   }
 
   // Already subscribed — send to app.
-  const access = await checkSubscription(supabase, user.id);
+  const access = await checkSubscription(user.id);
   if (access.hasAccess) {
     redirect("/coach");
   }

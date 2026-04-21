@@ -1,16 +1,22 @@
 // Pure EQ domain — replace in fork.
-import type { SupabaseClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import type { Database } from "@/types/database";
 import type { SubscriptionStatus } from "@/types";
+import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
- * 3-day window to complete 1 Prepare + 1 Review for free. Anchored to
- * onboarding completion (user_profiles.created_at), not signup, so a
- * workshop attendee who signs up days in advance doesn't burn their
- * window before they've tried the app.
+ * Both free windows are anchored to onboarding completion
+ * (user_profiles.created_at), not signup, so a workshop attendee who
+ * signs up days in advance doesn't burn their window before engaging.
+ *
+ * Coach: 1 free Prepare + 1 free Review inside COACH_FREE_PERIOD_DAYS.
+ * Tools: unlimited Overwhelmed + Triggered inside TOOLS_FREE_PERIOD_DAYS
+ *        (monetization test — see docs/access_route_matrix.md).
  */
-const FREE_PERIOD_MS = 3 * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const COACH_FREE_PERIOD_DAYS = 3;
+const TOOLS_FREE_PERIOD_DAYS = 7;
 
 export type FreeUsageField = "freePrepareUsed" | "freeReviewUsed";
 
@@ -24,6 +30,7 @@ export interface SubscriptionAccess {
   freePrepareUsed: boolean;
   freeReviewUsed: boolean;
   freePeriodActive: boolean;
+  toolsWindowActive: boolean;
   status: SubscriptionStatus;
   trialEndsAt: string | null;
 }
@@ -35,13 +42,21 @@ export interface SubscriptionAccess {
  * The free period is anchored to onboarding completion (user_profiles),
  * so the caller does not need to pass a date in.
  *
+ * Wrapped in `React.cache()` so a single server render that reads access
+ * from multiple call sites (layout + page + helper) hits the DB once per
+ * request. The cached key is `userId` only; supabase client is created
+ * inside (and is itself request-scoped via next/headers cookies), so
+ * React.cache's Object.is arg comparison sees stable input.
+ *
  * Handles trial expiry lazily — if a legacy trial has lapsed, updates
  * the status to 'trial_expired' inline so we don't need a cron job.
+ * Lazy expiry is only reachable when `status === 'trial_active'`; admin
+ * callers bypass checkSubscription entirely before reaching here, so an
+ * admin row in `trial_active` (unusual) would not be silently downgraded
+ * from any current call site.
  */
-export async function checkSubscription(
-  supabase: SupabaseClient<Database>,
-  userId: string,
-): Promise<SubscriptionAccess> {
+export const checkSubscription = cache(async (userId: string): Promise<SubscriptionAccess> => {
+  const supabase = await createClient();
   // Free-period anchor: onboarding completion. Users without a profile
   // are caught by the routing hub upstream; fail closed if missing.
   const { data: profileRow } = await supabase
@@ -52,9 +67,16 @@ export async function checkSubscription(
     .limit(1)
     .maybeSingle();
 
-  const freePeriodActive = profileRow?.created_at
-    ? Date.now() - new Date(profileRow.created_at).getTime() < FREE_PERIOD_MS
-    : false;
+  const now = Date.now();
+  const profileCreatedMs = profileRow?.created_at
+    ? new Date(profileRow.created_at).getTime()
+    : null;
+  const freePeriodActive =
+    profileCreatedMs !== null &&
+    now - profileCreatedMs < COACH_FREE_PERIOD_DAYS * DAY_MS;
+  const toolsWindowActive =
+    profileCreatedMs !== null &&
+    now - profileCreatedMs < TOOLS_FREE_PERIOD_DAYS * DAY_MS;
 
   const { data: row, error } = await supabase
     .from("user_subscriptions")
@@ -65,11 +87,11 @@ export async function checkSubscription(
   if (error) {
     console.error("subscription: lookup failed", error.code);
     // Fail closed — a DB hiccup must not grant free access.
-    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freePeriodActive: false, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freePeriodActive: false, toolsWindowActive: false, status: "none", trialEndsAt: null };
   }
 
   if (!row) {
-    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freePeriodActive, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freePeriodActive, toolsWindowActive, status: "none", trialEndsAt: null };
   }
 
   const freePrepareUsed = row.free_prepare_used_at !== null;
@@ -101,10 +123,11 @@ export async function checkSubscription(
     freePrepareUsed,
     freeReviewUsed,
     freePeriodActive,
+    toolsWindowActive,
     status,
     trialEndsAt: row.trial_ends_at,
   };
-}
+});
 
 /**
  * Atomically reserve a user's one free use (Prepare or Review) BEFORE the

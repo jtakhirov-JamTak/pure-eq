@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { requirePaidAccessApi } from "@/lib/require-access";
 import { buildExportText } from "@/lib/export";
 
 export const runtime = "nodejs";
@@ -26,6 +27,10 @@ export async function GET(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  // Paid-only: export is the largest user-content surface in the app.
+  const gate = await requirePaidAccessApi(user);
+  if (gate) return gate;
 
   const rlMin = await rateLimit(`export:min:${user.id}`, {
     limit: 3,

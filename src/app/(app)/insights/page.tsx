@@ -2,6 +2,7 @@
 import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { requirePaidAccessPage } from "@/lib/require-access";
 import {
   PROFILE_DESCRIPTIONS,
   PROFILE_AVATAR_CLASSES,
@@ -56,6 +57,9 @@ export default async function InsightsPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Paid-only surface (see docs/access_route_matrix.md).
+  await requirePaidAccessPage(user);
 
   // 1. Fetch cache + all live inputs.
   const [cachedRes, profile, rawRecordsRes, observationsRes, personsRes, flagRes] =

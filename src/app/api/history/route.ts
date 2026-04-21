@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { requirePaidAccessApi } from "@/lib/require-access";
 
 export const runtime = "nodejs";
 
@@ -53,6 +54,10 @@ export async function GET(req: Request) {
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  // Paid-only enumeration surface.
+  const gate = await requirePaidAccessApi(user);
+  if (gate) return gate;
 
   const rlMin = await rateLimit(`history-get:min:${user.id}`, {
     limit: 30,

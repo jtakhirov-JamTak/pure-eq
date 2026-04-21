@@ -377,10 +377,16 @@ This should produce one real AI output.
 
 **Paywall**
 
+Free access before paywall:
+
+- **1 free Prepare and 1 free Review within 3 days of onboarding completion**
+- **Unlimited Overwhelmed and Triggered within 7 days of onboarding completion**
+- **Insights requires a subscription**
+
 Present pricing as:
 
-- **7-day starter access for $0.99**
-- **then $9.99/month**
+- **$8.99 / month**
+- **$69.99 / year (best value)**
 - **cancel anytime in 1 click**
 
 If the user declines:

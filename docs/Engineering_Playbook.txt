@@ -1647,3 +1647,117 @@ Its whole value is preventing stale-shape reads from reaching new
 renderers after a bump. Asymmetric application means the bump
 succeeds for the guarded types and silently fails for the others —
 exactly when you most want the safety net.
+
+§16.18 React.cache() for server helpers: drop client args from the key
+
+Pending cross-app validation.
+
+Server-side helpers in Next.js App Router (auth info, subscription state,
+feature flags) often take a DB client as the first argument. Wrapping
+such a helper with `React.cache()` for request-scoped dedupe silently
+fails to dedupe across callers because `cache()` uses `Object.is` on
+each argument — and `createClient()` inside `(app)/layout.tsx` returns a
+different instance than `createClient()` inside a page or an API route,
+even within the same request.
+
+Two ways to make this work:
+
+    // A) Drop the client arg; create it inside the cached function.
+    //    Callers pass primitives only (e.g. userId). Good for most helpers.
+    export const getAccess = cache(async (userId: string) => {
+      const supabase = await createClient();
+      // ... query logic
+    });
+
+    // B) Cache createClient itself, so every caller gets the same instance
+    //    and object-identity comparisons succeed.
+    export const createClient = cache(async () => { /* ... */ });
+
+(A) is simpler and has fewer collision surfaces; (B) is nicer if you
+can't easily change helper signatures but means every caller is forced
+through the cached-client path. Do NOT wrap with cache() and leave a
+client param — it looks like it dedupes, it does not, and you only find
+out when you profile DB load.
+
+Refactor shape:
+- Before: `checkSubscription(supabase, userId)` called 2× per render
+  (layout + page) → 2× DB round trips per request.
+- After: `checkSubscription(userId)`, `cache()`-wrapped, `createClient()`
+  inside → 1× DB round trip per request no matter how many callers.
+
+Side-effect handling: if the cached helper has side effects (e.g. lazy
+trial-expiry UPDATE), `cache()` also dedupes those — a feature, not a
+bug. Previously concurrent callers could race-write the same transition;
+now exactly one fires per request.
+
+§16.19 Access-gate extraction threshold: name helpers after the policy,
+not the mechanism
+
+Pending cross-app validation.
+
+When the same "admin bypass → check access → redirect/403" block appears
+in 3+ places with subtle variants, the extraction threshold is crossed.
+What matters more than WHEN is HOW.
+
+    // WRONG — single generic helper is a drift trap
+    async function requireAccess(user: User, opts: { allowWindow?: bool })
+
+    // RIGHT — one helper per policy, one variant per mechanism
+    requirePaidAccessPage(user)          // throws redirect
+    requirePaidAccessApi(user)           // returns NextResponse|null
+    requireToolsAccessPage(user)
+    requireToolsAccessApi(user)
+    hasToolsAccess(user): boolean        // for surfaces that render state
+                                          // instead of redirecting
+
+Policies are load-bearing — mixing "paid-only" with "paid OR trial OR
+free-window" is exactly the bug the extraction is meant to prevent.
+Encode the policy in the function name so the author can't swap one for
+the other by tab-completing. The mechanism split (page vs API) is
+cheaper than trying to unify them: pages use `redirect()` (which throws),
+APIs return `NextResponse`, and their call shapes are different enough
+that a union type hurts more than it helps.
+
+Tell-tale signs you waited too long:
+- One helper with 3+ boolean options
+- `if (opts.asApi) return NextResponse... else redirect(...)` branches
+- Helper signature includes every access type the app supports
+
+Common mistake when extracting: leave one call site inlined because it
+has a slightly-different shape (the Coach 3-day free window vs. Tools
+7-day window is a real example — Coach gate uses `bothFreeUsed ||
+freePeriodExpired` on `!hasAccess`, not plain `!hasAccess`). That is
+FINE — helpers should cover the common policies, and the one-off gate
+can keep its bespoke inline block with a comment explaining why it's
+not using the helper.
+
+§16.20 Protect access-anchor columns from user-writable RLS
+
+Pending cross-app validation.
+
+Any table column that anchors a time-based access policy (trial start,
+free-window anchor, subscription activation date) must be protected from
+user-side delete or mutate via RLS. Anchoring on `profile.created_at`
+means the user can only get a new anchor by rewriting that row — if RLS
+lets them DELETE their own row, they can re-onboard and reset the
+anchor.
+
+Audit checklist when you introduce a new access-anchor column:
+
+1. Grep the table's RLS policies. List every user-side policy
+   (`auth.uid() = user_id`).
+2. If there is a DELETE policy: does any flow actually need it? If not,
+   drop it with a migration. If yes (e.g. user-initiated account
+   deletion), make sure the flow goes through a controlled API that
+   doesn't just delete the anchor row.
+3. If there is an UPDATE policy that includes the anchor column in its
+   WITH CHECK: pin the column against user writes (see migration 0017
+   for `free_prepare_used_at` + `free_review_used_at` + `status` +
+   `role`).
+4. Document the anchor dependency in the table's migration comment so a
+   future session knows why the RLS is strict.
+
+Pre-existing "harmless" delete policies are the common trap: they were
+harmless when no access logic depended on the row's existence. The
+moment you anchor access on a column in that row, they become a cheap
+user-driven bypass.

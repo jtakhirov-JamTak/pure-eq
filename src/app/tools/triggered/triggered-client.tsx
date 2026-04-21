@@ -59,7 +59,7 @@ const STEPS = [
   },
 ];
 
-export default function TriggeredPage() {
+export default function TriggeredClient() {
   const router = useRouter();
   const [step, setStep] = useState(-1); // -1 = intro
   const [data, setData] = useState<Record<string, string>>({});

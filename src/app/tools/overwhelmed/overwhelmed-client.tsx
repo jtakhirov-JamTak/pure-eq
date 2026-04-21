@@ -39,7 +39,7 @@ type Step =
   | "success"
   | "error";
 
-export default function OverwhelmedPage() {
+export default function OverwhelmedClient() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("intro");
   const [beforeRating, setBeforeRating] = useState<number | null>(null);

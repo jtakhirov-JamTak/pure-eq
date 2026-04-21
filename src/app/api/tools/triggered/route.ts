@@ -6,8 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createTriggerSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
-import { checkSubscription } from "@/lib/subscription";
-import { isAdmin } from "@/lib/admin";
+import { requireToolsAccessApi } from "@/lib/require-access";
 import {
   OBSERVATION_TAG_COPY,
   OBSERVATION_TYPE_FOR_TAG,
@@ -57,16 +56,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // 2b. Subscription gate — Tools have no free tier. Admins bypass.
-  if (!isAdmin(user.email)) {
-    const access = await checkSubscription(supabase, user.id);
-    if (!access.hasAccess) {
-      return NextResponse.json(
-        { error: "Subscription required" },
-        { status: 403 }
-      );
-    }
-  }
+  // 2b. Tools gate: admin OR paid OR within 7-day Tools window.
+  const toolsGate = await requireToolsAccessApi(user);
+  if (toolsGate) return toolsGate;
 
   // 3. Rate limit — minute bucket blocks burst, day bucket blocks row exhaustion.
   const rlMin = await rateLimit(`triggered:min:${user.id}`, {

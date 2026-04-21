@@ -90,7 +90,7 @@ export async function runCoachModule<
   // Admins and subscribed users skip the reservation entirely.
   let needsReservation = false;
   if (!adminUser) {
-    const access = await checkSubscription(supabase, user.id);
+    const access = await checkSubscription(user.id);
     if (config.subscriptionGate === "free_one") {
       const freeFieldUsed = access[config.freeUsageField];
       const canUseFree = access.freePeriodActive && !freeFieldUsed;

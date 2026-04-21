@@ -106,6 +106,13 @@ export function PaywallContent() {
           </button>
         </div>
 
+        {/* Free windows summary — keeps all three doc surfaces (CLAUDE.md,
+            Pure_EQ_Final.txt §3, this page) in sync with the access model. */}
+        <p className="mt-4 max-w-sm text-center text-xs text-zinc-600">
+          Free so far: 1 Prepare + 1 Review (first 3 days) plus unlimited Tools
+          (first 7 days). Subscribe for ongoing access.
+        </p>
+
         {/* What you get */}
         <div className="mt-6 w-full max-w-sm space-y-2 text-sm text-zinc-600">
           <div className="flex items-start gap-2">

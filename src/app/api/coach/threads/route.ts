@@ -1,10 +1,20 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
+import { checkOrigin } from "@/lib/check-origin";
+import { requirePaidAccessApi } from "@/lib/require-access";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
+  // Enumeration endpoint — same origin-check discipline as /api/history and
+  // /api/export. Thread titles are AI-generated summaries of sensitive
+  // conversations and must not be fetchable cross-site with the victim's
+  // cookie.
+  if (!checkOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -13,6 +23,10 @@ export async function GET(req: Request) {
   if (authError || !user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
+
+  // Paid-only surface.
+  const gate = await requirePaidAccessApi(user);
+  if (gate) return gate;
 
   const rl = await rateLimit(`threads:get:${user.id}`, { limit: 30, windowMs: 60_000 });
   if (!rl.allowed) {

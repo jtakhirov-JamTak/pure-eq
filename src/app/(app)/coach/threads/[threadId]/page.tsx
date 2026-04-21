@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { requirePaidAccessPage } from "@/lib/require-access";
 import ThreadStatusSelector from "./thread-status-selector";
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
@@ -20,6 +21,9 @@ export default async function ThreadDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
+
+  // Paid-only surface.
+  await requirePaidAccessPage(user);
 
   // Fetch thread (RLS ensures user ownership).
   const { data: thread } = await supabase

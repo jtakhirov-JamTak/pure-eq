@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
-import { AppShell } from "./app-shell";
+import { AppShell } from "@/components/app-shell";
 
 export default async function AppLayout({
   children,
@@ -23,7 +23,7 @@ export default async function AppLayout({
   if (!isAdmin(user.email)) {
     // Subscription gate: users get a 3-day free period from signup to
     // complete 1 Prepare + 1 Review. After that, paywall.
-    const access = await checkSubscription(supabase, user.id);
+    const access = await checkSubscription(user.id);
     const bothFreeUsed = access.freePrepareUsed && access.freeReviewUsed;
     const freePeriodExpired = !access.freePeriodActive;
     if (!access.hasAccess && (bothFreeUsed || freePeriodExpired)) {
