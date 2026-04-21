@@ -1761,3 +1761,81 @@ Pre-existing "harmless" delete policies are the common trap: they were
 harmless when no access logic depended on the row's existence. The
 moment you anchor access on a column in that row, they become a cheap
 user-driven bypass.
+
+§16.21 Bind prompt-text enum tokens to Zod enum via `satisfies`
+
+Pending cross-app validation.
+
+When an LLM-backed endpoint validates model output against a Zod enum
+AND the same enum values appear literally in the prompt instructing the
+model what to emit, bind the two literals at the type level so rename
+drift fails the build rather than silently breaking validation.
+
+Problem: a hard-coded token in the prompt ("return refusal_reason
+'safety_concern'") and a `z.enum(["safety_concern", ...])` in the
+validator live in different files. Renaming one side — say, refining
+"safety_concern" to "user_safety_concern" — leaves the other side
+stale. The model dutifully emits the renamed token, Zod rejects it,
+and the fallback path fires in production, often in exactly the rare
+scenarios the prompt was trying to reach (safety refusal, tool
+selection, rare taxonomic states).
+
+WRONG — two sources of truth:
+
+    // schemas.ts
+    export const refusalShape = z.object({
+      refusal_reason: z.enum(["safety_concern", "out_of_scope"]),
+      suggested_resource: z.enum(["988", "domestic_violence_hotline", ...]),
+    });
+
+    // prompts.ts
+    const SYSTEM = `... return refusal_reason "safety_concern"
+      and suggested_resource "988" ...`;
+
+RIGHT — shared tuple + `satisfies` binding:
+
+    // schemas.ts
+    export const REFUSAL_REASONS = ["safety_concern", "out_of_scope"] as const;
+    export const REFUSAL_RESOURCES = ["988", "domestic_violence_hotline", ...] as const;
+    export const refusalShape = z.object({
+      refusal_reason: z.enum(REFUSAL_REASONS),
+      suggested_resource: z.enum(REFUSAL_RESOURCES),
+    });
+
+    // prompts.ts
+    import { REFUSAL_REASONS, REFUSAL_RESOURCES } from "@/lib/ai/schemas";
+    const SAFETY_REASON  = "safety_concern"            satisfies (typeof REFUSAL_REASONS)[number];
+    const CRISIS_RESOURCE = "988"                       satisfies (typeof REFUSAL_RESOURCES)[number];
+    const SYSTEM = `... return refusal_reason "${SAFETY_REASON}"
+      and suggested_resource "${CRISIS_RESOURCE}" ...`;
+
+If a token is renamed in schemas.ts, the `satisfies` check in prompts.ts
+fails tsc — catching drift at compile time rather than in a user-facing
+production error.
+
+The `satisfies` operator (TS 4.9+) preserves the literal type while
+validating it against the tuple member union. Direct template
+interpolation `${REFUSAL_RESOURCES[0]}` also works but is index-fragile:
+reordering the tuple silently changes what the prompt says. The named
+`satisfies` const reads by semantic name and survives reorderings.
+
+Apply when:
+- A Zod enum's values appear as literal strings in an LLM prompt.
+- A renderer branches on enum values literally
+  (e.g., `switch (tag) { case "validation_present": ... }`) AND the
+  same tag appears in a taxonomy-declaration comment or a prompt
+  block that references the tag list.
+- Any other code path reads the enum value as a literal string for
+  control flow or user-facing text.
+
+Don't apply when:
+- The enum only exists on the validator side (the model never emits
+  it; it's a derived/internal state). No prompt coupling, no drift.
+- The prompt describes the taxonomy in prose rather than literal
+  tokens ("pick the pattern that best matches"). The model will
+  paraphrase, so a `satisfies` check is noise.
+
+Same class as §16.4 (controlled taxonomy: don't let AI invent tags)
+and the CLAUDE.md OBSERVATION_TAG_COPY prefix-drift lesson — any time
+the same string lives in two authored places, link them with a type
+so a rename in one breaks the build of the other.
