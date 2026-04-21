@@ -1,12 +1,14 @@
 import { MapPin, Users, ArrowRight } from "lucide-react";
 import { InsightIcon } from "./InsightIcon";
-import { DIRECTION_STYLES, FIELD_TYPOGRAPHY } from "@/lib/insights-visual";
+import {
+  ACCENT_BORDER,
+  DIRECTION_STYLES,
+  FIELD_TYPOGRAPHY,
+} from "@/lib/insights-visual";
 import type { TagCopy } from "@/lib/insights";
 
 interface Props {
   displayName: string;
-  // Optional: when null, the card renders a positive-only variant (no "Try
-  // instead" field) or degrades to the legacy single-line layout.
   copy: TagCopy | null;
   positiveCopy: TagCopy | null;
   distinctEntries: number;
@@ -25,31 +27,24 @@ function resolvePatternLine(copy: TagCopy, displayName: string): string {
   return `With ${displayName}, ${lowercaseFirst(copy.pattern)}`;
 }
 
-export function PersonPatternCard({
+export function WithPersonBox({
   displayName,
   copy,
   positiveCopy,
   distinctEntries,
   distinctDays,
 }: Props) {
-  // Prefer negative copy for the main render; fall back to positive-only view
-  // when only a positive counter-pattern meets the threshold for this person.
   const primary = copy ?? positiveCopy;
   if (!primary) return null;
 
   const style = DIRECTION_STYLES[primary.direction];
-  const accentBorder =
-    primary.direction === "positive"
-      ? "border-emerald-400"
-      : primary.direction === "neutral"
-        ? "border-sky-400"
-        : "border-amber-400";
+  const accentBorder = ACCENT_BORDER[primary.direction];
 
   const patternLine = resolvePatternLine(primary, displayName);
 
   return (
     <div
-      className={`rounded-xl border border-zinc-200 border-l-4 ${style.border} ${style.bg} p-5`}
+      className={`mt-4 rounded-xl border border-zinc-200 border-l-4 ${style.border} ${style.bg} p-5`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -100,7 +95,7 @@ export function PersonPatternCard({
         </p>
       ) : null}
 
-      <div className="mt-3 border-t border-zinc-200 pt-3">
+      <div className="mt-4 border-t border-zinc-200 pt-3">
         <p className={FIELD_TYPOGRAPHY.proof}>
           {distinctEntries} {distinctEntries === 1 ? "entry" : "entries"} across{" "}
           {distinctDays} {distinctDays === 1 ? "day" : "days"}.

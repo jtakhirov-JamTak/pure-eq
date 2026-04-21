@@ -1,7 +1,10 @@
 import { MapPin, Users, ArrowRight } from "lucide-react";
 import { InsightIcon } from "./InsightIcon";
-import { EvolutionDelta } from "./EvolutionDelta";
-import { DIRECTION_STYLES, FIELD_TYPOGRAPHY } from "@/lib/insights-visual";
+import {
+  ACCENT_BORDER,
+  DIRECTION_STYLES,
+  FIELD_TYPOGRAPHY,
+} from "@/lib/insights-visual";
 import type {
   TagCopy,
   PatternSnapshot,
@@ -12,26 +15,23 @@ interface Props {
   copy: TagCopy;
   distinctEntries: number;
   distinctDays: number;
-  evolution: PatternSnapshot["evolution"] | null;
+  evolution: PatternSnapshot["evolution"];
   counterObservations: Array<{
     tag: ObservationTag;
     count: number;
     copy: TagCopy;
   }>;
+  comparatorLine: string | null;
+  shiftLine: string;
 }
 
-const ACCENT_BORDER: Record<TagCopy["direction"], string> = {
-  negative: "border-amber-400",
-  positive: "border-emerald-400",
-  neutral: "border-sky-400",
-};
-
-export function PatternCard({
+export function MainPatternBox({
   copy,
   distinctEntries,
   distinctDays,
-  evolution,
   counterObservations,
+  comparatorLine,
+  shiftLine,
 }: Props) {
   const style = DIRECTION_STYLES[copy.direction];
   const accentBorder = ACCENT_BORDER[copy.direction];
@@ -44,7 +44,7 @@ export function PatternCard({
         <div className="flex items-center gap-2">
           <InsightIcon type="pattern" className="h-5 w-5 text-zinc-600" />
           <span className="text-xs font-medium uppercase tracking-wider text-zinc-600">
-            Pattern
+            Your Main Pattern
           </span>
         </div>
         <span
@@ -73,6 +73,10 @@ export function PatternCard({
         </div>
       </div>
 
+      {comparatorLine ? (
+        <p className="mt-3 text-sm italic text-zinc-700">{comparatorLine}</p>
+      ) : null}
+
       <div className={`mt-3 border-l-2 ${accentBorder} pl-3`}>
         <div className="flex items-start gap-2">
           <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
@@ -83,33 +87,26 @@ export function PatternCard({
         </div>
       </div>
 
-      <div className="mt-4 border-t border-zinc-200 pt-3">
-        <div className="flex items-center justify-between gap-2">
-          <p className={`${FIELD_TYPOGRAPHY.proof} min-w-0 flex-1`}>
-            Seen in {distinctEntries}{" "}
-            {distinctEntries === 1 ? "entry" : "entries"}, across {distinctDays}{" "}
-            {distinctDays === 1 ? "day" : "days"}.
-          </p>
-          {evolution ? (
-            <EvolutionDelta
-              priorCount={evolution.priorWindow.count}
-              currentCount={evolution.currentWindow.count}
-              verdict={evolution.verdict}
-              direction={copy.direction}
-            />
-          ) : null}
-        </div>
+      {counterObservations.length > 0 ? (
+        <p className="mt-3 text-xs text-zinc-600">
+          Also showing up:{" "}
+          {counterObservations
+            .slice(0, 2)
+            .map((c) => c.copy.pattern.replace(/\.$/, ""))
+            .join("; ")}
+          .
+        </p>
+      ) : null}
 
-        {counterObservations.length > 0 ? (
-          <p className="mt-2 text-xs text-zinc-600">
-            Also showing up:{" "}
-            {counterObservations
-              .slice(0, 2)
-              .map((c) => c.copy.pattern.replace(/\.$/, ""))
-              .join("; ")}
-            .
-          </p>
+      <div className="mt-4 border-t border-zinc-200 pt-3">
+        {shiftLine ? (
+          <p className="text-xs text-zinc-600">{shiftLine}</p>
         ) : null}
+        <p className={`${FIELD_TYPOGRAPHY.proof} ${shiftLine ? "mt-1" : ""}`}>
+          Seen in {distinctEntries}{" "}
+          {distinctEntries === 1 ? "entry" : "entries"}, across {distinctDays}{" "}
+          {distinctDays === 1 ? "day" : "days"}.
+        </p>
       </div>
     </div>
   );

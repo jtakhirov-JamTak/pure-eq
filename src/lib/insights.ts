@@ -1119,3 +1119,103 @@ export function gateComparatorRender(params: {
 }): boolean {
   return params.showComparator === true && params.qualifies === true;
 }
+
+// ---------- 3-Box Insights Redesign ----------
+
+// Thresholds for the "established" comparator tier. Mirrors the rule the
+// writer applies when it stamps confidence_level='established' on the
+// derived_insights row (see insights-writer.ts). Kept here so reader-side
+// code can derive the same verdict from a ComparatorSnapshot without a DB
+// round-trip on cache miss / live recompute.
+export const COMPARATOR_ESTABLISHED = {
+  minReviewCount: 5,
+  minReactiveCount: 5,
+  minGap: 0.45,
+} as const;
+
+export function isComparatorEstablished(snapshot: ComparatorSnapshot): boolean {
+  return (
+    snapshot.reviewCount >= COMPARATOR_ESTABLISHED.minReviewCount &&
+    snapshot.reactiveCount >= COMPARATOR_ESTABLISHED.minReactiveCount &&
+    snapshot.gap >= COMPARATOR_ESTABLISHED.minGap
+  );
+}
+
+// Box 2 comparator framing line renders only when the flag is on AND the
+// snapshot clears the established tier (strictly above qualifies). Weak
+// 0.35–0.45 gap users see nothing; the row still gets written for analytics.
+export function shouldRenderComparatorLine(params: {
+  showComparator: boolean;
+  snapshot: ComparatorSnapshot | null;
+}): boolean {
+  if (!params.showComparator) return false;
+  if (!params.snapshot) return false;
+  if (!params.snapshot.qualifies) return false;
+  return isComparatorEstablished(params.snapshot);
+}
+
+export const COMPARATOR_FRAMING_LINE =
+  "You often see this more clearly afterward than you catch it in the moment.";
+
+export const SHIFT_STATUS_COPY: Record<PatternVerdict, string> = {
+  new: "Starting to show up recently.",
+  increasing: "Happening more often lately.",
+  steady: "Active and steady.",
+  decreasing: "Easing up in recent weeks.",
+  gone: "Quiet in recent weeks.",
+  dormant: "No recent activity.",
+};
+
+// Box 3 picks a single person. Rank: established confidence first, then
+// strong-emerging fallback. Null when no person clears the bar — Box 3 is
+// omitted entirely in that case (no section header, no empty state).
+//
+// Strong-emerging requires:
+//   entryCount >= 5, distinctDays >= 3, topNegative.count >= 3.
+// The underlying getPersonPatterns already enforces reviewEntries >= 2, so
+// any candidate here has cleared that floor.
+export interface PersonPickCandidate {
+  personId: string;
+  displayName: string;
+  topNegative: { tag: ObservationTag; summary: string; count: number } | null;
+  topPositive: { tag: ObservationTag; summary: string; count: number } | null;
+  confidenceLevel: "emerging" | "established";
+  distinctEntries: number;
+  distinctDays: number;
+}
+
+export const PERSON_PICK_STRONG_EMERGING = {
+  minEntries: 5,
+  minDistinctDays: 3,
+  minNegativeCount: 3,
+} as const;
+
+export function pickTopPerson<T extends PersonPickCandidate>(
+  candidates: T[],
+): T | null {
+  if (candidates.length === 0) return null;
+
+  // Require a negative pattern on both tiers. Positive-only is demoted to the
+  // `Also` line per spec. Without this filter an established-confidence row
+  // with only a positive pattern (possible when the writer found ≥2 positive
+  // observations but no qualifying negative) would render Box 3 positive-only.
+  const established = candidates
+    .filter(
+      (c) => c.confidenceLevel === "established" && c.topNegative !== null,
+    )
+    .sort((a, b) => b.distinctEntries - a.distinctEntries);
+  if (established.length > 0) return established[0];
+
+  const strongEmerging = candidates
+    .filter(
+      (c) =>
+        c.distinctEntries >= PERSON_PICK_STRONG_EMERGING.minEntries &&
+        c.distinctDays >= PERSON_PICK_STRONG_EMERGING.minDistinctDays &&
+        c.topNegative !== null &&
+        c.topNegative.count >= PERSON_PICK_STRONG_EMERGING.minNegativeCount,
+    )
+    .sort((a, b) => b.distinctEntries - a.distinctEntries);
+  if (strongEmerging.length > 0) return strongEmerging[0];
+
+  return null;
+}

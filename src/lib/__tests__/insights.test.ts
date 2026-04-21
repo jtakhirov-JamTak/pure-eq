@@ -10,8 +10,13 @@ import {
   inferTriggerPatternTag,
   inferOverwhelmedPatternTag,
   isComparatorSnapshot,
+  isComparatorEstablished,
+  shouldRenderComparatorLine,
+  pickTopPerson,
+  type ComparatorSnapshot,
   type PatternObservation,
   type PatternSnapshot,
+  type PersonPickCandidate,
 } from "@/lib/insights";
 
 // Small helper: build a PatternObservation with sensible defaults so each
@@ -829,5 +834,295 @@ describe("multi-tag distinct counting (getTopPattern regression)", () => {
     // emergingTagCount is 2. All 3 tags have distinctEntries = 1 (same raw
     // record). Top pattern returns null.
     expect(getTopPattern(observations)).toBeNull();
+  });
+});
+
+// ---------- 3-Box Redesign Helpers ----------
+
+function makeComparator(
+  overrides: Partial<ComparatorSnapshot> = {},
+): ComparatorSnapshot {
+  return {
+    reflectionScore: 0.6,
+    regulationScore: 0.1,
+    gap: 0.5,
+    reviewCount: 6,
+    reactiveCount: 6,
+    distinctDays: 5,
+    qualifies: true,
+    evolution: null,
+    contributingTags: [],
+    ...overrides,
+  };
+}
+
+describe("isComparatorEstablished", () => {
+  it("requires review >= 5, reactive >= 5, gap >= 0.45", () => {
+    expect(isComparatorEstablished(makeComparator())).toBe(true);
+
+    // Each threshold tested by dropping just below the bar
+    expect(
+      isComparatorEstablished(makeComparator({ reviewCount: 4 })),
+    ).toBe(false);
+    expect(
+      isComparatorEstablished(makeComparator({ reactiveCount: 4 })),
+    ).toBe(false);
+    expect(isComparatorEstablished(makeComparator({ gap: 0.44 }))).toBe(false);
+
+    // Exactly at the bar qualifies
+    expect(
+      isComparatorEstablished(
+        makeComparator({ reviewCount: 5, reactiveCount: 5, gap: 0.45 }),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("shouldRenderComparatorLine", () => {
+  it("returns false when flag is off", () => {
+    expect(
+      shouldRenderComparatorLine({
+        showComparator: false,
+        snapshot: makeComparator(),
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when snapshot is null", () => {
+    expect(
+      shouldRenderComparatorLine({
+        showComparator: true,
+        snapshot: null,
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when snapshot does not qualify", () => {
+    expect(
+      shouldRenderComparatorLine({
+        showComparator: true,
+        snapshot: makeComparator({ qualifies: false }),
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false on emerging (qualifies but below established)", () => {
+    // gap 0.4 qualifies (>= 0.35) but is below established (0.45)
+    expect(
+      shouldRenderComparatorLine({
+        showComparator: true,
+        snapshot: makeComparator({ gap: 0.4 }),
+      }),
+    ).toBe(false);
+  });
+
+  it("returns true only when flag on AND established", () => {
+    expect(
+      shouldRenderComparatorLine({
+        showComparator: true,
+        snapshot: makeComparator(),
+      }),
+    ).toBe(true);
+  });
+});
+
+function makePerson(
+  overrides: Partial<PersonPickCandidate>,
+): PersonPickCandidate {
+  return {
+    personId: "p-" + Math.random().toString(36).slice(2, 8),
+    displayName: "Someone",
+    topNegative: null,
+    topPositive: null,
+    confidenceLevel: "emerging",
+    distinctEntries: 0,
+    distinctDays: 0,
+    ...overrides,
+  };
+}
+
+describe("pickTopPerson", () => {
+  it("returns null on empty input", () => {
+    expect(pickTopPerson([])).toBeNull();
+  });
+
+  it("prefers an established person even when emerging persons have more entries", () => {
+    const established = makePerson({
+      personId: "a",
+      displayName: "Alice",
+      confidenceLevel: "established",
+      distinctEntries: 9,
+      distinctDays: 6,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 5,
+      },
+    });
+    const stronglyEmerging = makePerson({
+      personId: "b",
+      displayName: "Bob",
+      confidenceLevel: "emerging",
+      distinctEntries: 50,
+      distinctDays: 10,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 40,
+      },
+    });
+    const picked = pickTopPerson([stronglyEmerging, established]);
+    expect(picked?.personId).toBe("a");
+  });
+
+  it("falls back to strong-emerging when no one is established", () => {
+    const weak = makePerson({
+      personId: "w",
+      distinctEntries: 3,
+      distinctDays: 2,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 2,
+      },
+    });
+    const strong = makePerson({
+      personId: "s",
+      distinctEntries: 6,
+      distinctDays: 4,
+      topNegative: {
+        tag: "withdrew_under_tension",
+        summary: "x",
+        count: 4,
+      },
+    });
+    const picked = pickTopPerson([weak, strong]);
+    expect(picked?.personId).toBe("s");
+  });
+
+  it("returns null when no one clears the strong-emerging bar", () => {
+    // Meets entries + days but negative count below minNegativeCount
+    const belowNegCount = makePerson({
+      distinctEntries: 6,
+      distinctDays: 4,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 2,
+      },
+    });
+    // Meets count + days but below minEntries
+    const belowEntries = makePerson({
+      distinctEntries: 4,
+      distinctDays: 4,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 3,
+      },
+    });
+    // Meets count + entries but below minDistinctDays
+    const belowDays = makePerson({
+      distinctEntries: 6,
+      distinctDays: 2,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 3,
+      },
+    });
+    expect(pickTopPerson([belowNegCount, belowEntries, belowDays])).toBeNull();
+  });
+
+  it("returns null for positive-only persons at the strong-emerging tier", () => {
+    // Strong-emerging requires a negative pattern. Positive-only does not
+    // qualify for Box 3 — spec says counter-patterns demote to `Also` line.
+    const positiveOnly = makePerson({
+      distinctEntries: 10,
+      distinctDays: 5,
+      topNegative: null,
+      topPositive: {
+        tag: "validation_present",
+        summary: "x",
+        count: 5,
+      },
+    });
+    expect(pickTopPerson([positiveOnly])).toBeNull();
+  });
+
+  it("rejects established persons that have only a positive pattern", () => {
+    // Regression: an established-confidence row with topNegative=null (writer
+    // found ≥2 positive observations but no qualifying negative) would have
+    // passed the established filter if it only keyed on confidenceLevel.
+    // Positive-only must demote to the `Also` line, never lead Box 3.
+    const establishedPositiveOnly = makePerson({
+      confidenceLevel: "established",
+      distinctEntries: 12,
+      distinctDays: 7,
+      topNegative: null,
+      topPositive: {
+        tag: "validation_present",
+        summary: "x",
+        count: 6,
+      },
+    });
+    expect(pickTopPerson([establishedPositiveOnly])).toBeNull();
+  });
+
+  it("picks a strong-emerging negative person over an established positive-only person", () => {
+    const establishedPositiveOnly = makePerson({
+      personId: "pos",
+      confidenceLevel: "established",
+      distinctEntries: 20,
+      distinctDays: 10,
+      topNegative: null,
+      topPositive: {
+        tag: "validation_present",
+        summary: "x",
+        count: 10,
+      },
+    });
+    const strongEmergingNegative = makePerson({
+      personId: "neg",
+      confidenceLevel: "emerging",
+      distinctEntries: 5,
+      distinctDays: 3,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 3,
+      },
+    });
+    const picked = pickTopPerson([
+      establishedPositiveOnly,
+      strongEmergingNegative,
+    ]);
+    expect(picked?.personId).toBe("neg");
+  });
+
+  it("picks the established person with more entries when multiple are established", () => {
+    const smaller = makePerson({
+      personId: "small",
+      confidenceLevel: "established",
+      distinctEntries: 10,
+      distinctDays: 6,
+      topNegative: {
+        tag: "defended_intent_early",
+        summary: "x",
+        count: 5,
+      },
+    });
+    const bigger = makePerson({
+      personId: "big",
+      confidenceLevel: "established",
+      distinctEntries: 20,
+      distinctDays: 8,
+      topNegative: {
+        tag: "withdrew_under_tension",
+        summary: "x",
+        count: 8,
+      },
+    });
+    expect(pickTopPerson([smaller, bigger])?.personId).toBe("big");
   });
 });

@@ -1474,3 +1474,176 @@ Why this matters:
   other schema failure in the route's retry logic — both attempts
   fail the same way and the user hits the same dead-end screen. A
   too-tight cap is a 100%-failure bug disguised as a transient.
+
+§16.14 Runtime-narrow enum string columns read from DB
+-------------------------------------------------------
+Problem: A table column with `CHECK (col IN ('a', 'b'))` or
+`col col_enum_type` gives you a narrow union in your generated Row
+types. On the read path, TypeScript trusts that union. In practice:
+legacy rows predate the constraint, pending migrations haven't run,
+hand-edited rows exist, or a future migration expands the enum and
+a stale reader runs the old code. Blind `as "a" | "b"` cast in the
+reader propagates the trust lie into downstream filters.
+
+    // BROKEN — if row.tier is "legacy" or null, the cast lies and
+    //   downstream `confidence === "established"` still type-checks
+    confidence: row.tier as "emerging" | "established",
+
+    // CORRECT — runtime ternary forces a known value or a safe default
+    const confidence: "emerging" | "established" =
+      row.tier === "established" ? "established" : "emerging";
+
+Same principle for jsonb-embedded enum-typed fields (`verdict`,
+`severity`, etc.). When the shape guard only checks `typeof x === "string"`,
+a `Record<Enum, V>` indexed by that string returns undefined at runtime
+despite TS's claim of `V`. Add `?? <default>` as a runtime fallback:
+
+    const copy = STATUS_COPY[row.verdict] ?? STATUS_COPY.steady;
+
+Rules:
+- Any string column column that drives a downstream filter or
+  dispatch table gets runtime narrowed, not cast
+- Record<Enum, V> lookups from jsonb-sourced keys get a `??` fallback
+- The fallback choice matters — pick the "most honest when we don't
+  know" value (e.g. "emerging" downgrades confidence; "steady"
+  downgrades verdict). Never pick the highest-claim value
+- Pair with a generator_version guard on the row so stale-shape
+  rows fall through to live recompute instead of rendering via
+  the fallback every time
+
+Why this matters: TypeScript's narrowing stops at `Database`-generated
+types. The whole chain downstream trusts the cast. A single row with
+an unexpected value can silently bucket into the wrong tier, the
+wrong dispatch case, or an empty render. Runtime narrowing re-imposes
+the constraint the type system was promising.
+
+§16.15 Empty-state copy: one state, one render
+----------------------------------------------
+Problem: An empty state that fires conditional copy overrides *and*
+renders a secondary description creates double-stacked text for one
+branch and single-line for the others. Looks like a typo to the user.
+
+    // BROKEN — no_entries shows TWO lines, others show ONE
+    <p>{state === "no_entries" ? "Not enough data yet" : message}</p>
+    {state === "no_entries" && <p>{message}</p>}
+
+    // CORRECT — one render per state, caller picks the message
+    <p>{message}</p>
+
+Rules:
+- A given empty state renders the same shape (title, or title +
+  subtitle — not sometimes one, sometimes both)
+- If a state needs both a short title and a longer explainer, make
+  that structural — every state provides both fields, even if one
+  is empty — not a conditional override
+- Empty-state copy is user-facing. Inconsistent renders read as
+  bugs, not deliberate design
+
+Why this matters: empty states are the first thing a brand-new user
+sees. Double-text on day-one and single-text on day-three destroys
+trust in the polish of the product. Caught on a 6-surface → 3-box
+refactor where one branch had been designed as "label + explainer"
+and the others had inherited "label only" — visible inconsistency.
+
+§16.16 Selector-tier predicates: explicit at every tier
+--------------------------------------------------------
+Problem: A selector that ranks candidates across confidence tiers
+(established > emerging > nothing) and applies a predicate only
+to the lower tier implicitly assumes higher-tier candidates already
+satisfy the same predicate. They don't.
+
+    // BROKEN — established positive-only persons slip through
+    const established = candidates
+      .filter(c => c.confidence === "established")
+      .sort(...);
+    if (established.length > 0) return established[0];
+
+    const strongEmerging = candidates
+      .filter(c =>
+        c.entries >= 5 && c.days >= 3 && c.topNegative !== null
+      )
+      .sort(...);
+
+The `topNegative !== null` check only runs on the strong-emerging
+tier. An established-confidence row with `topNegative === null`
+(e.g., writer found ≥2 positive observations but no qualifying
+negative) bypasses the filter and leads the surface with a positive-
+only render — contradicting the spec that positives demote to a
+secondary line.
+
+    // CORRECT — every hard predicate applies to every tier
+    const established = candidates
+      .filter(c =>
+        c.confidence === "established" && c.topNegative !== null
+      )
+      .sort(...);
+
+Rules:
+- Identify the hard predicates (must-be-true for this surface to
+  render honestly) vs the soft predicates (thresholds that define
+  a tier). Hard predicates go on every tier; soft predicates define
+  the tier
+- Each tier's filter is a full `predicate = hardPredicates ∧ tierPredicate`
+- Test every tier × hard-predicate combination. A passing test on
+  one tier doesn't cover the higher tier if the predicate is
+  implicit there
+
+Why this matters: higher-confidence tiers aren't automatically
+superset-safe for every downstream render constraint. The shape of
+what qualifies at each tier is decided by the writer's rules; the
+selector has to reaffirm the render-level shape it needs. Missed
+on the first implementation — tests covered strong-emerging
+positive-only rejection but not established positive-only
+rejection; same bug, untested dimension.
+
+§16.17 Cache version guards applied uniformly across row types
+--------------------------------------------------------------
+Problem: A cache table with multiple row types (insight_type,
+event_type, entity_type, etc.) needs the `generator_version` guard
+applied to every type, not just the first one the feature shipped
+for. Skipping it on a later-added type creates a silent rendering
+hazard after the next schema bump.
+
+    // BROKEN — top_pattern guards version; person_pattern skips it
+    if (cacheIsFresh) {
+      const topRow = rows.find(r => r.type === "top_pattern");
+      if (topRow?.version === VERSION && isValidShape(topRow.data)) {
+        // use cache
+      } else {
+        // live recompute
+      }
+
+      const personRows = rows.filter(r => r.type === "person_pattern");
+      for (const row of personRows) {
+        // NO version check — legacy rows render through new code
+      }
+    }
+
+    // CORRECT — same guard, fall through on mismatch
+    if (cacheIsFresh) {
+      const personRows = rows.filter(r => r.type === "person_pattern");
+      const allVersionOk = personRows.every(
+        r => r.version === VERSION
+      );
+      if (allVersionOk) {
+        // use cache
+      }
+      // else: fall through to live recompute below
+    }
+
+Rules:
+- Every cache row type uses the same generator_version guard as the
+  first one you shipped
+- For multi-row types (N rows per user), decide: fail-all-or-nothing
+  (one stale row → live recompute all) vs fail-per-row (skip stale,
+  use rest). Fail-all is cleaner for consistency; fail-per-row
+  optimizes for cost during a rolling migration. Default to fail-all
+- Audit checklist for `generator_version` bumps: every cache row
+  type must fall through to live recompute under the bumped version.
+  Grep for `version === VERSION` — every cache-read site should match
+
+Why this matters: versioning is a consistency tool, not a type tool.
+Its whole value is preventing stale-shape reads from reaching new
+renderers after a bump. Asymmetric application means the bump
+succeeds for the guarded types and silently fails for the others —
+exactly when you most want the safety net.

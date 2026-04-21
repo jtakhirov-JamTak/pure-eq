@@ -41,9 +41,9 @@ export const DIRECTION_STYLES: Record<
   },
 };
 
-// Per-field typography for PatternCard's five-field layout.
-// pattern is the lead; tryInstead gets visual emphasis via font-medium +
-// accent left border (border color resolved at render site from direction).
+// Per-field typography for the insight-box five-field layout. pattern is the
+// lead; tryInstead gets visual emphasis via font-medium + accent left border
+// (border color resolved at render site from direction via ACCENT_BORDER).
 export const FIELD_TYPOGRAPHY = {
   pattern: "text-lg font-semibold text-zinc-900",
   showsUpWhen: "text-sm text-zinc-700",
@@ -51,3 +51,12 @@ export const FIELD_TYPOGRAPHY = {
   tryInstead: "text-sm font-medium text-zinc-900",
   proof: "text-xs text-zinc-600",
 } as const;
+
+// Accent border used inside the "Try instead" block. One shade lighter than
+// DIRECTION_STYLES.border (which is the left edge of the full card) so the
+// inner accent reads as a sub-emphasis rather than a second hard edge.
+export const ACCENT_BORDER: Record<TagDirection, string> = {
+  negative: "border-amber-400",
+  positive: "border-emerald-400",
+  neutral: "border-sky-400",
+};

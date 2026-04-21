@@ -8,12 +8,13 @@ import * as Sentry from "@sentry/nextjs";
 import type { Database, Json } from "@/types/database";
 import {
   checkInsightThresholds,
+  COMPARATOR_COPY,
   computePatternSnapshot,
   computeReflectionRegulationGap,
-  COMPARATOR_COPY,
   enrichObservations,
   getPersonPatterns,
   HIGH_FIT_RECORD_TYPES,
+  isComparatorEstablished,
 } from "@/lib/insights";
 
 export const GENERATOR_VERSION = "v1";
@@ -169,11 +170,9 @@ async function regenerateInsightsInner(
 
   if (comparator.qualifies) {
     // "established" tier: has material margin over threshold on all axes.
-    // Same two-tier shape as PatternCard (emerging | established).
-    const established =
-      comparator.reviewCount >= 5 &&
-      comparator.reactiveCount >= 5 &&
-      comparator.gap >= 0.45;
+    // Thresholds live in insights.ts so reader-side gating (Box 2 framing
+    // line) can derive the same verdict from the snapshot without a DB read.
+    const established = isComparatorEstablished(comparator);
     rows.push({
       ...baseRow,
       insight_type: "reflection_regulation_gap",
