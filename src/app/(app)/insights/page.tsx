@@ -1,6 +1,6 @@
 // Pure EQ domain — replace in fork.
 import * as Sentry from "@sentry/nextjs";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { requirePaidAccessPage } from "@/lib/require-access";
 import {
@@ -52,11 +52,13 @@ function captureInsightsRead(err: unknown, kind: string): void {
 }
 
 export default async function InsightsPage() {
-  const supabase = await createClient();
+  const t0 = Date.now();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getAuthUser();
   if (!user) redirect("/login");
+
+  const supabase = await createClient();
 
   // Paid-only surface (see docs/access_route_matrix.md).
   await requirePaidAccessPage(user);
@@ -369,6 +371,7 @@ export default async function InsightsPage() {
   const primary = profile?.primary_profile as ProfileType | undefined;
   const secondary = profile?.secondary_profile as ProfileType | null;
 
+  console.log(`[perf] insights ${Date.now() - t0}ms`);
   return (
     <div className="px-5 pb-28 pt-8">
       <h2 className="text-xl font-bold text-zinc-900">Insights</h2>

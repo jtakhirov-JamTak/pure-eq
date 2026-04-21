@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/server";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import { AppShell } from "@/components/app-shell";
@@ -9,10 +9,12 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
+  const t0 = Date.now();
+  // getAuthUser is React.cache()-wrapped — shares the JWT validation
+  // round trip with the page below.
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getAuthUser();
 
   // Middleware should have caught unauthed users, but be safe.
   if (!user) {
@@ -31,5 +33,6 @@ export default async function AppLayout({
     }
   }
 
+  console.log(`[perf] (app) layout ${Date.now() - t0}ms u=${user.id.slice(0, 8)}`);
   return <AppShell>{children}</AppShell>;
 }

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { requirePaidAccessPage } from "@/lib/require-access";
@@ -26,17 +26,20 @@ const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
 };
 
 export default async function HistoryPage() {
-  const supabase = await createClient();
+  const t0 = Date.now();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getAuthUser();
   if (!user) redirect("/login");
+
+  const supabase = await createClient();
 
   // Paid-only surface.
   await requirePaidAccessPage(user);
 
-  // Counts per module type. Five parallel `head + count: exact` queries —
-  // fine for v0 on a low-traffic page. Swap for a GROUP BY RPC if load grows.
+  // Counts per module type + latest-10 query — all in one parallel batch.
+  // Previously the rows query ran sequentially after the counts, costing
+  // one extra round trip per page render.
   const countQueries = DELETABLE_TYPES.map((t) =>
     supabase
       .from("raw_records")
@@ -46,8 +49,21 @@ export default async function HistoryPage() {
       .eq("is_complete", true)
       .is("deleted_at", null)
   );
+  const rowsQuery = supabase
+    .from("raw_records")
+    .select("raw_record_id, record_type, created_at, completed_at")
+    .eq("user_id", user.id)
+    .in("record_type", DELETABLE_TYPES as unknown as string[])
+    .eq("is_complete", true)
+    .is("deleted_at", null)
+    .order("created_at", { ascending: false })
+    .limit(PAGE_SIZE);
 
-  const countResults = await Promise.all(countQueries);
+  const [countResults, rowsRes] = await Promise.all([
+    Promise.all(countQueries),
+    rowsQuery,
+  ]);
+  const { data: rows } = rowsRes;
 
   const counts: Record<(typeof DELETABLE_TYPES)[number], number> = {
     prepare: 0,
@@ -62,17 +78,6 @@ export default async function HistoryPage() {
 
   const totalCount = Object.values(counts).reduce((a, b) => a + b, 0);
 
-  // Latest 10 entries across the five deletable types.
-  const { data: rows } = await supabase
-    .from("raw_records")
-    .select("raw_record_id, record_type, created_at, completed_at")
-    .eq("user_id", user.id)
-    .in("record_type", DELETABLE_TYPES as unknown as string[])
-    .eq("is_complete", true)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false })
-    .limit(PAGE_SIZE);
-
   const initialEntries: HistoryEntry[] = (rows ?? []).map((r) => ({
     id: r.raw_record_id,
     recordType: r.record_type,
@@ -81,6 +86,7 @@ export default async function HistoryPage() {
     completedAt: r.completed_at ?? r.created_at,
   }));
 
+  console.log(`[perf] history ${Date.now() - t0}ms total=${totalCount}`);
   return (
     <div className="px-5 pt-8 pb-28">
       <h1 className="text-2xl font-bold text-zinc-900">History</h1>

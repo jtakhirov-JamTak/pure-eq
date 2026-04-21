@@ -1,13 +1,17 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 
 export default async function CoachPage() {
-  const supabase = await createClient();
+  const t0 = Date.now();
+  // Same request-cached getAuthUser as the (app) layout — zero extra
+  // Supabase Auth round trip here.
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await getAuthUser();
   if (!user) redirect("/login");
+
+  const supabase = await createClient();
 
   // Fetch recent active threads (limit 3 for the hub).
   const [threadsRes, personsRes] = await Promise.all([
@@ -30,6 +34,8 @@ export default async function CoachPage() {
   const personMap = new Map(
     (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
   );
+
+  console.log(`[perf] coach hub ${Date.now() - t0}ms threads=${threads.length}`);
 
   function formatRelativeDate(iso: string) {
     const d = new Date(iso);

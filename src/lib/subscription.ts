@@ -57,15 +57,27 @@ export interface SubscriptionAccess {
  */
 export const checkSubscription = cache(async (userId: string): Promise<SubscriptionAccess> => {
   const supabase = await createClient();
-  // Free-period anchor: onboarding completion. Users without a profile
-  // are caught by the routing hub upstream; fail closed if missing.
-  const { data: profileRow } = await supabase
-    .from("user_profiles")
-    .select("created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  // Fire both reads in parallel — they're independent. Used to run
+  // sequentially, which added ~50–100ms per page render on top of the
+  // layout + page auth round trips. Users without a profile are caught
+  // by the routing hub upstream; fail closed if missing.
+  const [profileRes, subRes] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("user_subscriptions")
+      .select("status, free_prepare_used_at, free_review_used_at, trial_ends_at")
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+
+  const profileRow = profileRes.data;
+  const { data: row, error } = subRes;
 
   const now = Date.now();
   const profileCreatedMs = profileRow?.created_at
@@ -77,12 +89,6 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
   const toolsWindowActive =
     profileCreatedMs !== null &&
     now - profileCreatedMs < TOOLS_FREE_PERIOD_DAYS * DAY_MS;
-
-  const { data: row, error } = await supabase
-    .from("user_subscriptions")
-    .select("status, free_prepare_used_at, free_review_used_at, trial_ends_at")
-    .eq("user_id", userId)
-    .maybeSingle();
 
   if (error) {
     console.error("subscription: lookup failed", error.code);
