@@ -158,3 +158,6 @@ scratch/
 
 # /save-context skill state — per-developer running context, not source code
 session-context.md
+
+# Offline eval harness output — batch artifacts (machine metrics + blind review CSVs)
+eval-output/

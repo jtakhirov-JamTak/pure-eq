@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "db:types": "npx -y supabase gen types typescript --project-id ppklkrsotwckcqmsddcs --schema public > src/types/database.ts"
+    "db:types": "npx -y supabase gen types typescript --project-id ppklkrsotwckcqmsddcs --schema public > src/types/database.ts",
+    "eval:arms": "tsx scripts/eval/run-arm-comparison.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.89.0",
@@ -37,6 +38,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
     "tailwindcss": "^4",
+    "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^4.1.4"
   }
