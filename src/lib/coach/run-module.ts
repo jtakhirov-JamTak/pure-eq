@@ -368,8 +368,13 @@ export async function runCoachModule<
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const message = await anthropic.messages.create({
+        // Sonnet 4.6: thinking off + effort high. Explicit because Sonnet 4.6
+        // defaults have shifted across SDK versions; pinning preserves the
+        // instruction-following behavior our prompts are tuned against.
         model: "claude-sonnet-4-6",
         max_tokens: 1024,
+        thinking: { type: "disabled" },
+        output_config: { effort: "high" },
         system: prompt.system,
         messages: [{ role: "user", content: prompt.user }],
       });
