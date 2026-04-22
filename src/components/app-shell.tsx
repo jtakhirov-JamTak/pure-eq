@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
@@ -16,12 +16,38 @@ import {
   Check,
   Clock,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 const TABS = [
   { href: "/coach", label: "Coach", icon: MessageCircle },
   { href: "/tools", label: "Tools", icon: Wrench },
   { href: "/insights", label: "Insights", icon: BarChart3 },
 ];
+
+// useLinkStatus must be called inside a descendant of <Link>, so the
+// tap-feedback logic lives in a child component. `pending` flips true
+// the instant the Link is tapped and false when the navigation
+// resolves — lets us highlight the tab within one frame instead of
+// waiting for usePathname() to update after the new route loads.
+function TabIconAndLabel({
+  icon: Icon,
+  label,
+  isActive,
+}: {
+  icon: LucideIcon;
+  label: string;
+  isActive: boolean;
+}) {
+  const { pending } = useLinkStatus();
+  const showActive = isActive || pending;
+  const color = showActive ? "text-zinc-900" : "text-zinc-400";
+  return (
+    <>
+      <Icon className={cn("h-5 w-5", color)} />
+      <span className={color}>{label}</span>
+    </>
+  );
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -105,15 +131,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Link
               key={tab.href}
               href={tab.href}
-              className={cn(
-                "flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium transition-colors",
-                isActive ? "text-zinc-900" : "text-zinc-400"
-              )}
+              // `active:opacity-70` is the CSS finger-down feedback;
+              // icon/label color flip comes from useLinkStatus inside
+              // TabIconAndLabel.
+              className="flex flex-col items-center gap-1 px-4 py-2 text-xs font-medium transition-colors active:opacity-70"
             >
-              <tab.icon
-                className={cn("h-5 w-5", isActive ? "text-zinc-900" : "text-zinc-400")}
+              <TabIconAndLabel
+                icon={tab.icon}
+                label={tab.label}
+                isActive={isActive}
               />
-              {tab.label}
             </Link>
           );
         })}
