@@ -5,15 +5,12 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { useTheme } from "@/lib/use-theme";
 import {
   MessageCircle,
   Wrench,
   BarChart3,
   User,
   LogOut,
-  Cloud,
-  Check,
   Clock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -53,7 +50,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { theme, toggle: toggleTheme } = useTheme();
 
   async function handleLogout() {
     const supabase = createClient();
@@ -91,19 +87,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   <Clock className="h-4 w-4" />
                   History
                 </Link>
-                <button
-                  onClick={() => {
-                    toggleTheme();
-                    setMenuOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-                >
-                  <Cloud className="h-4 w-4" />
-                  <span className="flex-1 text-left">Easy Mode</span>
-                  {theme === "easy" && (
-                    <Check className="h-4 w-4 text-sky-500" />
-                  )}
-                </button>
                 <button
                   onClick={handleLogout}
                   className="flex w-full items-center gap-2 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"

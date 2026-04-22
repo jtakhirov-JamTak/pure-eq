@@ -18,72 +18,62 @@ body {
 }
 
 /* ============================================================
-   Easy Mode — light blue sky + white cloud feel
-   Toggled via `html.easy-mode` class (see src/lib/use-theme.ts)
+   Mobile tap responsiveness
+   ============================================================
+   `touch-action: manipulation` tells the browser the tap is a plain
+   click — skip the ~300ms wait that Android Chrome and older iOS
+   Safari build in to detect double-tap-to-zoom. Combined with
+   `-webkit-tap-highlight-color: transparent`, this removes both the
+   tap delay and the gray flash, so buttons/links feel instant.
    ============================================================ */
-
-html.easy-mode {
-  background-image: linear-gradient(
-    180deg,
-    #bae6fd 0%,
-    #dbeafe 50%,
-    #e0f2fe 100%
-  );
-  background-attachment: fixed;
-  background-size: cover;
+button,
+a,
+[role="button"],
+label,
+input[type="submit"],
+input[type="button"],
+input[type="checkbox"],
+input[type="radio"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-html.easy-mode body {
-  background: transparent;
+/* ============================================================
+   Cross-page transitions (browser-native View Transitions API)
+   ============================================================
+   `@view-transition { navigation: auto }` enables a default crossfade
+   between pages on same-document navigation (Next.js App Router does
+   soft nav, so this triggers on tab clicks, Link presses, etc.).
+   Chrome 111+, Safari 18.2+, Android Chrome — falls back gracefully
+   on Firefox and other browsers. Zero JS cost.
+   ============================================================ */
+@view-transition {
+  navigation: auto;
 }
 
-/* Root-level white backgrounds (app shell, page containers) become
-   translucent so the sky gradient shows through. */
-html.easy-mode .bg-white {
-  background-color: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Rounded "card"-shaped white elements get cloud-lift shadows. */
-html.easy-mode .rounded-lg.bg-white,
-html.easy-mode .rounded-xl.bg-white,
-html.easy-mode .rounded-2xl.bg-white,
-html.easy-mode .rounded-3xl.bg-white,
-html.easy-mode .rounded-full.bg-white {
-  background-color: rgba(255, 255, 255, 0.92);
-  box-shadow:
-    0 20px 40px -15px rgba(56, 189, 248, 0.3),
-    0 8px 16px -8px rgba(56, 189, 248, 0.15);
+/* ============================================================
+   Content fade-in
+   ============================================================
+   Belt-and-suspenders fallback for browsers without View Transitions
+   support (and for the first skeleton → content swap within a single
+   Suspense boundary). Applied via className="animate-in fade-in"
+   where it matters, or implicitly via loading.tsx swap.
+   ============================================================ */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-/* Zinc-50 and zinc-100 surfaces get a faint sky tint. */
-html.easy-mode .bg-zinc-50 {
-  background-color: rgba(240, 249, 255, 0.6);
-}
-
-html.easy-mode .bg-zinc-100 {
-  background-color: rgba(219, 234, 254, 0.5);
-}
-
-/* Inputs and textareas feel cloud-like. */
-html.easy-mode input:not([type="checkbox"]):not([type="radio"]),
-html.easy-mode textarea,
-html.easy-mode select {
-  background-color: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  box-shadow: 0 6px 16px -6px rgba(56, 189, 248, 0.2);
-}
-
-/* Soften zinc borders into sky tones. */
-html.easy-mode .border-zinc-100,
-html.easy-mode .border-zinc-200,
-html.easy-mode .border-zinc-300 {
-  border-color: rgba(147, 197, 253, 0.45);
-}
-
-/* Bottom tab bar: more transparent so it floats over the sky. */
-html.easy-mode .bg-white\/95 {
-  background-color: rgba(255, 255, 255, 0.7) !important;
+.animate-fade-in {
+  animation: fade-in 150ms ease-out;
 }
