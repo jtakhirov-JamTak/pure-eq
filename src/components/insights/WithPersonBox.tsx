@@ -44,17 +44,20 @@ export function WithPersonBox({
 
   return (
     <div
-      className={`mt-4 rounded-xl border border-zinc-200 border-l-4 ${style.border} ${style.bg} p-5`}
+      className={`mt-4 rounded-card-sm border-l-4 ${style.border} ${style.bg} p-5 shadow-card`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
-          <InsightIcon type="person" className="h-5 w-5 shrink-0 text-zinc-600" />
-          <span className="truncate text-xs font-medium uppercase tracking-wider text-zinc-600">
+          <InsightIcon
+            type="person"
+            className="h-5 w-5 shrink-0 text-ink-soft"
+          />
+          <span className="truncate text-[11px] font-bold uppercase tracking-[1.2px] text-ink-soft">
             With {displayName}
           </span>
         </div>
         <span
-          className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${style.badge}`}
+          className={`shrink-0 rounded-pill px-2.5 py-0.5 text-[11px] font-bold ${style.badge}`}
         >
           {style.badgeText}
         </span>
@@ -64,16 +67,16 @@ export function WithPersonBox({
 
       <div className="mt-4 space-y-2">
         <div className="flex items-start gap-2">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" />
           <p className={FIELD_TYPOGRAPHY.showsUpWhen}>
-            <span className="text-zinc-500">Shows up when </span>
+            <span className="text-ink-muted">Shows up when </span>
             {lowercaseFirst(primary.showsUpWhen)}
           </p>
         </div>
         <div className="flex items-start gap-2">
-          <Users className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+          <Users className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" />
           <p className={FIELD_TYPOGRAPHY.eqImpact}>
-            <span className="text-zinc-500">EQ impact: </span>
+            <span className="text-ink-muted">EQ impact: </span>
             {primary.eqImpact}
           </p>
         </div>
@@ -81,21 +84,21 @@ export function WithPersonBox({
 
       <div className={`mt-3 border-l-2 ${accentBorder} pl-3`}>
         <div className="flex items-start gap-2">
-          <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-zinc-500" />
+          <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" />
           <p className={FIELD_TYPOGRAPHY.tryInstead}>
-            <span className="text-zinc-500">Try instead: </span>
+            <span className="text-ink-muted">Try instead: </span>
             {primary.tryInstead}
           </p>
         </div>
       </div>
 
       {copy && positiveCopy ? (
-        <p className="mt-3 text-xs text-zinc-600">
+        <p className="mt-3 text-[12px] font-medium text-ink-soft">
           Also: {lowercaseFirst(positiveCopy.pattern.replace(/\.$/, ""))}.
         </p>
       ) : null}
 
-      <div className="mt-4 border-t border-zinc-200 pt-3">
+      <div className="mt-4 border-t border-hair pt-3">
         <p className={FIELD_TYPOGRAPHY.proof}>
           {distinctEntries} {distinctEntries === 1 ? "entry" : "entries"} across{" "}
           {distinctDays} {distinctDays === 1 ? "day" : "days"}.

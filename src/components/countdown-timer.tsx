@@ -127,28 +127,32 @@ export function CountdownTimer({
   return (
     <div className="flex flex-col items-center gap-6 py-4">
       {label && (
-        <p className="text-center text-sm text-zinc-500">{label}</p>
+        <p className="text-center text-[11px] font-bold uppercase tracking-[1.5px] text-ink-soft">
+          {label}
+        </p>
       )}
 
-      {/* Circular progress ring */}
-      <div className="relative flex h-40 w-40 items-center justify-center">
+      {/* Circular progress ring + optional breathing-cloud pulse */}
+      <div
+        className={`relative flex h-44 w-44 items-center justify-center ${
+          breathingMode ? "[animation:breathe_14s_ease-in-out_infinite]" : ""
+        }`}
+      >
         <svg className="absolute inset-0 -rotate-90" viewBox="0 0 160 160">
-          {/* Background ring */}
           <circle
             cx="80"
             cy="80"
             r="70"
             fill="none"
-            stroke="#e4e4e7"
+            stroke="var(--color-surface-tint)"
             strokeWidth="6"
           />
-          {/* Progress ring */}
           <circle
             cx="80"
             cy="80"
             r="70"
             fill="none"
-            stroke="#3b82f6"
+            stroke="var(--color-brand)"
             strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray={2 * Math.PI * 70}
@@ -156,25 +160,26 @@ export function CountdownTimer({
             className="transition-[stroke-dashoffset] duration-1000 ease-linear"
           />
         </svg>
-        <span className="text-4xl font-light text-zinc-900 tabular-nums">
+        <span
+          className="font-display text-[48px] leading-none text-ink tabular-nums"
+          style={{ letterSpacing: "-1.5px" }}
+        >
           {display}
         </span>
       </div>
 
-      {/* Breathing phase text */}
       {breathingMode && remaining > 0 && (
-        <p className="text-xl font-medium text-blue-600">
+        <p className="font-display text-[18px] italic text-brand-deep">
           {breathingPhase(elapsed)}
         </p>
       )}
 
-      {/* Done button to skip ahead */}
       <button
         type="button"
         onClick={handleDone}
-        className="flex h-11 items-center justify-center rounded-lg border border-zinc-200 px-6 text-base font-medium text-zinc-600 transition-colors hover:bg-zinc-50 active:bg-zinc-100"
+        className="inline-flex h-11 items-center justify-center rounded-pill bg-surface px-6 text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
       >
-        Done
+        Skip
       </button>
     </div>
   );

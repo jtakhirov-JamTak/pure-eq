@@ -31,6 +31,7 @@ import type { ObservationTag, ProfileType } from "@/types";
 import { StyleBox } from "@/components/insights/StyleBox";
 import { MainPatternBox } from "@/components/insights/MainPatternBox";
 import { WithPersonBox } from "@/components/insights/WithPersonBox";
+import { SkyBackground } from "@/components/brand/SkyBackground";
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
@@ -373,13 +374,21 @@ export default async function InsightsPage() {
 
   console.log(`[perf] insights ${Date.now() - t0}ms`);
   return (
-    <div className="px-5 pb-28 pt-8">
-      <h2 className="text-xl font-bold text-zinc-900">Insights</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Your patterns, profile, and long-term learning.
-      </p>
+    <div className="relative min-h-full px-5 pt-4 pb-32">
+      <SkyBackground variant="calm" />
 
-      {/* Box 1 — Your Style */}
+      <div className="pt-2">
+        <span className="inline-block rounded-pill bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
+          Insights
+        </span>
+        <h1
+          className="mt-2.5 font-display text-[32px] leading-[1.08] text-ink"
+          style={{ letterSpacing: "-1px" }}
+        >
+          Your <span className="italic">patterns</span> are who you are.
+        </h1>
+      </div>
+
       {primary ? (
         <StyleBox
           primary={primary}
@@ -388,21 +397,24 @@ export default async function InsightsPage() {
           avatarColorClass={PROFILE_AVATAR_CLASSES[primary]}
         />
       ) : (
-        <div className="mt-4 rounded-xl border border-zinc-200 p-5">
-          <p className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-            Your Style
+        <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+            Your style
           </p>
-          <p className="mt-2 text-sm text-zinc-600">
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
             Complete onboarding to see your profile here.
           </p>
         </div>
       )}
 
-      {/* Box 2 — Your Main Pattern */}
       {thresholdResult.state !== "threshold_met" ? (
-        <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
-          <p className="text-sm font-medium text-zinc-700">Your Main Pattern</p>
-          <p className="mt-1 text-sm text-zinc-500">{thresholdResult.message}</p>
+        <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+            Your main pattern
+          </p>
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
+            {thresholdResult.message}
+          </p>
         </div>
       ) : snapshot ? (
         <MainPatternBox
@@ -415,16 +427,17 @@ export default async function InsightsPage() {
           shiftLine={shiftLine}
         />
       ) : (
-        <div className="mt-4 rounded-xl border border-zinc-100 bg-zinc-50 p-5">
-          <p className="text-sm font-medium text-zinc-700">Your Main Pattern</p>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+            Your main pattern
+          </p>
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
             Your first pattern will surface once two entries share the same
             behavioral tag.
           </p>
         </div>
       )}
 
-      {/* Box 3 — With [Name]. Omitted entirely when no person clears the bar. */}
       {topPerson ? (
         <WithPersonBox
           displayName={topPerson.displayName}

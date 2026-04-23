@@ -34,5 +34,5 @@ export default async function AppLayout({
   }
 
   console.log(`[perf] (app) layout ${Date.now() - t0}ms u=${user.id.slice(0, 8)}`);
-  return <AppShell>{children}</AppShell>;
+  return <AppShell userEmail={user.email}>{children}</AppShell>;
 }

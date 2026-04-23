@@ -1,4 +1,3 @@
-// Pure EQ domain — replace in fork.
 "use client";
 
 import { useRef, useState } from "react";
@@ -6,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { isLegacyV1 } from "@/lib/coach/output-shape";
+import { SkyBackground } from "@/components/brand/SkyBackground";
+import { safeUUID } from "@/lib/utils";
 import type { RelationshipDomain } from "@/types";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
@@ -52,19 +53,23 @@ const STEPS = [
   },
   {
     key: "defaultPattern",
-    title: "When you feel that way, what do you usually do that gets in the way?",
+    title:
+      "When you feel that way, what do you usually do that gets in the way?",
     prompt: "What is your likely default pattern here?",
     type: "textarea" as const,
   },
   {
     key: "otherPersonHypothesis",
-    title: "What do you think may be going on for them — and what makes you think that?",
-    prompt: "What is your best guess about what may be happening for them, and what evidence do you actually have?",
+    title:
+      "What do you think may be going on for them — and what makes you think that?",
+    prompt:
+      "What is your best guess about what may be happening for them, and what evidence do you actually have?",
     type: "textarea" as const,
   },
   {
     key: "realityCheckQuestion",
-    title: "What question can you ask to test your read instead of assuming?",
+    title:
+      "What question can you ask to test your read instead of assuming?",
     prompt: null,
     type: "textarea" as const,
   },
@@ -76,17 +81,14 @@ const STEPS = [
   },
 ];
 
-// Field-presence-based render: payload shape varies by PROMPT_VERSION.
 type AiOutput = {
   reality_check_question?: string;
   thing_not_to_do?: string;
   best_next_move?: string;
 };
 
-// Renders legacy v1 Prepare output — the current (and, until Coach v2
-// ships across the rollout, only) shape. Extracted from the parent's
-// aiOutput-truthy branch so the parent can dispatch to a v2 renderer
-// once that shape lands. Visual output unchanged.
+const PrepareBackground = () => <SkyBackground variant="calm" />;
+
 function LegacyV1PrepareCard({
   output,
   onRetryCoaching,
@@ -107,21 +109,27 @@ function LegacyV1PrepareCard({
   });
   if (visible.length === 0) {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
-        <p className="mt-4 text-base text-zinc-700">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <PrepareBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Entry saved
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your entry is saved, but no coaching feedback is available to show
           for this one.
         </p>
         <button
           onClick={onRetryCoaching}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Try again for coaching feedback
         </button>
         <button
           onClick={onBack}
-          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back to Coach
         </button>
@@ -129,21 +137,35 @@ function LegacyV1PrepareCard({
     );
   }
   return (
-    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <h2 className="text-xl font-bold text-zinc-900">Your Prepare Feedback</h2>
-      <div className="mt-6 space-y-5">
+    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <PrepareBackground />
+      <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
+        Prepare
+      </span>
+      <h2
+        className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
+        style={{ letterSpacing: "-0.6px" }}
+      >
+        Your <span className="italic">feedback</span>.
+      </h2>
+      <div className="mt-5 space-y-3">
         {visible.map(({ label, key }) => (
-          <div key={key}>
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+          <div
+            key={key}
+            className="rounded-card-sm bg-surface p-4 shadow-soft"
+          >
+            <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
               {label}
             </p>
-            <p className="mt-1 text-base text-zinc-800">{output[key]}</p>
+            <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+              {output[key]}
+            </p>
           </div>
         ))}
       </div>
       <button
         onClick={onBack}
-        className="mt-10 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
       >
         Done
       </button>
@@ -161,11 +183,9 @@ export default function PreparePage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
   const submitRef = useRef(false);
-  // Same idempotency key for every retry of this submission, so the server
-  // reuses rows instead of duplicating them. Reset on navigate-away.
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = safeUUID();
   }
 
   const currentStep = STEPS[step];
@@ -212,13 +232,13 @@ export default function PreparePage() {
       } else {
         setSavedMessage(
           result.message ??
-            "Your entry is saved. Coaching feedback wasn't available this time."
+            "Your entry is saved. Coaching feedback wasn't available this time.",
         );
       }
     } catch (err) {
       console.error("prepare submit failed", (err as Error)?.message);
       setSubmitError(
-        "Could not save. Check your connection and try again."
+        "Could not save. Check your connection and try again.",
       );
     } finally {
       setSubmitting(false);
@@ -232,7 +252,6 @@ export default function PreparePage() {
     handleSubmit();
   }
 
-  // AI output screen — dispatch by output shape.
   if (aiOutput) {
     if (isLegacyV1(aiOutput)) {
       return (
@@ -243,27 +262,40 @@ export default function PreparePage() {
         />
       );
     }
-    // Coach v2 (mode: "normal" / "refusal") rendering lands in a later
-    // commit. Today no stored output carries `mode`, so this branch is
-    // unreachable. Null render until the v2 renderer is wired.
-    return null;
+    // Unknown output shape (e.g. a future Coach v2 payload without a renderer
+    // yet). Don't leave the user on a blank screen — fall through to the same
+    // empty-fields card the v1 renderer uses.
+    return (
+      <LegacyV1PrepareCard
+        output={{}}
+        onRetryCoaching={retryCoaching}
+        onBack={() => router.push("/coach")}
+      />
+    );
   }
 
-  // Saved but no AI feedback screen
   if (savedMessage) {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Entry saved</h2>
-        <p className="mt-4 text-base text-zinc-700">{savedMessage}</p>
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <PrepareBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Entry saved
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          {savedMessage}
+        </p>
         <button
           onClick={retryCoaching}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Try again for coaching feedback
         </button>
         <button
           onClick={() => router.push("/coach")}
-          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back to Coach
         </button>
@@ -271,48 +303,60 @@ export default function PreparePage() {
     );
   }
 
-  // Loading screen
   if (submitting) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center px-5">
+      <div className="relative flex min-h-[60vh] items-center justify-center px-5">
+        <PrepareBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" />
-          <p className="mt-4 text-sm text-zinc-500">
-            Generating your coaching feedback...
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <p className="mt-4 text-[14px] font-medium text-ink-soft">
+            Generating your coaching feedback…
           </p>
         </div>
       </div>
     );
   }
 
-  // Step form
   return (
-    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      {/* Progress */}
-      <div className="flex items-center gap-1">
+    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <PrepareBackground />
+
+      <div className="flex items-center gap-1.5">
         {STEPS.map((_, i) => (
           <div
             key={i}
-            className={`h-1 flex-1 rounded-full ${
-              i <= step ? "bg-zinc-900" : "bg-zinc-200"
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              i < step
+                ? "bg-brand"
+                : i === step
+                  ? "bg-brand-deep"
+                  : "bg-white/60"
             }`}
           />
         ))}
       </div>
-      <p className="mt-2 text-xs text-zinc-400">
-        Step {step + 1} of {STEPS.length}
-      </p>
+      <div className="mt-3 flex items-center justify-between">
+        <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
+          Prepare
+        </span>
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+          {step + 1} / {STEPS.length}
+        </p>
+      </div>
 
-      {/* Question */}
-      <h2 className="mt-6 text-lg font-semibold text-zinc-900">
+      <h2
+        className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
+      >
         {currentStep.title}
       </h2>
       {currentStep.prompt && (
-        <p className="mt-1 text-sm text-zinc-500">{currentStep.prompt}</p>
+        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          {currentStep.prompt}
+        </p>
       )}
 
-      {/* Input */}
-      <div className="mt-4">
+      <div className="mt-5">
         {currentStep.type === "person" ? (
           <PersonPicker
             key={currentStep.key}
@@ -320,7 +364,6 @@ export default function PreparePage() {
             onChange={(next) => setFieldValue(currentStep.key, next)}
             onPersonSelect={(id, relationship) => {
               setPersonId(id);
-              // Auto-fill relationship when selecting an existing person
               if (id && relationship) {
                 setFieldValue("relationship", relationship);
               }
@@ -328,7 +371,7 @@ export default function PreparePage() {
             selectedPersonId={personId}
           />
         ) : currentStep.type === "select" ? (
-          <div className="space-y-3">
+          <div className="space-y-2">
             {RELATIONSHIPS.map((rel) => (
               <button
                 key={rel.value}
@@ -336,10 +379,10 @@ export default function PreparePage() {
                   setFieldValue(currentStep.key, rel.value);
                   setStep(step + 1);
                 }}
-                className={`flex h-11 w-full items-center rounded-lg border px-4 text-base transition-colors ${
+                className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
                   value === rel.value
-                    ? "border-zinc-900 bg-zinc-50 text-zinc-900"
-                    : "border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
                 }`}
               >
                 {rel.label}
@@ -357,15 +400,14 @@ export default function PreparePage() {
         )}
       </div>
       {submitError && (
-        <p className="mt-3 text-sm text-red-600">{submitError}</p>
+        <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
       )}
 
-      {/* Navigation */}
       <div className="mt-6 flex gap-3">
         {step > 0 && (
           <button
             onClick={() => setStep(step - 1)}
-            className="flex h-11 flex-1 items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+            className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
           >
             Back
           </button>
@@ -374,7 +416,7 @@ export default function PreparePage() {
           <button
             onClick={handleNext}
             disabled={!value.trim()}
-            className="flex h-11 flex-1 items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white disabled:opacity-40"
+            className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
           >
             {step === STEPS.length - 1 ? "Get Feedback" : "Next"}
           </button>

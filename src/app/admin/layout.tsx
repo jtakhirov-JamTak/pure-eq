@@ -31,7 +31,7 @@ export default async function AdminLayout({
       <header className="border-b border-zinc-200 bg-white px-6 py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between">
           <h1 className="text-lg font-semibold text-zinc-900">
-            Pure EQ Admin
+            SpeakEasy Admin
           </h1>
           <nav className="flex items-center gap-4">
             <Link

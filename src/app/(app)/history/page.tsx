@@ -3,12 +3,11 @@ import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { requirePaidAccessPage } from "@/lib/require-access";
 import { HistoryList, type HistoryEntry } from "./history-list";
+import { SkyBackground } from "@/components/brand/SkyBackground";
+import { captureServerRead } from "@/lib/read-capture";
 
 const PAGE_SIZE = 10;
 
-// record_types surfaced in the History UI. onboarding_profile is handled by
-// the Retake Quiz flow (on /insights); outcome_tracking is a follow-up PATCH
-// to an existing coach entry, not a standalone completed entry.
 const DELETABLE_TYPES = [
   "prepare",
   "review",
@@ -34,12 +33,8 @@ export default async function HistoryPage() {
 
   const supabase = await createClient();
 
-  // Paid-only surface.
   await requirePaidAccessPage(user);
 
-  // Counts per module type + latest-10 query — all in one parallel batch.
-  // Previously the rows query ran sequentially after the counts, costing
-  // one extra round trip per page render.
   const countQueries = DELETABLE_TYPES.map((t) =>
     supabase
       .from("raw_records")
@@ -47,7 +42,7 @@ export default async function HistoryPage() {
       .eq("user_id", user.id)
       .eq("record_type", t)
       .eq("is_complete", true)
-      .is("deleted_at", null)
+      .is("deleted_at", null),
   );
   const rowsQuery = supabase
     .from("raw_records")
@@ -63,6 +58,27 @@ export default async function HistoryPage() {
     Promise.all(countQueries),
     rowsQuery,
   ]);
+
+  // Inspect .error on each count query and the rows query — PostgREST returns
+  // { data: null, error } on RLS mis-config / schema drift / transient outage
+  // rather than throwing. Without this, a failure silently zeros the counts.
+  countResults.forEach((r, i) => {
+    if (r.error) {
+      captureServerRead(
+        "history",
+        `count_${DELETABLE_TYPES[i]}`,
+        new Error(`count_${DELETABLE_TYPES[i]}_read_failed`),
+      );
+    }
+  });
+  if (rowsRes.error) {
+    captureServerRead(
+      "history",
+      "raw_records",
+      new Error("raw_records_read_failed"),
+    );
+  }
+
   const { data: rows } = rowsRes;
 
   const counts: Record<(typeof DELETABLE_TYPES)[number], number> = {
@@ -87,43 +103,51 @@ export default async function HistoryPage() {
   }));
 
   console.log(`[perf] history ${Date.now() - t0}ms total=${totalCount}`);
+
   return (
-    <div className="px-5 pt-8 pb-28">
-      <h1 className="text-2xl font-bold text-zinc-900">History</h1>
-      <p className="mt-1 text-sm text-zinc-500">
+    <div className="relative min-h-full px-5 pt-4 pb-32">
+      <SkyBackground variant="calm" />
+
+      <h1
+        className="mt-2 font-display text-[30px] leading-[1.1] text-ink"
+        style={{ letterSpacing: "-0.8px" }}
+      >
+        History
+      </h1>
+      <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink-soft">
         Everything you&apos;ve completed, newest first.
       </p>
 
-      {/* Counts per module */}
-      <div className="mt-6 grid grid-cols-5 gap-2">
+      <div className="mt-5 grid grid-cols-5 gap-2">
         {DELETABLE_TYPES.map((t) => (
           <div
             key={t}
-            className="rounded-lg border border-zinc-200 bg-white p-3 text-center"
+            className="rounded-card-xs bg-surface p-3 text-center shadow-soft"
           >
-            <p className="text-2xl font-semibold text-zinc-900">{counts[t]}</p>
-            <p className="mt-1 text-xs text-zinc-500">{MODULE_LABEL[t]}</p>
+            <p className="font-display text-[22px] leading-none text-ink">
+              {counts[t]}
+            </p>
+            <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.5px] text-ink-soft">
+              {MODULE_LABEL[t]}
+            </p>
           </div>
         ))}
       </div>
 
-      <p className="mt-4 text-sm text-zinc-600">
-        Total completed: <span className="font-semibold">{totalCount}</span>
+      <p className="mt-4 text-[13px] font-medium text-ink-soft">
+        Total completed:{" "}
+        <span className="font-bold text-ink">{totalCount}</span>
       </p>
 
-      {/* Download all data as .txt. Plain <a download> lets the browser
-          handle the attachment with the Content-Disposition filename the
-          server sets — no JS needed. */}
       <a
         href="/api/export"
         download
-        className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-full border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 active:bg-zinc-100"
+        className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-pill bg-surface px-4 py-2 text-[13px] font-semibold text-ink shadow-soft active:opacity-80"
       >
         <Download className="h-4 w-4" />
         Download my data (.txt)
       </a>
 
-      {/* List with select + delete + load more */}
       <HistoryList initialEntries={initialEntries} pageSize={PAGE_SIZE} />
     </div>
   );

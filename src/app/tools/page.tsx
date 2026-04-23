@@ -1,9 +1,9 @@
-// Pure EQ domain — replace in fork.
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { hasToolsAccess } from "@/lib/require-access";
 import { ToolsHubLocked } from "./tools-hub-locked";
+import { SkyBackground } from "@/components/brand/SkyBackground";
 
 export default async function ToolsPage() {
   const supabase = await createClient();
@@ -17,43 +17,86 @@ export default async function ToolsPage() {
   }
 
   return (
-    <div className="px-5 pt-8 pb-28">
-      <h2 className="text-xl font-bold text-zinc-900">Tools</h2>
-      <p className="mt-1 text-sm text-zinc-500">
-        Use these when you need help in the moment.
-      </p>
+    <div className="relative min-h-full px-5 pt-4 pb-32">
+      <SkyBackground variant="tools-hub" />
 
-      <div className="mt-8 space-y-4">
+      <div className="pt-2">
+        <span className="inline-block rounded-pill bg-warm px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
+          When storms roll in
+        </span>
+        <h1
+          className="mt-2.5 font-display text-[32px] leading-[1.08] text-ink"
+          style={{ letterSpacing: "-1px" }}
+        >
+          Two tools for when
+          <br />
+          <span className="italic">emotions hit hard</span>.
+        </h1>
+      </div>
+
+      <div className="mt-7 space-y-3.5">
         <Link
           href="/tools/overwhelmed"
-          className="flex w-full flex-col items-start rounded-xl border border-zinc-200 p-5 text-left transition-colors hover:border-zinc-300 hover:bg-zinc-50 active:bg-zinc-100"
+          className="relative block overflow-hidden rounded-card p-5 text-white shadow-dark transition active:scale-[0.99]"
+          style={{
+            background:
+              "linear-gradient(160deg, #2a86e3 0%, #1A4A8F 100%)",
+          }}
         >
-          <h3 className="text-base font-semibold text-zinc-900">
-            I&apos;m Overwhelmed
-          </h3>
-          <p className="mt-1 text-sm text-zinc-500">
-            A fast nervous-system reset. Calm your body and reduce the grip of
-            intense emotion.
-          </p>
-          <span className="mt-3 text-xs text-zinc-500">
-            ~4 min guided exercise
+          <span className="text-[11px] font-bold uppercase tracking-[1.5px] opacity-85">
+            ~4 min · guided
           </span>
+          <div
+            className="mt-3 font-display text-[26px] leading-[1.1]"
+            style={{ letterSpacing: "-0.6px" }}
+          >
+            I&apos;m <span className="italic">overwhelmed</span>
+          </div>
+          <p className="mt-1.5 max-w-[260px] text-[14px] font-medium leading-[1.4] text-white/90">
+            Settle the storm. Feel, clear your mind, reset.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {["Feel", "Label", "Validate", "Regulate", "Move"].map((s) => (
+              <span
+                key={s}
+                className="rounded-pill bg-white/20 px-2.5 py-1 text-[11px] font-bold tracking-[0.3px]"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
         </Link>
 
         <Link
           href="/tools/triggered"
-          className="flex w-full flex-col items-start rounded-xl border border-zinc-200 p-5 text-left transition-colors hover:border-zinc-300 hover:bg-zinc-50 active:bg-zinc-100"
+          className="relative block overflow-hidden rounded-card p-5 text-white shadow-dark transition active:scale-[0.99]"
+          style={{
+            background:
+              "linear-gradient(160deg, #3A4A66 0%, #1F2A42 100%)",
+          }}
         >
-          <h3 className="text-base font-semibold text-zinc-900">
-            I&apos;m Triggered
-          </h3>
-          <p className="mt-1 text-sm text-zinc-500">
-            Log a trigger in real time. Understand your pattern and see the
-            situation more clearly.
-          </p>
-          <span className="mt-3 text-xs text-zinc-500">
-            7-step guided reflection
+          <span className="text-[11px] font-bold uppercase tracking-[1.5px] text-warm">
+            7 steps · reflect
           </span>
+          <div
+            className="mt-3 font-display text-[26px] leading-[1.1]"
+            style={{ letterSpacing: "-0.6px" }}
+          >
+            I&apos;m <span className="italic">triggered</span>
+          </div>
+          <p className="mt-1.5 max-w-[260px] text-[14px] font-medium leading-[1.4] text-white/90">
+            Catch the spark. Overcome your trigger in real time.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-1.5">
+            {["Fact", "Story", "Emotion", "Urge", "Outcome"].map((s) => (
+              <span
+                key={s}
+                className="rounded-pill bg-warm/20 px-2.5 py-1 text-[11px] font-bold tracking-[0.3px] text-warm"
+              >
+                {s}
+              </span>
+            ))}
+          </div>
         </Link>
       </div>
     </div>

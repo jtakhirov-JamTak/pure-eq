@@ -1,10 +1,11 @@
-// Pure EQ domain — replace in fork.
 "use client";
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { CountdownTimer, unlockAudio } from "@/components/countdown-timer";
+import { SkyBackground } from "@/components/brand/SkyBackground";
+import { safeUUID } from "@/lib/utils";
 
 const BODY_LOCATIONS = [
   "Throat",
@@ -25,6 +26,10 @@ const AFTER_FEELINGS = [
   "Same",
 ];
 
+// Split: Step is position in the flow; Mode is submission state. Earlier
+// the two were one union, which caused `stepIndex = STEP_ORDER.indexOf(step)`
+// to return -1 during submit (progress bar would disappear) and let future
+// features overload the type further.
 type Step =
   | "intro"
   | "before-rating"
@@ -34,14 +39,16 @@ type Step =
   | "regulate"
   | "move"
   | "after-rating"
-  | "close"
-  | "submitting"
-  | "success"
-  | "error";
+  | "close";
+
+type Mode = "idle" | "submitting" | "success" | "error";
+
+const OverwhelmedBackground = () => <SkyBackground variant="stormy" />;
 
 export default function OverwhelmedClient() {
   const router = useRouter();
   const [step, setStep] = useState<Step>("intro");
+  const [mode, setMode] = useState<Mode>("idle");
   const [beforeRating, setBeforeRating] = useState<number | null>(null);
   const [bodyLocation, setBodyLocation] = useState<string | null>(null);
   const [feelingLabel, setFeelingLabel] = useState("");
@@ -52,7 +59,7 @@ export default function OverwhelmedClient() {
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = safeUUID();
   }
 
   const STEP_ORDER: Step[] = [
@@ -68,13 +75,13 @@ export default function OverwhelmedClient() {
   ];
 
   const stepIndex = STEP_ORDER.indexOf(step);
-  const totalSteps = STEP_ORDER.length - 1; // exclude intro from progress
+  const totalSteps = STEP_ORDER.length - 1;
 
   async function handleSubmit(feeling: string) {
     if (submitRef.current) return;
     submitRef.current = true;
     setAfterFeeling(feeling);
-    setStep("submitting");
+    setMode("submitting");
     setSubmitError(null);
     try {
       const res = await fetch("/api/tools/overwhelmed", {
@@ -96,35 +103,40 @@ export default function OverwhelmedClient() {
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }
-      setStep("success");
+      setMode("success");
     } catch (err) {
       console.error("overwhelmed submit failed", (err as Error)?.message);
       setSubmitError("Could not save. Check your connection and try again.");
-      setStep("error");
+      setMode("error");
     } finally {
       submitRef.current = false;
     }
   }
 
-  // ── Success screen ──
-  if (step === "success") {
+  if (mode === "success") {
     const delta =
       beforeRating && afterRating ? beforeRating - afterRating : null;
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Exercise complete</h2>
-        <p className="mt-4 text-base text-zinc-700">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <OverwhelmedBackground />
+        <h2
+          className="font-display text-[30px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.7px" }}
+        >
+          Exercise <span className="italic">complete</span>
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your regulation entry has been saved.
         </p>
         {delta !== null && delta > 0 && (
-          <p className="mt-2 text-sm text-zinc-500">
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
             Your overwhelm went from {beforeRating} to {afterRating} — a{" "}
             {delta}-point drop.
           </p>
         )}
         <button
           onClick={() => router.push("/tools")}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Done
         </button>
@@ -132,23 +144,28 @@ export default function OverwhelmedClient() {
     );
   }
 
-  // ── Error screen ──
-  if (step === "error") {
+  if (mode === "error") {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Save failed</h2>
-        <p className="mt-4 text-base text-red-600">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <OverwhelmedBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Save failed
+        </h2>
+        <p className="mt-3 text-[14px] font-medium text-danger">
           {submitError || "Something went wrong."}
         </p>
         <button
           onClick={() => afterFeeling && handleSubmit(afterFeeling)}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Try again
         </button>
         <button
           onClick={() => router.push("/tools")}
-          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back to Tools
         </button>
@@ -156,58 +173,62 @@ export default function OverwhelmedClient() {
     );
   }
 
-  // ── Loading screen ──
-  if (step === "submitting") {
+  if (mode === "submitting") {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center px-5">
+      <div className="relative flex min-h-[60vh] items-center justify-center px-5">
+        <OverwhelmedBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" />
-          <p className="mt-4 text-sm text-zinc-500">
-            Saving your entry...
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <p className="mt-4 text-[14px] font-medium text-ink-soft">
+            Saving your entry…
           </p>
         </div>
       </div>
     );
   }
 
-  // ── Intro ──
   if (step === "intro") {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">
-          I&apos;m Overwhelmed
+      <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <OverwhelmedBackground />
+        <span className="inline-block rounded-pill bg-brand-deep px-3 py-1 text-[11px] font-bold uppercase tracking-[1.2px] text-white">
+          Overwhelmed
+        </span>
+        <h2
+          className="mt-3 font-display text-[32px] leading-[1.1] text-ink"
+          style={{ letterSpacing: "-0.9px" }}
+        >
+          Settle the <span className="italic">storm</span>.
         </h2>
-        <p className="mt-2 text-sm text-zinc-500">
-          This is a short regulation exercise to help you calm your body
-          and reduce the grip of intense emotion.
+        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          A short regulation exercise to help you calm your body and reduce the
+          grip of intense emotion.
         </p>
         <div className="mt-6 space-y-2">
-          {["Feel", "Label", "Validate", "Regulate", "Move"].map(
-            (name, i) => (
-              <div
-                key={name}
-                className="flex items-center gap-3 text-sm text-zinc-600"
-              >
-                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-100 text-xs font-medium text-zinc-500">
-                  {i + 1}
-                </span>
-                {name}
-              </div>
-            )
-          )}
+          {["Feel", "Label", "Validate", "Regulate", "Move"].map((name, i) => (
+            <div
+              key={name}
+              className="flex items-center gap-3 rounded-card-xs bg-surface px-4 py-2.5 shadow-soft"
+            >
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-tint text-[12px] font-bold text-brand-deep">
+                {i + 1}
+              </span>
+              <span className="text-[14px] font-semibold text-ink">{name}</span>
+            </div>
+          ))}
         </div>
         <button
           onClick={() => {
             unlockAudio();
             setStep("before-rating");
           }}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Start
         </button>
         <button
           onClick={() => router.push("/tools")}
-          className="mt-3 flex h-11 w-full items-center justify-center text-sm text-zinc-400 underline"
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
         >
           Back to Tools
         </button>
@@ -215,32 +236,45 @@ export default function OverwhelmedClient() {
     );
   }
 
-  // ── Step content ──
   return (
-    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      {/* Progress bar */}
-      <div className="flex items-center gap-1">
+    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <OverwhelmedBackground />
+
+      <div className="flex items-center gap-1.5">
         {STEP_ORDER.slice(1).map((_, i) => (
           <div
             key={i}
-            className={`h-1 flex-1 rounded-full ${
-              i < stepIndex ? "bg-zinc-900" : "bg-zinc-200"
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              i < stepIndex - 1
+                ? "bg-brand"
+                : i === stepIndex - 1
+                  ? "bg-brand-deep"
+                  : "bg-white/60"
             }`}
           />
         ))}
       </div>
-      <p className="mt-2 text-xs text-zinc-400">
-        Step {stepIndex} of {totalSteps}
-      </p>
+      <div className="mt-3 flex items-center justify-between">
+        <span className="inline-block rounded-pill bg-brand-deep px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
+          Overwhelmed
+        </span>
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+          {stepIndex} / {totalSteps}
+        </p>
+      </div>
 
-      {/* ── Before rating ── */}
       {step === "before-rating" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            How overwhelmed do you feel right now?
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            How overwhelmed do you feel <span className="italic">right now</span>?
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">1 = slightly, 5 = very</p>
-          <div className="mt-4 flex gap-3">
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
+            1 = slightly, 5 = very
+          </p>
+          <div className="mt-5 flex gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
@@ -248,10 +282,10 @@ export default function OverwhelmedClient() {
                   setBeforeRating(n);
                   setStep("feel");
                 }}
-                className={`flex h-12 flex-1 items-center justify-center rounded-lg border text-lg font-medium transition-colors ${
+                className={`flex h-14 flex-1 items-center justify-center rounded-card-sm font-display text-[22px] transition active:scale-[0.97] ${
                   beforeRating === n
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
                 }`}
               >
                 {n}
@@ -261,33 +295,39 @@ export default function OverwhelmedClient() {
         </div>
       )}
 
-      {/* ── Feel (31s timer + body location) ── */}
       {step === "feel" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">Feel</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Feel
+          </h2>
+          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
             Close your eyes. Notice where this feeling shows up in your body.
           </p>
-          <CountdownTimer
-            durationSeconds={31}
-            onComplete={() => {}}
-            label="Body scan"
-          />
-          <div className="mt-4">
-            <p className="text-sm font-medium text-zinc-700">
+          <div className="mt-5">
+            <CountdownTimer
+              durationSeconds={31}
+              onComplete={() => {}}
+              label="Body scan"
+            />
+          </div>
+          <div className="mt-5">
+            <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
               Where do you feel it? (optional)
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2.5 flex flex-wrap gap-2">
               {BODY_LOCATIONS.map((loc) => (
                 <button
                   key={loc}
                   onClick={() =>
                     setBodyLocation(bodyLocation === loc ? null : loc)
                   }
-                  className={`rounded-full border px-4 py-2.5 text-base transition-colors ${
+                  className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition ${
                     bodyLocation === loc
-                      ? "border-zinc-900 bg-zinc-900 text-white"
-                      : "border-zinc-200 text-zinc-600 hover:border-zinc-300"
+                      ? "bg-brand text-white shadow-cta"
+                      : "bg-surface text-ink shadow-soft"
                   }`}
                 >
                   {loc}
@@ -297,21 +337,25 @@ export default function OverwhelmedClient() {
           </div>
           <button
             onClick={() => setStep("label")}
-            className="mt-6 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+            className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
           >
             Next
           </button>
         </div>
       )}
 
-      {/* ── Label ── */}
       {step === "label" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">Label</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Label
+          </h2>
+          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
             Complete this sentence: &quot;I feel ___ because ___.&quot;
           </p>
-          <div className="mt-4">
+          <div className="mt-5">
             <VoiceInput
               key={step}
               value={feelingLabel}
@@ -323,14 +367,14 @@ export default function OverwhelmedClient() {
           <div className="mt-6 flex gap-3">
             <button
               onClick={() => setStep("feel")}
-              className="flex h-11 flex-1 items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+              className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
             >
               Back
             </button>
             <button
               onClick={() => setStep("validate")}
               disabled={!feelingLabel.trim()}
-              className="flex h-11 flex-1 items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white disabled:opacity-40"
+              className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
             >
               Next
             </button>
@@ -338,28 +382,35 @@ export default function OverwhelmedClient() {
         </div>
       )}
 
-      {/* ── Validate ── */}
       {step === "validate" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">Validate</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Validate
+          </h2>
+          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
             Slowly say to yourself 3 times:
           </p>
-          <div className="mt-4 rounded-xl border border-blue-100 bg-blue-50 p-5">
-            <p className="text-center text-base font-medium text-blue-800">
+          <div className="mt-5 rounded-card bg-surface p-6 shadow-card">
+            <p
+              className="text-center font-display text-[20px] italic leading-[1.3] text-brand-deep"
+              style={{ letterSpacing: "-0.3px" }}
+            >
               &quot;It makes sense to feel this way right now.&quot;
             </p>
           </div>
           <div className="mt-6 flex gap-3">
             <button
               onClick={() => setStep("label")}
-              className="flex h-11 flex-1 items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+              className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
             >
               Back
             </button>
             <button
               onClick={() => setStep("regulate")}
-              className="flex h-11 flex-1 items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+              className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
             >
               Done
             </button>
@@ -367,47 +418,63 @@ export default function OverwhelmedClient() {
         </div>
       )}
 
-      {/* ── Regulate (61s breathing timer) ── */}
       {step === "regulate" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">Regulate</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Regulate
+          </h2>
+          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
             Take slow breaths: in through your nose for 4, hold for 4, out
             through your mouth for 6.
           </p>
-          <CountdownTimer
-            durationSeconds={61}
-            onComplete={() => setStep("move")}
-            label="Box breathing"
-            breathingMode
-          />
+          <div className="mt-5">
+            <CountdownTimer
+              durationSeconds={61}
+              onComplete={() => setStep("move")}
+              label="Box breathing"
+              breathingMode
+            />
+          </div>
         </div>
       )}
 
-      {/* ── Move (121s timer) ── */}
       {step === "move" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">Move</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Move
+          </h2>
+          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
             Take one small action to shift your state — walk, stretch, drink
             water, tidy up, or step outside.
           </p>
-          <CountdownTimer
-            durationSeconds={121}
-            onComplete={() => setStep("after-rating")}
-            label="Movement break"
-          />
+          <div className="mt-5">
+            <CountdownTimer
+              durationSeconds={121}
+              onComplete={() => setStep("after-rating")}
+              label="Movement break"
+            />
+          </div>
         </div>
       )}
 
-      {/* ── After rating ── */}
       {step === "after-rating" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            How overwhelmed do you feel now?
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            How overwhelmed do you feel <span className="italic">now</span>?
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">1 = slightly, 5 = very</p>
-          <div className="mt-4 flex gap-3">
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
+            1 = slightly, 5 = very
+          </p>
+          <div className="mt-5 flex gap-2">
             {[1, 2, 3, 4, 5].map((n) => (
               <button
                 key={n}
@@ -415,10 +482,10 @@ export default function OverwhelmedClient() {
                   setAfterRating(n);
                   setStep("close");
                 }}
-                className={`flex h-12 flex-1 items-center justify-center rounded-lg border text-lg font-medium transition-colors ${
+                className={`flex h-14 flex-1 items-center justify-center rounded-card-sm font-display text-[22px] transition active:scale-[0.97] ${
                   afterRating === n
-                    ? "border-zinc-900 bg-zinc-900 text-white"
-                    : "border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
                 }`}
               >
                 {n}
@@ -428,21 +495,23 @@ export default function OverwhelmedClient() {
         </div>
       )}
 
-      {/* ── Close (after feeling choice) ── */}
       {step === "close" && (
-        <div className="mt-6">
-          <h2 className="text-lg font-semibold text-zinc-900">
+        <div className="mt-5">
+          <h2
+            className="font-display text-[26px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
             How do you feel now?
           </h2>
-          <div className="mt-4 space-y-3">
+          <div className="mt-5 space-y-2">
             {AFTER_FEELINGS.map((feeling) => (
               <button
                 key={feeling}
                 onClick={() => handleSubmit(feeling)}
-                className={`flex h-11 w-full items-center rounded-lg border px-4 text-base transition-colors ${
+                className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
                   afterFeeling === feeling
-                    ? "border-zinc-900 bg-zinc-50 text-zinc-900"
-                    : "border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
                 }`}
               >
                 {feeling}

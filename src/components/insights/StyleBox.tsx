@@ -24,30 +24,32 @@ export function StyleBox({
     : null;
 
   return (
-    <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50 px-4 py-3">
+    <div className="mt-4 rounded-card-sm bg-surface p-4 shadow-soft">
       <div className="flex items-center gap-3">
         <div
-          className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-bold text-white ${avatarColorClass}`}
+          className={`flex h-9 w-9 items-center justify-center rounded-full font-display text-[15px] text-white ${avatarColorClass}`}
         >
           {primary.charAt(0).toUpperCase()}
         </div>
         <div className="flex-1">
-          <p className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-            Your Style
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-soft">
+            Your style
           </p>
-          <p className="text-sm text-zinc-800">
+          <p className="text-[14px] font-semibold text-ink">
             {primaryLabel}
             {secondaryLabel ? ` with ${secondaryLabel} tendencies` : ""}
           </p>
         </div>
       </div>
 
-      <p className="mt-3 text-sm text-zinc-700">{description.strength}</p>
+      <p className="mt-3 text-[13px] font-medium leading-[1.5] text-ink-soft">
+        {description.strength}
+      </p>
 
       <div className="mt-2 flex justify-end">
         <Link
           href="/onboarding?retake=1"
-          className="inline-flex min-h-11 items-center px-2 text-xs text-zinc-600 underline hover:text-zinc-800"
+          className="inline-flex min-h-11 items-center px-2 text-[12px] font-medium text-ink-soft underline active:opacity-70"
         >
           Retake Communication Profile
         </Link>

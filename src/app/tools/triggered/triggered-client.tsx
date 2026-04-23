@@ -1,9 +1,10 @@
-// Pure EQ domain — replace in fork.
 "use client";
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
+import { SkyBackground } from "@/components/brand/SkyBackground";
+import { safeUUID } from "@/lib/utils";
 
 const AFTER_FEELINGS = [
   "Calmer",
@@ -59,9 +60,11 @@ const STEPS = [
   },
 ];
 
+const TriggeredBackground = () => <SkyBackground variant="calm" />;
+
 export default function TriggeredClient() {
   const router = useRouter();
-  const [step, setStep] = useState(-1); // -1 = intro
+  const [step, setStep] = useState(-1);
   const [data, setData] = useState<Record<string, string>>({});
   const [emotionIntensity, setEmotionIntensity] = useState(5);
   const [urgeIntensity, setUrgeIntensity] = useState(5);
@@ -73,10 +76,10 @@ export default function TriggeredClient() {
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
-    idempotencyKeyRef.current = crypto.randomUUID();
+    idempotencyKeyRef.current = safeUUID();
   }
 
-  const totalSteps = STEPS.length + 1; // +1 for close step
+  const totalSteps = STEPS.length + 1;
 
   function setFieldValue(key: string, next: string) {
     setData((d) => ({ ...d, [key]: next }));
@@ -123,21 +126,26 @@ export default function TriggeredClient() {
     }
   }
 
-  // ── Error screen ──
   if (submitError && !submitting) {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Save failed</h2>
-        <p className="mt-4 text-base text-red-600">{submitError}</p>
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <TriggeredBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Save failed
+        </h2>
+        <p className="mt-3 text-[14px] font-medium text-danger">{submitError}</p>
         <button
           onClick={() => afterFeeling && handleSubmit(afterFeeling)}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Try again
         </button>
         <button
           onClick={() => router.push("/tools")}
-          className="mt-3 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back to Tools
         </button>
@@ -145,18 +153,23 @@ export default function TriggeredClient() {
     );
   }
 
-  // ── Success screen ──
   if (success) {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">Trigger log saved</h2>
-        <p className="mt-4 text-base text-zinc-700">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <TriggeredBackground />
+        <h2
+          className="font-display text-[30px] leading-[1.12] text-ink"
+          style={{ letterSpacing: "-0.7px" }}
+        >
+          Trigger log <span className="italic">saved</span>.
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your trigger entry has been saved. Over time, these entries help
           surface patterns in how you respond to difficult moments.
         </p>
         <button
           onClick={() => router.push("/tools")}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Done
         </button>
@@ -164,41 +177,52 @@ export default function TriggeredClient() {
     );
   }
 
-  // ── Loading screen ──
   if (submitting) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center px-5">
+      <div className="relative flex min-h-[60vh] items-center justify-center px-5">
+        <TriggeredBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-zinc-900" />
-          <p className="mt-4 text-sm text-zinc-500">Saving your entry...</p>
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-trigger" />
+          <p className="mt-4 text-[14px] font-medium text-ink-soft">
+            Saving your entry…
+          </p>
         </div>
       </div>
     );
   }
 
-  // ── Intro ──
   if (step === -1) {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <h2 className="text-xl font-bold text-zinc-900">
-          I&apos;m Triggered
+      <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <TriggeredBackground />
+        <span
+          className="inline-block rounded-pill px-3 py-1 text-[11px] font-bold uppercase tracking-[1.2px] text-white"
+          style={{ backgroundColor: "var(--color-trigger)" }}
+        >
+          Triggered
+        </span>
+        <h2
+          className="mt-3 font-display text-[32px] leading-[1.1] text-ink"
+          style={{ letterSpacing: "-0.9px" }}
+        >
+          Catch the <span className="italic">spark</span>.
         </h2>
-        <p className="mt-2 text-sm text-zinc-500">
-          Use this tool to log a trigger in real time so you can understand
-          your pattern, calm down, and see the situation more clearly.
+        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          Log a trigger in real time so you can understand your pattern, calm
+          down, and see the situation more clearly.
         </p>
-        <p className="mt-2 text-sm text-zinc-400">
+        <p className="mt-2 text-[13px] font-medium text-ink-soft">
           This entry will also be used to generate coaching insights over time.
         </p>
         <button
           onClick={() => setStep(0)}
-          className="mt-8 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Start
         </button>
         <button
           onClick={() => router.push("/tools")}
-          className="mt-3 flex h-11 w-full items-center justify-center text-sm text-zinc-400 underline"
+          className="mt-3 inline-flex min-h-11 w-full items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
         >
           Back to Tools
         </button>
@@ -206,40 +230,48 @@ export default function TriggeredClient() {
     );
   }
 
-  // ── Close step (after feeling) ──
   if (step === STEPS.length) {
     return (
-      <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        {/* Progress bar */}
-        <div className="flex items-center gap-1">
+      <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <TriggeredBackground />
+        <div className="flex items-center gap-1.5">
           {Array.from({ length: totalSteps }).map((_, i) => (
             <div
               key={i}
-              className={`h-1 flex-1 rounded-full ${
-                i <= step ? "bg-zinc-900" : "bg-zinc-200"
+              className={`h-1.5 flex-1 rounded-full transition-colors ${
+                i < step
+                  ? "bg-brand"
+                  : i === step
+                    ? "bg-brand-deep"
+                    : "bg-white/60"
               }`}
             />
           ))}
         </div>
-        <p className="mt-2 text-xs text-zinc-400">
-          Step {step + 1} of {totalSteps}
+        <p className="mt-3 text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+          {step + 1} / {totalSteps}
         </p>
 
-        <h2 className="mt-6 text-lg font-semibold text-zinc-900">
+        <h2
+          className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
+        >
           How do you feel now?
         </h2>
         {submitError && (
-          <p className="mt-2 text-sm text-red-600">{submitError}</p>
+          <p className="mt-2 text-[13px] font-medium text-danger">
+            {submitError}
+          </p>
         )}
-        <div className="mt-4 space-y-3">
+        <div className="mt-5 space-y-2">
           {AFTER_FEELINGS.map((feeling) => (
             <button
               key={feeling}
               onClick={() => handleSubmit(feeling)}
-              className={`flex h-11 w-full items-center rounded-lg border px-4 text-base transition-colors ${
+              className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
                 afterFeeling === feeling
-                  ? "border-zinc-900 bg-zinc-50 text-zinc-900"
-                  : "border-zinc-200 text-zinc-700 hover:border-zinc-300"
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
               }`}
             >
               {feeling}
@@ -248,7 +280,7 @@ export default function TriggeredClient() {
         </div>
         <button
           onClick={() => setStep(STEPS.length - 1)}
-          className="mt-6 flex h-11 w-full items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          className="mt-6 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back
         </button>
@@ -256,7 +288,6 @@ export default function TriggeredClient() {
     );
   }
 
-  // ── Step form ──
   const currentStep = STEPS[step];
   const value = data[currentStep.key] || "";
 
@@ -270,32 +301,48 @@ export default function TriggeredClient() {
   }
 
   return (
-    <div className="px-5 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      {/* Progress bar */}
-      <div className="flex items-center gap-1">
+    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <TriggeredBackground />
+
+      <div className="flex items-center gap-1.5">
         {Array.from({ length: totalSteps }).map((_, i) => (
           <div
             key={i}
-            className={`h-1 flex-1 rounded-full ${
-              i <= step ? "bg-zinc-900" : "bg-zinc-200"
+            className={`h-1.5 flex-1 rounded-full transition-colors ${
+              i < step
+                ? "bg-brand"
+                : i === step
+                  ? "bg-brand-deep"
+                  : "bg-white/60"
             }`}
           />
         ))}
       </div>
-      <p className="mt-2 text-xs text-zinc-400">
-        Step {step + 1} of {totalSteps}
-      </p>
+      <div className="mt-3 flex items-center justify-between">
+        <span
+          className="inline-block rounded-pill px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white"
+          style={{ backgroundColor: "var(--color-trigger)" }}
+        >
+          Triggered
+        </span>
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+          {step + 1} / {totalSteps}
+        </p>
+      </div>
 
-      {/* Question */}
-      <h2 className="mt-6 text-lg font-semibold text-zinc-900">
+      <h2
+        className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
+      >
         {currentStep.title}
       </h2>
       {currentStep.prompt && (
-        <p className="mt-1 text-sm text-zinc-500">{currentStep.prompt}</p>
+        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          {currentStep.prompt}
+        </p>
       )}
 
-      {/* Input */}
-      <div className="mt-4">
+      <div className="mt-5">
         {currentStep.type === "textarea" && (
           <VoiceInput
             key={currentStep.key}
@@ -315,19 +362,29 @@ export default function TriggeredClient() {
               rows={2}
               placeholder="Name the emotion..."
             />
-            <div>
-              <label className="text-sm font-medium text-zinc-700">
-                Intensity: {emotionIntensity}/10
-              </label>
+            <div className="rounded-card-sm bg-surface p-4 shadow-soft">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[13px] font-semibold text-ink">
+                  Intensity
+                </span>
+                <span
+                  className="font-display text-[20px] leading-none"
+                  style={{ color: "var(--color-trigger)" }}
+                >
+                  {emotionIntensity}
+                  <span className="text-ink-soft text-[13px]">/10</span>
+                </span>
+              </div>
               <input
                 type="range"
                 min={1}
                 max={10}
                 value={emotionIntensity}
                 onChange={(e) => setEmotionIntensity(Number(e.target.value))}
-                className="mt-2 h-11 w-full accent-zinc-900"
+                className="mt-3 h-11 w-full"
+                style={{ accentColor: "var(--color-trigger)" }}
               />
-              <div className="flex justify-between text-xs text-zinc-400">
+              <div className="flex justify-between text-[11px] font-semibold text-ink-soft">
                 <span>1 — mild</span>
                 <span>10 — overwhelming</span>
               </div>
@@ -344,19 +401,29 @@ export default function TriggeredClient() {
               rows={2}
               placeholder="What was your urge?"
             />
-            <div>
-              <label className="text-sm font-medium text-zinc-700">
-                Intensity: {urgeIntensity}/10
-              </label>
+            <div className="rounded-card-sm bg-surface p-4 shadow-soft">
+              <div className="flex items-baseline justify-between">
+                <span className="text-[13px] font-semibold text-ink">
+                  Intensity
+                </span>
+                <span
+                  className="font-display text-[20px] leading-none"
+                  style={{ color: "var(--color-trigger)" }}
+                >
+                  {urgeIntensity}
+                  <span className="text-ink-soft text-[13px]">/10</span>
+                </span>
+              </div>
               <input
                 type="range"
                 min={1}
                 max={10}
                 value={urgeIntensity}
                 onChange={(e) => setUrgeIntensity(Number(e.target.value))}
-                className="mt-2 h-11 w-full accent-zinc-900"
+                className="mt-3 h-11 w-full"
+                style={{ accentColor: "var(--color-trigger)" }}
               />
-              <div className="flex justify-between text-xs text-zinc-400">
+              <div className="flex justify-between text-[11px] font-semibold text-ink-soft">
                 <span>1 — mild</span>
                 <span>10 — overwhelming</span>
               </div>
@@ -365,11 +432,10 @@ export default function TriggeredClient() {
         )}
       </div>
 
-      {/* Navigation */}
       <div className="mt-6 flex gap-3">
         <button
           onClick={() => setStep(step - 1)}
-          className="flex h-11 flex-1 items-center justify-center rounded-lg border border-zinc-200 text-base font-medium text-zinc-700"
+          className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back
         </button>
@@ -380,7 +446,7 @@ export default function TriggeredClient() {
             (currentStep.type === "emotion" && !data.emotion?.trim()) ||
             (currentStep.type === "urge" && !data.urge?.trim())
           }
-          className="flex h-11 flex-1 items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white disabled:opacity-40"
+          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
           Next
         </button>

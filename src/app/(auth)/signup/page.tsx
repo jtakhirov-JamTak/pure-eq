@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { Wordmark } from "@/components/brand/Wordmark";
+import { SkyBackground } from "@/components/brand/SkyBackground";
 
 export default function SignupPage() {
   const [email, setEmail] = useState("");
@@ -50,16 +52,29 @@ export default function SignupPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-6">
+    <div className="relative flex min-h-dvh flex-col items-center justify-center px-6 pb-[env(safe-area-inset-bottom)] pt-[max(3rem,env(safe-area-inset-top))]">
+      <SkyBackground variant="calm" />
+
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-zinc-900">Create account</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <div className="flex justify-center">
+          <Wordmark size={18} />
+        </div>
+        <h1
+          className="mt-8 font-display text-[30px] leading-[1.12] text-ink text-center"
+          style={{ letterSpacing: "-0.7px" }}
+        >
+          Create account
+        </h1>
+        <p className="mt-2 text-center text-[14px] font-medium leading-[1.5] text-ink-soft">
           Start with your communication profile.
         </p>
 
         <form onSubmit={handleSignup} className="mt-8 space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="email"
+              className="block text-[13px] font-semibold text-ink"
+            >
               Email
             </label>
             <input
@@ -70,13 +85,16 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1 block h-12 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="password"
+              className="block text-[13px] font-semibold text-ink"
+            >
               Password
             </label>
             <input
@@ -87,24 +105,24 @@ export default function SignupPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="mt-1 block h-12 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="••••••••"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-[13px] font-medium text-danger">{error}</p>
           )}
 
           {alreadyRegistered && (
-            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
-              <p className="text-sm text-amber-900">
+            <div className="space-y-3 rounded-card-sm bg-warm-soft p-4 shadow-soft">
+              <p className="text-[13px] font-medium leading-[1.5] text-ink">
                 You already have an account with this email. Your quiz answers
                 will be saved automatically after you sign in.
               </p>
               <Link
                 href="/login"
-                className="flex h-11 w-full items-center justify-center rounded-lg bg-amber-900 text-sm font-medium text-white transition-colors hover:bg-amber-950 active:bg-amber-950"
+                className="flex h-12 w-full items-center justify-center rounded-pill bg-ink text-[14px] font-bold text-white shadow-soft active:scale-[0.98]"
               >
                 Log in instead
               </Link>
@@ -114,15 +132,18 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-12 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white transition-colors hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-50"
+            className="flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "Creating account..." : "Get started"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-[13px] font-medium text-ink-soft">
           Already have an account?{" "}
-          <Link href="/login" className="text-zinc-700 underline">
+          <Link
+            href="/login"
+            className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-brand-deep underline active:opacity-70"
+          >
             Log in
           </Link>
         </p>

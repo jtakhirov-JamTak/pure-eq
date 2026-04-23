@@ -17,7 +17,7 @@ export const DIRECTION_STYLES: Record<
 > = {
   negative: {
     border: "border-l-amber-500",
-    bg: "bg-amber-50",
+    bg: "bg-surface",
     badge: "bg-amber-100 text-amber-800",
     badgeText: "Watch",
     evolutionUpColor: "text-amber-600",
@@ -25,31 +25,33 @@ export const DIRECTION_STYLES: Record<
   },
   positive: {
     border: "border-l-emerald-500",
-    bg: "bg-emerald-50",
+    bg: "bg-surface",
     badge: "bg-emerald-100 text-emerald-800",
     badgeText: "Strength",
     evolutionUpColor: "text-emerald-600",
-    evolutionDownColor: "text-zinc-500",
+    evolutionDownColor: "text-ink-muted",
   },
   neutral: {
-    border: "border-l-sky-500",
-    bg: "bg-sky-50",
-    badge: "bg-sky-100 text-sky-800",
+    border: "border-l-brand",
+    bg: "bg-surface",
+    badge: "bg-surface-tint text-brand-deep",
     badgeText: "Trigger",
-    evolutionUpColor: "text-sky-600",
-    evolutionDownColor: "text-zinc-500",
+    evolutionUpColor: "text-brand-deep",
+    evolutionDownColor: "text-ink-muted",
   },
 };
 
 // Per-field typography for the insight-box five-field layout. pattern is the
-// lead; tryInstead gets visual emphasis via font-medium + accent left border
+// lead; tryInstead gets visual emphasis via font-semibold + accent left border
 // (border color resolved at render site from direction via ACCENT_BORDER).
 export const FIELD_TYPOGRAPHY = {
-  pattern: "text-lg font-semibold text-zinc-900",
-  showsUpWhen: "text-sm text-zinc-700",
-  eqImpact: "text-sm text-zinc-700",
-  tryInstead: "text-sm font-medium text-zinc-900",
-  proof: "text-xs text-zinc-600",
+  pattern: "font-display text-[20px] leading-[1.2] text-ink",
+  showsUpWhen: "text-[13px] font-medium text-ink-soft",
+  eqImpact: "text-[13px] font-medium text-ink-soft",
+  tryInstead: "text-[13px] font-semibold text-ink",
+  // Use ink-soft not ink-muted: ink-muted (#8AA0C2) on white at 11px is ~3.4:1,
+  // fails WCAG AA for body text. ink-soft (#4A5E82) hits ~7:1.
+  proof: "text-[11px] font-semibold uppercase tracking-[0.8px] text-ink-soft",
 } as const;
 
 // Accent border used inside the "Try instead" block. One shade lighter than
@@ -58,5 +60,5 @@ export const FIELD_TYPOGRAPHY = {
 export const ACCENT_BORDER: Record<TagDirection, string> = {
   negative: "border-amber-400",
   positive: "border-emerald-400",
-  neutral: "border-sky-400",
+  neutral: "border-brand",
 };

@@ -51,11 +51,8 @@ export function HistoryList({
 
   function mergeUnique(
     prev: HistoryEntry[],
-    incoming: HistoryEntry[]
+    incoming: HistoryEntry[],
   ): HistoryEntry[] {
-    // If a new entry was completed in another tab between loads, the offset
-    // window can shift and re-include a row the client already holds.
-    // De-dup by id so the list never shows the same entry twice.
     const seen = new Set(prev.map((e) => e.id));
     return [...prev, ...incoming.filter((e) => !seen.has(e.id))];
   }
@@ -66,7 +63,7 @@ export function HistoryList({
     setError(null);
     try {
       const res = await fetch(
-        `/api/history?offset=${entries.length}&limit=${pageSize}`
+        `/api/history?offset=${entries.length}&limit=${pageSize}`,
       );
       if (!res.ok) throw new Error(`status ${res.status}`);
       const body = (await res.json()) as { entries: HistoryEntry[] };
@@ -94,18 +91,13 @@ export function HistoryList({
       if (!result.success) {
         throw new Error(result.error ?? "Delete failed");
       }
-      // Optimistically remove the deleted rows from local state.
       setEntries((prev) => prev.filter((e) => !selected.has(e.id)));
       setSelected(new Set());
       setShowConfirm(false);
-      // Auto-refill: if we dropped below pageSize, fetch more to backfill.
-      // Using the server-revalidated path means counts also refresh on any
-      // subsequent nav back to /history.
       if (!noMore) {
-        // Silent background top-up.
         try {
           const res = await fetch(
-            `/api/history?offset=${entries.length - ids.length}&limit=${ids.length}`
+            `/api/history?offset=${entries.length - ids.length}&limit=${ids.length}`,
           );
           if (res.ok) {
             const body = (await res.json()) as { entries: HistoryEntry[] };
@@ -120,7 +112,6 @@ export function HistoryList({
           // Non-fatal — the delete already succeeded.
         }
       }
-      // Refresh server-rendered pieces (counts at top of page).
       router.refresh();
     } catch (err) {
       console.error("history delete failed", (err as Error).message);
@@ -132,9 +123,11 @@ export function HistoryList({
 
   if (entries.length === 0) {
     return (
-      <div className="mt-8 rounded-xl border border-zinc-200 bg-white p-8 text-center">
-        <p className="text-base text-zinc-700">No completed entries yet.</p>
-        <p className="mt-2 text-sm text-zinc-500">
+      <div className="mt-6 rounded-card-sm bg-surface p-6 text-center shadow-soft">
+        <p className="text-[15px] font-medium text-ink">
+          No completed entries yet.
+        </p>
+        <p className="mt-1 text-[13px] font-medium text-ink-soft">
           Entries you complete in Coach or Tools will show up here.
         </p>
       </div>
@@ -144,19 +137,19 @@ export function HistoryList({
   return (
     <div className="mt-6">
       <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-sm text-zinc-700">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 text-[13px] font-semibold text-ink">
           <input
             type="checkbox"
             checked={allVisibleSelected}
             onChange={toggleAllVisible}
-            className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+            className="h-4 w-4 rounded border-hair text-brand focus:ring-brand"
           />
           Select all {entries.length}
         </label>
         {selectedCount > 0 && (
           <button
             onClick={() => setShowConfirm(true)}
-            className="inline-flex h-11 items-center gap-1.5 rounded-full bg-red-600 px-4 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800"
+            className="inline-flex h-11 items-center gap-1.5 rounded-pill bg-danger px-4 text-[13px] font-bold text-white shadow-soft active:opacity-90"
           >
             <Trash2 className="h-4 w-4" />
             Delete {selectedCount}
@@ -164,8 +157,8 @@ export function HistoryList({
         )}
       </div>
 
-      <ul className="mt-3 divide-y divide-zinc-100 rounded-xl border border-zinc-200 bg-white">
-        {entries.map((e) => {
+      <ul className="mt-3 overflow-hidden rounded-card-sm bg-surface shadow-soft">
+        {entries.map((e, idx) => {
           const isSelected = selected.has(e.id);
           const date = new Date(e.completedAt);
           const dateLabel = date.toLocaleDateString(undefined, {
@@ -175,20 +168,25 @@ export function HistoryList({
           });
           return (
             <li key={e.id}>
-              {/* Whole row is a label so any tap inside toggles the
-                  checkbox — 16px checkboxes alone are a terrible touch
-                  target, and the row text/date shouldn't be dead zones. */}
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3">
+              <label
+                className={`flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3 ${
+                  idx > 0 ? "border-t border-hair" : ""
+                }`}
+              >
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggleOne(e.id)}
-                  className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                  className="h-4 w-4 rounded border-hair text-brand focus:ring-brand"
                   aria-label={`Select ${e.label} entry from ${dateLabel}`}
                 />
                 <div className="flex-1">
-                  <p className="text-base font-medium text-zinc-900">{e.label}</p>
-                  <p className="text-sm text-zinc-500">{dateLabel}</p>
+                  <p className="text-[14px] font-semibold text-ink">
+                    {e.label}
+                  </p>
+                  <p className="text-[12px] font-medium text-ink-soft">
+                    {dateLabel}
+                  </p>
                 </div>
               </label>
             </li>
@@ -196,14 +194,16 @@ export function HistoryList({
         })}
       </ul>
 
-      {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+      {error && (
+        <p className="mt-3 text-[13px] font-medium text-danger">{error}</p>
+      )}
 
       {!noMore && (
         <div className="mt-4 flex justify-center">
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="inline-flex h-11 items-center justify-center rounded-full border border-zinc-200 px-5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center rounded-pill bg-surface px-5 text-[13px] font-semibold text-ink shadow-soft active:opacity-80 disabled:opacity-50"
           >
             {loadingMore ? "Loading…" : "Load more"}
           </button>
@@ -212,33 +212,33 @@ export function HistoryList({
 
       {showConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 px-6 backdrop-blur-sm"
           onClick={() => !deleting && setShowConfirm(false)}
         >
           <div
-            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+            className="w-full max-w-sm rounded-card-sm bg-surface p-6 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-zinc-900">
+            <h3 className="font-display text-[22px] leading-[1.15] text-ink">
               Delete {selectedCount}{" "}
               {selectedCount === 1 ? "entry" : "entries"}?
             </h3>
-            <p className="mt-2 text-sm text-zinc-600">
+            <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
               This removes them from your history and from any insights they
               contributed to. This can&apos;t be undone.
             </p>
-            <div className="mt-6 flex gap-2">
+            <div className="mt-5 flex gap-2">
               <button
                 onClick={() => setShowConfirm(false)}
                 disabled={deleting}
-                className="h-11 flex-1 rounded-full border border-zinc-200 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+                className="h-12 flex-1 rounded-pill bg-surface-tint text-[14px] font-semibold text-ink active:opacity-80 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
                 disabled={deleting}
-                className="h-11 flex-1 rounded-full bg-red-600 text-sm font-medium text-white hover:bg-red-700 active:bg-red-800 disabled:opacity-50"
+                className="h-12 flex-1 rounded-pill bg-danger text-[14px] font-bold text-white shadow-soft active:opacity-90 disabled:opacity-50"
               >
                 {deleting ? "Deleting…" : "Delete"}
               </button>

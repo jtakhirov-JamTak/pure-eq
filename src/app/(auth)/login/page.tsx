@@ -3,6 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { Wordmark } from "@/components/brand/Wordmark";
+import { SkyBackground } from "@/components/brand/SkyBackground";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -35,16 +37,29 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center bg-white px-6">
+    <div className="relative flex min-h-dvh flex-col items-center justify-center px-6 pb-[env(safe-area-inset-bottom)] pt-[max(3rem,env(safe-area-inset-top))]">
+      <SkyBackground variant="calm" />
+
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold text-zinc-900">Log in</h1>
-        <p className="mt-1 text-sm text-zinc-500">
-          Welcome back to Pure EQ.
+        <div className="flex justify-center">
+          <Wordmark size={18} />
+        </div>
+        <h1
+          className="mt-8 font-display text-[30px] leading-[1.12] text-ink text-center"
+          style={{ letterSpacing: "-0.7px" }}
+        >
+          Log in
+        </h1>
+        <p className="mt-2 text-center text-[14px] font-medium leading-[1.5] text-ink-soft">
+          Welcome back to SpeakEasy.
         </p>
 
         <form onSubmit={handleLogin} className="mt-8 space-y-4">
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="email"
+              className="block text-[13px] font-semibold text-ink"
+            >
               Email
             </label>
             <input
@@ -55,13 +70,16 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1 block h-12 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="you@example.com"
             />
           </div>
 
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700">
+            <label
+              htmlFor="password"
+              className="block text-[13px] font-semibold text-ink"
+            >
               Password
             </label>
             <input
@@ -71,27 +89,30 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="mt-1 block h-12 w-full rounded-lg border border-zinc-300 px-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
               placeholder="••••••••"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600">{error}</p>
+            <p className="text-[13px] font-medium text-danger">{error}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="flex h-12 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white transition-colors hover:bg-zinc-800 active:bg-zinc-700 disabled:opacity-50"
+            className="flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "Logging in..." : "Log in"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm text-zinc-500">
+        <p className="mt-6 text-center text-[13px] font-medium text-ink-soft">
           Don&apos;t have an account?{" "}
-          <Link href="/signup" className="text-zinc-700 underline">
+          <Link
+            href="/signup"
+            className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-brand-deep underline active:opacity-70"
+          >
             Sign up
           </Link>
         </p>

@@ -19,5 +19,5 @@ export default async function ToolsLayout({
   // Subscription gating happens at the page layer below so we can (a)
   // render a locked card on the /tools hub for users outside the window
   // and (b) redirect leaf pages to /paywall before journaling UI renders.
-  return <AppShell>{children}</AppShell>;
+  return <AppShell userEmail={user.email}>{children}</AppShell>;
 }

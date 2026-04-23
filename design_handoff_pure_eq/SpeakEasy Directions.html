@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SpeakEasy · Three Directions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Inter+Tight:wght@400;500;600&family=Instrument+Serif:ital@0;1&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    html, body { margin: 0; padding: 0; background: #1a1a1c; color: #eee; font-family: Inter, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    @keyframes caret { 50% { opacity: 0.25; } }
+  </style>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel" src="ios-frame.jsx"></script>
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="shared.jsx"></script>
+  <script type="text/babel" src="directionA.jsx"></script>
+  <script type="text/babel" src="directionB.jsx"></script>
+  <script type="text/babel" src="directionB_more.jsx"></script>
+  <script type="text/babel" src="directionB_more2.jsx"></script>
+  <script type="text/babel" src="directionB_more3.jsx"></script>
+  <script type="text/babel" src="directionB_more4.jsx"></script>
+  <script type="text/babel" src="directionC.jsx"></script>
+  <script type="text/babel" src="realScreens.jsx"></script>
+  <script type="text/babel" src="realScreensCoach.jsx"></script>
+  <script type="text/babel" src="realScreensTools.jsx"></script>
+  <script type="text/babel" src="realScreensInsights.jsx"></script>
+
+  <script type="text/babel">
+    const { useState } = React;
+
+    function Device({ screen }) {
+      return (
+        <IOSDevice width={390} height={844}>
+          {screen}
+        </IOSDevice>
+      );
+    }
+
+    // Each artboard is a phone — 390 × 844 plus device chrome. iOS frame is ~410 wide by default; give artboards slightly more room.
+    const ARTBOARD_W = 412;
+    const ARTBOARD_H = 862;
+
+    function Section({ id, title, screens, directionLabel, subtitle }) {
+      return (
+        <DCSection id={id} title={title} subtitle={subtitle}>
+          {screens.map(s => (
+            <DCArtboard key={s.id} id={s.id} label={s.label} width={ARTBOARD_W} height={ARTBOARD_H}>
+              <div style={{
+                width: ARTBOARD_W, height: ARTBOARD_H,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'transparent',
+              }}>
+                <Device screen={s.node}/>
+              </div>
+            </DCArtboard>
+          ))}
+        </DCSection>
+      );
+    }
+
+    function App() {
+      const directionA = [
+        { id: 'a-home',   label: 'Home · Coach hub',  node: <A_Home/> },
+        { id: 'a-tools',  label: 'Tools hub',         node: <A_Tools/> },
+        { id: 'a-prep',   label: 'Prepare · voice input',   node: <A_Prepare/> },
+        { id: 'a-overw',  label: 'Overwhelmed · regulate',   node: <A_Overwhelmed/> },
+        { id: 'a-insight',label: 'Insights',          node: <A_Insights/> },
+      ];
+      const directionB = [
+        { id: 'b-home',   label: 'Home · Coach hub',  node: <B_Home/> },
+        { id: 'b-tools',  label: 'Tools hub',         node: <B_Tools/> },
+        { id: 'b-prep',   label: 'Prepare · voice input',   node: <B_Prepare/> },
+        { id: 'b-overw',  label: 'Overwhelmed · regulate',   node: <B_Overwhelmed/> },
+        { id: 'b-insight',label: 'Insights',          node: <B_Insights/> },
+      ];
+      const directionC = [
+        { id: 'c-home',   label: 'Home · Coach hub',  node: <C_Home/> },
+        { id: 'c-tools',  label: 'Tools hub',         node: <C_Tools/> },
+        { id: 'c-prep',   label: 'Prepare · voice input',   node: <C_Prepare/> },
+        { id: 'c-overw',  label: 'Overwhelmed · regulate',   node: <C_Overwhelmed/> },
+        { id: 'c-insight',label: 'Insights',          node: <C_Insights/> },
+      ];
+
+      return (
+        <DesignCanvas
+          title="SpeakEasy — 3 directions"
+          subtitle="iOS · Coach, Tools, Insights. Open any artboard fullscreen via the expand icon on hover."
+        >
+          <Section
+            id="dir-a"
+            title="A · Warm Editorial"
+            subtitle="Cream paper, Instrument Serif, warm ochre accent. Feels considered, human, unhurried."
+            screens={directionA}
+          />
+          <Section
+            id="dir-b"
+            title="B · Soft Pastel"
+            subtitle="DM Sans, lavender + peach gradients, rounded geometry. Feels gentle, warm, approachable."
+            screens={directionB}
+          />
+          <Section
+            id="dir-b-onboarding"
+            title="B · Onboarding"
+            subtitle="First-open flow: splash, intent, relationships, privacy."
+            screens={[
+              { id: 'b-splash',   label: 'Splash',              node: <B_Splash/> },
+              { id: 'b-intent',   label: 'What brings you here', node: <B_OnboardingIntent/> },
+              { id: 'b-rels',     label: 'Relationships',        node: <B_OnboardingRelationships/> },
+              { id: 'b-perm',     label: 'Privacy & permissions',node: <B_OnboardingPermissions/> },
+            ]}
+          />
+          <Section
+            id="dir-b-flows"
+            title="B · Review + Repair"
+            subtitle="Question-by-question flows for looking back and mending."
+            screens={[
+              { id: 'b-review', label: 'Review · what landed', node: <B_Review/> },
+              { id: 'b-repair', label: 'Repair · draft',       node: <B_Repair/> },
+            ]}
+          />
+          <Section
+            id="dir-b-detail"
+            title="B · Detail & threads"
+            subtitle="Pattern detail view + the active-conversations rectangle expanded."
+            screens={[
+              { id: 'b-insight-detail', label: 'Insight detail',   node: <B_InsightsDetail/> },
+              { id: 'b-convos',         label: 'Conversations',    node: <B_Conversations/> },
+            ]}
+          />
+          <Section
+            id="dir-b-system"
+            title="B · Settings, states & upgrade"
+            subtitle="Settings, empty state, paywall, end-of-session completion."
+            screens={[
+              { id: 'b-settings', label: 'Settings',          node: <B_Settings/> },
+              { id: 'b-empty',    label: 'Empty · no entries',node: <B_Empty/> },
+              { id: 'b-paywall',  label: 'Premium paywall',   node: <B_Paywall/> },
+              { id: 'b-complete', label: 'Session complete',  node: <B_Complete/> },
+            ]}
+          />
+          <Section
+            id="real-a"
+            title="Pure EQ · Real Screens — A · Soft Pastel"
+            subtitle="12 real app screens with actual product copy. 5 use the stylized cloud direction, 7 use the flatter soft pastel."
+            screens={[
+              { id: 'ra-coach',   label: '1 · Coach hub · cloud',       node: <B_Home/> },
+              { id: 'ra-prep1',   label: '2 · Prepare · person',        node: <R_PrepPerson   P={PAL_A}/> },
+              { id: 'ra-prep2',   label: '3 · Prepare · cloud voice',   node: <B_Prepare/> },
+              { id: 'ra-prep3',   label: '4 · Prepare · feedback',      node: <R_PrepFeedback P={PAL_A}/> },
+              { id: 'ra-threads', label: '5 · Threads',                 node: <R_Threads      P={PAL_A}/> },
+              { id: 'ra-tools',   label: '6 · Tools hub · cloud',       node: <B_Tools/> },
+              { id: 'ra-owfeel',  label: '7 · Overwhelmed · Feel',      node: <R_OwFeel       P={PAL_A}/> },
+              { id: 'ra-owreg',   label: '8 · Overwhelmed · cloud',     node: <B_Overwhelmed/> },
+              { id: 'ra-trig',    label: '9 · Triggered · Emotion',     node: <R_TrigEmotion  P={PAL_A}/> },
+              { id: 'ra-insight', label: '10 · Insights · cloud',       node: <B_Insights/> },
+              { id: 'ra-onb',     label: '11 · Onboarding · result',    node: <R_OnbResult    P={PAL_A}/> },
+              { id: 'ra-paywall', label: '12 · Paywall',                node: <R_Paywall      P={PAL_A}/> },
+            ]}
+          />
+          <Section
+            id="real-b"
+            title="Pure EQ · Real Screens — B · Sky & Sage"
+            subtitle="Same screens, sage + sky + cream + terracotta. Calmer, more grounded, less candy."
+            screens={[
+              { id: 'rb-coach',   label: '1 · Coach hub',               node: <R_CoachHub     P={PAL_B}/> },
+              { id: 'rb-prep1',   label: '2 · Prepare · person',        node: <R_PrepPerson   P={PAL_B}/> },
+              { id: 'rb-prep2',   label: '3 · Prepare · outcome',       node: <R_PrepOutcome  P={PAL_B}/> },
+              { id: 'rb-prep3',   label: '4 · Prepare · feedback',      node: <R_PrepFeedback P={PAL_B}/> },
+              { id: 'rb-threads', label: '5 · Threads',                 node: <R_Threads      P={PAL_B}/> },
+              { id: 'rb-tools',   label: '6 · Tools hub',               node: <R_ToolsHub     P={PAL_B}/> },
+              { id: 'rb-owfeel',  label: '7 · Overwhelmed · Feel',      node: <R_OwFeel       P={PAL_B}/> },
+              { id: 'rb-owreg',   label: '8 · Overwhelmed · Regulate',  node: <R_OwRegulate   P={PAL_B}/> },
+              { id: 'rb-trig',    label: '9 · Triggered · Emotion',     node: <R_TrigEmotion  P={PAL_B}/> },
+              { id: 'rb-insight', label: '10 · Insights',               node: <R_Insights     P={PAL_B}/> },
+              { id: 'rb-onb',     label: '11 · Onboarding · result',    node: <R_OnbResult    P={PAL_B}/> },
+              { id: 'rb-paywall', label: '12 · Paywall',                node: <R_Paywall      P={PAL_B}/> },
+            ]}
+          />
+          <Section
+            id="dir-c"
+            title="C · Mono Quiet"
+            subtitle="Near-monochrome paper. Inter Tight + JetBrains Mono. Feels precise, calm, grown-up."
+            screens={directionC}
+          />
+        </DesignCanvas>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>

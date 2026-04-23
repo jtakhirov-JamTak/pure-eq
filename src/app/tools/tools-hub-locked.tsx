@@ -1,20 +1,32 @@
 import Link from "next/link";
+import { SkyBackground } from "@/components/brand/SkyBackground";
 
 export function ToolsHubLocked() {
   return (
-    <div className="px-5 pt-8 pb-28">
-      <h2 className="text-xl font-bold text-zinc-900">Tools</h2>
-      <div className="mt-8 rounded-xl border border-zinc-200 bg-zinc-50 p-5">
-        <p className="text-sm text-zinc-700">
+    <div className="relative min-h-full px-5 pt-4 pb-32">
+      <SkyBackground variant="tools-hub" />
+
+      <h1
+        className="mt-2 font-display text-[30px] leading-[1.1] text-ink"
+        style={{ letterSpacing: "-0.8px" }}
+      >
+        Tools
+      </h1>
+
+      <div className="mt-5 rounded-card bg-surface p-5 shadow-card">
+        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.6px] text-ink">
+          Locked
+        </span>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Overwhelmed and Triggered are free during your first 7 days after
           onboarding.
         </p>
-        <p className="mt-2 text-sm text-zinc-700">
+        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
           After day 7, Tools require a subscription.
         </p>
         <Link
           href="/paywall"
-          className="mt-5 flex h-11 w-full items-center justify-center rounded-lg bg-zinc-900 text-base font-medium text-white"
+          className="mt-5 flex h-12 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Subscribe to keep using Tools
         </Link>
