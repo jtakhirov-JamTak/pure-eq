@@ -3,6 +3,7 @@ import { getAuthUser } from "@/lib/supabase/server";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 import { AppShell } from "@/components/app-shell";
+import { readFirstName } from "@/lib/user-metadata";
 
 export default async function AppLayout({
   children,
@@ -34,5 +35,12 @@ export default async function AppLayout({
   }
 
   console.log(`[perf] (app) layout ${Date.now() - t0}ms u=${user.id.slice(0, 8)}`);
-  return <AppShell userEmail={user.email}>{children}</AppShell>;
+  return (
+    <AppShell
+      userEmail={user.email}
+      firstName={readFirstName(user.user_metadata)}
+    >
+      {children}
+    </AppShell>
+  );
 }

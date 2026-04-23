@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { captureServerRead } from "@/lib/read-capture";
+import { readFirstName } from "@/lib/user-metadata";
 
 function firstNameFromEmail(email: string | null | undefined): string {
   if (!email) return "";
@@ -10,15 +11,6 @@ function firstNameFromEmail(email: string | null | undefined): string {
   const chunk = prefix.split(/[._]/)[0] ?? "";
   if (!chunk) return "";
   return chunk.charAt(0).toUpperCase() + chunk.slice(1).toLowerCase();
-}
-
-function readFirstName(
-  metadata: Record<string, unknown> | null | undefined,
-): string {
-  const raw = metadata?.first_name;
-  if (typeof raw !== "string") return "";
-  const trimmed = raw.trim();
-  return trimmed.slice(0, 50);
 }
 
 export default async function CoachPage() {

@@ -40,7 +40,12 @@ function TabLabel({
   );
 }
 
-function avatarInitial(email: string | null | undefined): string {
+function avatarInitial(
+  firstName: string | null | undefined,
+  email: string | null | undefined,
+): string {
+  const fn = firstName?.trim();
+  if (fn) return fn.charAt(0).toUpperCase();
   if (!email) return "?";
   const prefix = email.split("@")[0] ?? "";
   const ch = prefix.charAt(0);
@@ -50,9 +55,11 @@ function avatarInitial(email: string | null | undefined): string {
 export function AppShell({
   children,
   userEmail,
+  firstName,
 }: {
   children: React.ReactNode;
   userEmail?: string | null;
+  firstName?: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -84,7 +91,7 @@ export function AppShell({
             onClick={() => setMenuOpen((v) => !v)}
             className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-[14px] font-bold text-ink shadow-soft transition active:scale-95"
           >
-            {avatarInitial(userEmail)}
+            {avatarInitial(firstName, userEmail)}
           </button>
 
           {menuOpen && (
