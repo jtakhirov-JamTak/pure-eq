@@ -124,7 +124,7 @@ export function PaywallContent() {
           {[
             "Unlimited AI coaching sessions",
             "Regulation tools for tough moments",
-            "Pattern insights over time",
+            "Weekly reflection with quoted evidence",
             "Cancel anytime in 1 click",
           ].map((item) => (
             <li key={item} className="flex items-start gap-2">

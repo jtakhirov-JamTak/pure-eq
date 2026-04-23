@@ -856,20 +856,56 @@ Your trigger log has been saved.
 
 ## 6. Insights Tab [PRODUCT LAW]
 
+**Rewritten 2026-04-23.** The v1 Insights (keyword-extractor → tag-counter → 3-box page, plus the 4-layer raw/parsed/observation/derived architecture) was retired. The Insights Data Architecture sections below (§7 Layer 3 Pattern Observations, §8 Layer 4 Derived Insight Objects, §9 Evidence model, §10 Signal-fit, §11 thresholds) are kept as historical record — they describe a retired system and do NOT describe the current build. Tables `pattern_observations` and `derived_insights` are renamed to `_v1_archive` in migration 0023; no new writes.
+
 **Decided item**
 
 The user's **Communication Profile** lives in **Insights**.
 
 **Purpose**
 
-Insights helps the user:
+Insights renders two cards:
 
-- understand recurring communication patterns
-- see what tends to happen under stress
-- learn from Prepare / Review / Repair / Tools usage over time
-- identify what is improving and what still repeats
+1. **Your Style** — the Communication Profile from onboarding (primary + secondary style + short description).
+2. **Weekly Reflection** — a once-per-7-days LLM-generated read of the user's last ~4 weeks of entries. Claude Opus 4.7 reads the user's Prepare / Review / Repair / Overwhelmed / Triggered entries and returns 2–3 blind-spot observations, each grounded in verbatim quotes from the user's own words. The server verifies every quote is a substring of its cited source entry; observations with unverifiable quotes are dropped.
 
-The full Insights data architecture, evidence model, and AI output requirements are defined in the Insights Data Architecture section of this document. The data model and schema requirements below should be read as a summary; the architecture section is authoritative.
+**Cost architecture (PRODUCT LAW)**
+
+- One LLM call per user per 7 days, enforced by a server-side idempotency short-circuit inside the generator endpoint. Visiting /insights inside the 7-day window returns the cached row; no user action (no refresh button, no pageview storm, no client-side bug loop) can force additional calls.
+- No manual refresh button. Weekly cadence is the cost architecture; revisit only with explicit product justification.
+- LLM cost scales with `paid_users × 52 weeks`, not `paid_users × pageviews`. At current Opus pricing ≈ $7.30/user/year worst case.
+
+**Output shape (PRODUCT LAW)**
+
+- `mode: "reflection"` — 1-sentence summary + 2–3 observations. Each observation has a theme, a 2–3 sentence body describing the pattern, 1–3 quoted evidence items with raw_record_id + date, and a confidence level (`tentative` or `clear`).
+- `mode: "refusal"` — fires on safety trigger (abuse, crisis) OR insufficient evidence (cannot ground ≥2 patterns in quotes). Returns `refusal_reason`, a `message_to_user`, and a `suggested_resource`.
+
+**Banned language (PRODUCT LAW)**
+
+- No pathologizing labels ("anxious attachment", "avoidant", "trauma response", "dysregulated nervous system", "attachment wound").
+- No diagnoses.
+- No prescriptions — observations describe behavior and likely effect; they do not tell the user what to do differently.
+- No claims unsupported by a quote. Any observation whose evidence cannot be verified via substring-match against the cited source entry is dropped server-side.
+
+**Visible freshness signal (PRODUCT LAW)**
+
+- Every rendered reflection carries a prominent `Generated on YYYY-MM-DD` byline. This is the user-visible canary if the writer ever silently breaks — direct lesson from the migration-0018 incident where the v1 cache layer silently failed for months.
+
+**Storage**
+
+- `weekly_reflections` table (migration 0022) stores one row per generation, indexed on (user_id, generated_at desc). Old rows retained for history; the page renders only the latest row.
+- Versioned by `generator_version` + `prompt_version`; shape changes bump the constants and force re-generation.
+
+---
+
+### Retired Insights architecture (v1 — do not implement)
+
+The sections below (§7 Data Model onward, up to and including §11 Recommended default thresholds) describe the retired v1 Insights system. They are retained for historical context only. Current Insights is defined by the top of §6 (above this divider). New implementations should treat §§7–11 as archival — specifically:
+
+- The 4-layer model (Raw Records → Canonical Objects → Pattern Observations → Derived Insight Objects) collapses to 2 layers in v2: raw entries + weekly reflections. Raw entries (raw_records + the five module tables) stay authoritative; reflections are a stateless projection over them.
+- Pattern Observations (§7.5, §7.6, §7.7) are not produced. No tag taxonomy, no keyword extraction, no heuristic inference.
+- Derived Insight Objects (§8) are replaced by the single `weekly_reflections` row type.
+- Evidence model (§9), signal-fit (§10), thresholds (§11) — all retired. The "silence over garbage" principle survives as the reflection's refusal mode ("not enough entries yet").
 
 ## 7. Data Model / Core Objects [IMPLEMENTATION GUIDANCE]
 
@@ -892,9 +928,9 @@ The full Insights data architecture, evidence model, and AI output requirements 
 - Overwhelmed entry
 - Trigger entry
 - Outcome tracking record
-- Insight summary
+- Weekly reflection (one per user per ~7 days; LLM-generated with quoted evidence from the user's own entries)
 
-The authoritative schema definitions, field lists, and layer architecture are in the Insights Data Architecture section of this document.
+The current schema lives in `supabase/migrations/` — migration 0022 defines `weekly_reflections`; migration 0023 renames the retired `pattern_observations` / `derived_insights` tables to `_v1_archive`. The Insights Data Architecture sections below (§§7 Layer 3 through §11 thresholds) describe the retired v1 model and are archival only — see the divider at the end of §6 Insights Tab.
 
 ## 8. Decision Log [PRODUCT LAW]
 
@@ -1824,40 +1860,37 @@ If AI parsing fails and the user has already completed the flow:
 
 ## 18. Final v1 surfaced insight objects [PRODUCT LAW]
 
-These are the only Derived Insight Objects that should be surfaced in the v1 UI.
+Rewritten 2026-04-23. v1 surfaces exactly two objects on `/insights`: the Profile Display Object (Your Style) and the Weekly Reflection Object. The four previously-listed objects (Recurring Blind Spot Summary, How You Tend to Land Summary, Person / Relationship Memory Summary) are collapsed into the single Weekly Reflection — its observations naturally cover blind spots, interpersonal impact reads, and relationship-specific patterns when evidence warrants.
 
 ### 18.1 Profile Display Object
 
 Shows:
 
 - primary profile
-- secondary profile if needed
-- short baseline explanation
+- secondary profile if present
+- short baseline explanation (strength line from `PROFILE_DESCRIPTIONS`)
+- "Retake Communication Profile" link
 
-### 18.2 Recurring Blind Spot Summary
+### 18.2 Weekly Reflection Object
 
-Shows:
+Generated by one Claude Opus 4.7 call per user per ~7 days. Input: user's last ~4 weeks of raw entries + Communication Profile + named persons.
 
-- top repeated behavior pattern
-- short explanation
-- evidence-backed confidence state
+Shape:
 
-### 18.3 How You Tend to Land Summary
+- one-sentence framing summary
+- 2–3 observations, each with:
+  - a short theme (title)
+  - a 2–3 sentence behavior-level observation
+  - 1–3 verbatim quotes from the user's entries as evidence (quote + source entry id + date)
+  - a confidence level (`tentative` | `clear`)
+- prominent `Generated on {date}` byline
 
-Shows:
+Refusal mode (same object, different shape) fires on:
 
-- likely interpersonal-impact pattern
-- short under-stress shift
-- one practical implication
+- safety trigger (abuse, crisis) → resource referral (988, DV hotline, therapist)
+- insufficient evidence (cannot ground ≥2 observations in quotes) → "not enough entries yet" message
 
-### 18.4 Person / Relationship Memory Summary
-
-Shows:
-
-- person-specific summary
-- what tends to work
-- what tends to go wrong
-- repeated tension pattern if evidence exists
+The Weekly Reflection is cached server-side for 7 days; repeat visits inside the window render the cached row without calling the LLM again. No manual-refresh button.
 
 ## 19. What is delayed from literal v1 build scope [PRODUCT LAW]
 

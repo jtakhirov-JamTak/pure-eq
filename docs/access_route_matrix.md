@@ -42,7 +42,7 @@ Access is checked in three layers: middleware (unauthed → `/login`), layout (b
 | `/api/persons` (GET/POST) | authed + rate limit; no sub check | unchanged | free_or_paid (support surface used during onboarding + Coach) | no |
 | `/api/transcribe` (POST) | authed + rate limit | unchanged | always_open_after_auth (used during onboarding + every free-text field) | no |
 | `/api/subscribe` (POST) | authed + rate limit | unchanged | always_open_after_auth (must be reachable from `/paywall` for conversion) | no |
-| `/api/admin/backfill-observations` | admin-gated | unchanged | admin_only | no |
+| `/api/insights/generate` (POST) | authed + origin + paid-only + 3/week rate limit; 7-day idempotency short-circuit is the primary cost gate | — | paid_only | no (new) |
 
 Notes:
 - Every `paid_only` row is now defended by an explicit `checkSubscription` check at the route/page level (not just the `(app)` layout gate). An unpaid user within the 3-day Coach window can no longer reach `/insights`, `/history`, `/coach/repair`, `/coach/threads`, `/coach/threads/[threadId]`, nor their `/api/*` peers — each redirects or 403s directly.

@@ -60,7 +60,9 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 - `src/components/app-shell.tsx` — top bar + bottom tabs + menu (shared across `(app)` and `/tools` segments)
 - `src/app/(app)/coach/{prepare,review}/page.tsx` — core coach flows (multi-step + AI)
 - `src/app/tools/{page,layout,tools-hub-locked}.tsx` + `src/app/tools/{overwhelmed,triggered}/{page,*-client}.tsx` — tools subtree lives outside `(app)` so its 7-day free window can gate without triggering the broad `(app)` paywall redirect
-- `src/app/(app)/insights/page.tsx` — profile + blind-spot insights
+- `src/app/(app)/insights/page.tsx` — weekly reflection page (StyleBox + ReflectionCard)
+- `src/components/insights/{StyleBox,ReflectionCard,ReflectionKickoff}.tsx` — reflection UI
+- `src/app/api/insights/generate/route.ts` — weekly reflection generation (Opus 4.7, 7-day idempotent)
 - `src/app/(app)/history/{page,history-list,actions}.tsx` — history list + soft delete action
 - `src/app/admin/{page,users,users/[id]}/page.tsx` — admin dashboard + user management
 - `src/app/onboarding/page.tsx` — 9-question quiz + routing hub
@@ -68,7 +70,8 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 - `src/app/api/coach/{prepare,review}/route.ts` — AI-backed coach endpoints
 - `src/app/api/tools/{overwhelmed,triggered}/route.ts` — tool write endpoints
 - `src/app/api/{persons,history,subscribe,transcribe,auth/callback}/route.ts`
-- `src/lib/{validation,check-origin,rate-limit,subscription,require-access,admin,insights,onboarding,verify-ownership,utils}.ts`
+- `src/lib/{validation,check-origin,rate-limit,subscription,require-access,admin,onboarding,verify-ownership,utils}.ts`
+- `src/lib/insights/{generate,reflection-input,types}.ts` — weekly reflection orchestrator + input helper
 - `src/lib/{supabase/{client,server,service},ai/{prompts,schemas},coach/run-module}.ts`
 - `src/components/{voice-input,person-picker,countdown-timer}.tsx`
 - `src/types/{database,index}.ts` — generated Supabase types + app taxonomy
@@ -212,15 +215,17 @@ Universal traps (Zod `.min(1)`/`.int()`/length-uniqueness, auth/rate-limit/origi
 - **`tracesSampleRate: 0` unless a tracing consumer exists.** Transactions flow through a separate pipeline — `beforeSend` doesn't scrub them. Tracing events include full URL + query + route metadata. Collect-now-use-later costs privacy budget for no benefit and can't be retroactively scrubbed.
 - **Latch captures in per-request fallback paths with a cooldown.** `Sentry.captureException` inside rate-limit.ts's Upstash fallback catch fires once per request during an outage — thousands per minute on a busy instance, event quota exhausts, the alert that would have said "Upstash is down" never fires. Module-level `lastCaptureAt` + 5-min cooldown for any capture in a path hit on every request during a degraded state.
 
-### Pure EQ modules & insights
+### Pure EQ modules
 
-- **Heuristic extractors need an intensity gate before keyword matching.** A user with `beforeRating: 2` mentioning "deadline" shouldn't get tagged `recurring_trigger_pressure`. Low-intensity entries are noise, not pattern.
-- **Keyword checks run BEFORE intensity heuristics.** "I was criticized" at high intensity should tag `recurring_trigger_criticism` (specific), not `escalated_after_trigger` (generic). Keywords are more informative than intensity alone.
-- **Don't put a tool's own central word in its keyword list.** `PRESSURE_KEYWORDS` originally included "overwhelmed". Every Overwhelmed-tool entry then tagged `recurring_trigger_pressure` because users describing internal state on the Overwhelmed form will say the word. False-positives flood top-pattern aggregation. Audit each keyword list against the names + central feeling-words of the tools that consume it; same caution for any future heuristic ("had to" was also too generic — matches "I had to take a walk"). When in doubt, scope to multi-word phrases that disambiguate.
-- **Positive counter-patterns need the same `emergingTagCount` (2+) as negative patterns.** A single observation is noise, not insight. Applies to "How You Tend to Land", per-person positive patterns, AND PatternCard's `counterObservationsThisPeriod`. Any new pattern surface must apply the same ≥2 rule — if a spec defaults to ≥1, override to ≥2 during review (memory: `feedback_rabbit_holes_avoided.md` PatternCard counter-obs entry).
-- **Window-based evolution needs a `"dormant"` verdict — treating (prior=0, current=0) as "steady" misleads.** A tag that qualified all-time (distinct_count ≥ 2) but has zero observations in the last 28 days is not steady — it's absent. Rendering "Steady, Minus icon" tells a returning user the pattern is stable when in fact they haven't triggered it in weeks. Add a sixth verdict (`dormant`) and render it as "No recent activity" so the signal reads honestly.
-- **Schema contractions are lossy forward: renderers must be field-presence-based.** Old JSONB rows keep their original fields; new rows don't. No top-level destructuring of expected fields, no filtering out legacy rows by schema version, no assuming a new-shape field exists on every historical row. Fields cut from schema-v(N+1) are recoverable only from rows written at schema-v(N).
-- **Schema-shape discipline: remove fields that duplicate their question's corrective function; remove paired do/don't fields that operate at the same level.** Diagnosis-plus-answer pairs raise cognitive load without adding action. Keep pairs only when they operate at different levels (a strategy move vs a phrase-level opener).
 - **Auto-committed transcription needs a one-tap redo path per mounted field instance.** Full confirmation banners add too much friction for mobile/walking use, but silent commit with no undo lets speech errors flow straight into model input.
 - **`resolved_at` must be cleared when un-resolving.** Setting it on "resolved"/"ended" but not clearing it on revert to "open" leaves a stale timestamp. Always explicitly set `resolved_at: null` in the non-terminal branch.
-- **Multi-tier insight selectors must apply hard predicates on every tier, not just the fallback.** `pickTopPerson` (Insights Box 3) selects established confidence first, then strong-emerging. The `topNegative !== null` requirement (positive-only demotes to `Also` line per spec) MUST apply to both tiers — not just strong-emerging. An established row with only a positive pattern exists in principle (writer needs ≥2 positives and ≥2 negatives to stamp both; if only positives reach threshold, the row still gets written with `confidenceLevel: established` when the entry/day/review counts meet the higher tier). Playbook §16.16. Tests must cover every tier × hard-predicate combination.
+
+### Weekly reflection (Insights)
+
+- **Opus 4.7 is used ONLY in the weekly reflection generator.** Coach / Review / Repair stay on Sonnet 4.6 (pinned via 2026-04-20 blind eval, memory `project_coach_ai_config_pinned.md`). The two model configs live in separate files — `src/lib/insights/generate.ts` instantiates its own `new Anthropic(...)` so a future edit to one can't accidentally drift the other.
+- **The 7-day idempotency short-circuit is the PRIMARY cost gate, not the rate limiter.** `generateReflection` returns the latest `weekly_reflections` row without calling Claude if it's <7 days old. Rate limits (3/week user) are defense-in-depth. There is no user action that forces an additional LLM call inside a week. Do not add a manual refresh button unless explicitly revisiting this decision.
+- **No enum-string CHECKs on `weekly_reflections`.** `ai_json.mode` ("reflection" vs "refusal") is validated by Zod before INSERT. Duplicating the enum into a DB CHECK is exactly what drifted on migration 0003/0018. Inline comment in migration 0022 captures this; do not add one later "for safety."
+- **INSERT errors on `weekly_reflections` fail loudly, not silently.** `/api/insights/generate` inspects `.error` and throws `ReflectionGenerationError("insert_failed")`; the route returns 500 + Sentry capture with `kind=insert_failed`. The page surfaces the error state. Fire-and-forget is banned on this path. Direct lesson from migration 0018 (writer-silently-failing incident).
+- **Every reflection render shows a `Generated on YYYY-MM-DD` byline.** User-visible canary if the writer ever silently breaks again. Don't remove it "for cleaner UI."
+- **Every LLM-returned quote must substring-match its cited source entry server-side.** `generateReflection` builds a per-record text lookup and drops observations whose quotes don't verify. If fewer than 2 observations survive, the response is rewritten to a refusal with `reason: "out_of_scope"` — never serve a partially-verified reflection.
+- **Symmetric `generator_version` check on both reader and writer.** `src/lib/insights/generate.ts` exports `GENERATOR_VERSION = "reflection_v1"`; the page reads it and gates rendering on `row.generator_version === GENERATOR_VERSION`, mismatch falls through to ReflectionKickoff (Playbook §16.17 generalized). Bump the constant whenever the `ai_json` shape changes.

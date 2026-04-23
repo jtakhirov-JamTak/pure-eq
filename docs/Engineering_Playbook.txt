@@ -1594,7 +1594,9 @@ what qualifies at each tier is decided by the writer's rules; the
 selector has to reaffirm the render-level shape it needs. Missed
 on the first implementation — tests covered strong-emerging
 positive-only rejection but not established positive-only
-rejection; same bug, untested dimension.
+rejection; same bug, untested dimension. Concrete `topNegative`
+example above is from a retired Pure EQ selector; the rule applies
+to any tiered selector.
 
 §16.17 Cache version guards applied uniformly across row types
 --------------------------------------------------------------
@@ -1835,7 +1837,147 @@ Don't apply when:
   tokens ("pick the pattern that best matches"). The model will
   paraphrase, so a `satisfies` check is noise.
 
-Same class as §16.4 (controlled taxonomy: don't let AI invent tags)
-and the CLAUDE.md OBSERVATION_TAG_COPY prefix-drift lesson — any time
-the same string lives in two authored places, link them with a type
-so a rename in one breaks the build of the other.
+Same class as §16.4 (controlled taxonomy: don't let AI invent tags) —
+any time the same string lives in two authored places, link them with
+a type so a rename in one breaks the build of the other.
+
+§16.22 Weekly LLM-backed user reflection pattern
+
+Pending cross-app validation.
+
+When a product shows the user a periodic (weekly, monthly) LLM-generated
+reflection of their own data — surfacing patterns, summarizing activity,
+calling out blind spots grounded in quoted evidence — the generation
+pipeline has a specific shape that keeps cost bounded, output trustworthy,
+and failure modes visible.
+
+Shape:
+
+- Single orchestrator function takes (userId) and returns a persisted row.
+  Queries bounded inputs (profile, named entities, last N entries, hard
+  capped + per-field truncated so token budget is deterministic), composes
+  the prompt, calls the LLM, validates the structured output, persists, and
+  returns.
+- Output is a discriminated union: `normalShape | refusalShape`. Normal
+  shape contains N observations (typically 2-3), each with verbatim-quoted
+  evidence grounded in a specific source row. Refusal shape fires on
+  safety triggers OR insufficient evidence.
+- Every observation requires at least one quote with a source_record_id.
+  After Zod validation, server-side post-process verifies each quote is
+  a substring of the cited source row's text. Observations whose quotes
+  don't verify are dropped. If the verified set is too small, rewrite the
+  entire response to a refusal with `reason: "out_of_scope"`. Never serve
+  a partially-verified reflection.
+- Cost gate is time-based idempotency, not a rate limiter. API endpoint
+  checks for a recent row within the regeneration window (e.g., 7 days)
+  BEFORE calling the LLM; returns the cached row if found. This means no
+  user action — no client-side bug loop, no pageview storm — can force
+  additional LLM calls inside the window. Rate limits are defense-in-depth
+  only; cost scales with `users × regenerations_per_year`, not pageviews.
+- Reads are version-guarded. Stamp `generator_version` + `prompt_version`
+  on every row; reader checks the current code's version on fetch and
+  falls through to regeneration on mismatch. See §16.17 for the symmetric
+  version-guard rule.
+
+Table shape:
+
+    CREATE TABLE user_reflections (
+      reflection_id uuid PRIMARY KEY,
+      user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE,
+      generated_at timestamptz NOT NULL DEFAULT now(),
+      period_start timestamptz NOT NULL,
+      period_end timestamptz NOT NULL,
+      input_entry_count int NOT NULL,
+      input_window_days int NOT NULL,
+      generator_version text NOT NULL,
+      prompt_version text NOT NULL,
+      ai_json jsonb NOT NULL,
+      ai_duration_ms int NOT NULL
+    );
+    CREATE INDEX ON user_reflections (user_id, generated_at DESC);
+
+RLS: SELECT-only for owners. Writes go through a service-role client
+inside the generator endpoint; never accept client-side writes to the
+cache table.
+
+Failure handling (direct §16.23 lesson): INSERT failures must throw and
+surface as HTTP 500 + structured error capture. No fire-and-forget on
+the write. UI shows the error state (not a silent empty card) and
+includes the last-successful-generation date so silent staleness is
+impossible to miss.
+
+Client UX:
+
+- Server fetches the latest row. If fresh + version-matching + shape-
+  valid, renders directly. Otherwise renders a client-side kickoff
+  component that auto-POSTs the regenerate endpoint on mount and shows
+  a loading state, then renders the result.
+- No manual "refresh" button unless there's an explicit product reason
+  — the 7-day cadence is the cost architecture, and a refresh button
+  invites cost-expansion pressure. Add one only if user feedback
+  specifically demands "I want a fresh read now," and even then, layer
+  it on top of the idempotency window rather than replacing it.
+- Prominent "Generated {date}" byline on the card — user-visible canary
+  for silent staleness.
+
+Apply when:
+- The feature reads across many user rows and returns a synthesized
+  summary or pattern-read, at a cadence longer than per-session.
+- Output quality matters enough that fabricated or hallucinated content
+  would damage trust (pattern reports, activity summaries, blind-spot
+  surfacing).
+
+Don't apply when:
+- Real-time per-interaction output (coach replies, chat). Use a
+  per-call pipeline instead.
+- Cost is bounded some other way (tiny user count, bulk batch job).
+
+§16.23 Writer-reader symbol drift: never CHECK an enum that a writer
+        also knows
+
+If an enum value lives in application code (Zod schema, TypeScript
+string union, module-level const tuple), DO NOT duplicate it as a
+Postgres `CHECK` constraint. Pick one source of truth.
+
+The bug pattern (direct Pure EQ incident): an initial migration
+shipped `CHECK (insight_type IN ('recurring_blind_spot', ...))` while
+the writer used symbols like `'top_pattern'`. Every INSERT silently
+failed against the mismatched CHECK. The read path had live-compute
+fallthrough, so the cache being 100% empty was never surfaced — the
+page rendered correctly from live compute and nobody noticed for
+months. A later migration relaxed the CHECK to match writer values;
+that's the session that exposed the whole incident.
+
+The silent-INSERT-failure + read-fallthrough combination is the worst
+possible failure mode: a working-looking feature with no telemetry
+and no operator signal that the cache layer is a lie.
+
+Rules:
+- If the enum is in code, TRUST the code. Zod / TS validates writer
+  output before Postgres sees it. A failing validation returns 400
+  from the API; a passing validation writes a row the DB should trust.
+- If the enum MUST also be DB-enforced (e.g., for ad-hoc SQL, for
+  external writers, for policies), generate the CHECK from the same
+  source at migration time (templated SQL, CI check) and add a test
+  that parses the migration and asserts the CHECK list matches the
+  code tuple.
+- Pair INSERT paths with explicit `.error` inspection + fail-loudly
+  error surfacing. INSERT failures MUST trigger operator signal
+  (Sentry capture with a specific kind tag) and MUST NOT be masked
+  by a read-path fallback that makes the feature look healthy.
+- Pair read paths that fall through to live compute with a visible-to-user
+  signal when the fallback fires (stale-cache byline, "regenerating"
+  state, "last updated {date}"). The live-compute-fallthrough pattern
+  is a helpful availability tool, but only when the operator is
+  signaled that the cache isn't populating.
+
+Apply to:
+- Any string column with a CHECK constraint that duplicates a Zod
+  enum, TypeScript union, or module const tuple.
+- Any write-side enum that lives in more than one place (code + DB +
+  docs + prompts). Rename in one invariably drifts the others.
+
+Don't apply to:
+- Pure structural invariants: numeric ranges (`check (x >= 0)`),
+  timestamp ordering (`check (end >= start)`), array cardinality.
+  Those aren't enum strings; they can't drift by rename.
