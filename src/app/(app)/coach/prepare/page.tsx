@@ -6,6 +6,7 @@ import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { isLegacyV1 } from "@/lib/coach/output-shape";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
 import type { RelationshipDomain } from "@/types";
 
@@ -321,27 +322,16 @@ export default function PreparePage() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
 
-      <div className="flex items-center gap-1.5">
-        {STEPS.map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${
-              i < step
-                ? "bg-brand"
-                : i === step
-                  ? "bg-brand-deep"
-                  : "bg-white/60"
-            }`}
-          />
-        ))}
-      </div>
-      <div className="mt-3 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
           Prepare
         </span>
         <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
           {step + 1} / {STEPS.length}
         </p>
+      </div>
+      <div className="mt-3">
+        <StepDots current={step} total={STEPS.length} />
       </div>
 
       <h2

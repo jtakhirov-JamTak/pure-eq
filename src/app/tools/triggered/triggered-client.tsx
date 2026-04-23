@@ -4,7 +4,18 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import { GradientSlider } from "@/components/brand/GradientSlider";
+import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
+
+const EMOTIONS = [
+  "Angry",
+  "Hurt",
+  "Anxious",
+  "Ashamed",
+  "Sad",
+  "Disappointed",
+] as const;
 
 const AFTER_FEELINGS = [
   "Calmer",
@@ -234,23 +245,20 @@ export default function TriggeredClient() {
     return (
       <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <TriggeredBackground />
-        <div className="flex items-center gap-1.5">
-          {Array.from({ length: totalSteps }).map((_, i) => (
-            <div
-              key={i}
-              className={`h-1.5 flex-1 rounded-full transition-colors ${
-                i < step
-                  ? "bg-brand"
-                  : i === step
-                    ? "bg-brand-deep"
-                    : "bg-white/60"
-              }`}
-            />
-          ))}
+        <div className="flex items-center justify-between">
+          <span
+            className="inline-block rounded-pill px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white"
+            style={{ backgroundColor: "var(--color-trigger)" }}
+          >
+            Triggered
+          </span>
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+            {step + 1} / {totalSteps}
+          </p>
         </div>
-        <p className="mt-3 text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          {step + 1} / {totalSteps}
-        </p>
+        <div className="mt-3">
+          <StepDots current={step} total={totalSteps} />
+        </div>
 
         <h2
           className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
@@ -304,21 +312,7 @@ export default function TriggeredClient() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <TriggeredBackground />
 
-      <div className="flex items-center gap-1.5">
-        {Array.from({ length: totalSteps }).map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${
-              i < step
-                ? "bg-brand"
-                : i === step
-                  ? "bg-brand-deep"
-                  : "bg-white/60"
-            }`}
-          />
-        ))}
-      </div>
-      <div className="mt-3 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <span
           className="inline-block rounded-pill px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white"
           style={{ backgroundColor: "var(--color-trigger)" }}
@@ -328,6 +322,9 @@ export default function TriggeredClient() {
         <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
           {step + 1} / {totalSteps}
         </p>
+      </div>
+      <div className="mt-3">
+        <StepDots current={step} total={totalSteps} />
       </div>
 
       <h2
@@ -355,40 +352,47 @@ export default function TriggeredClient() {
 
         {currentStep.type === "emotion" && (
           <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {EMOTIONS.map((emo) => {
+                const on = data.emotion === emo;
+                return (
+                  <button
+                    key={emo}
+                    type="button"
+                    onClick={() =>
+                      setFieldValue("emotion", on ? "" : emo)
+                    }
+                    className={`min-h-11 rounded-pill px-4 text-[13px] font-bold transition active:scale-[0.97] ${
+                      on
+                        ? "text-white"
+                        : "bg-surface text-ink shadow-soft"
+                    }`}
+                    style={
+                      on
+                        ? {
+                            backgroundColor: "var(--color-trigger)",
+                            boxShadow: "0 8px 18px rgba(243,148,35,0.50)",
+                          }
+                        : undefined
+                    }
+                  >
+                    {emo}
+                  </button>
+                );
+              })}
+            </div>
             <VoiceInput
               key={currentStep.key}
               value={data.emotion || ""}
               onChange={(next) => setFieldValue("emotion", next)}
               rows={2}
-              placeholder="Name the emotion..."
+              placeholder="Or describe it in your own words..."
             />
-            <div className="rounded-card-sm bg-surface p-4 shadow-soft">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[13px] font-semibold text-ink">
-                  Intensity
-                </span>
-                <span
-                  className="font-display text-[20px] leading-none"
-                  style={{ color: "var(--color-trigger)" }}
-                >
-                  {emotionIntensity}
-                  <span className="text-ink-soft text-[13px]">/10</span>
-                </span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                value={emotionIntensity}
-                onChange={(e) => setEmotionIntensity(Number(e.target.value))}
-                className="mt-3 h-11 w-full"
-                style={{ accentColor: "var(--color-trigger)" }}
-              />
-              <div className="flex justify-between text-[11px] font-semibold text-ink-soft">
-                <span>1 — mild</span>
-                <span>10 — overwhelming</span>
-              </div>
-            </div>
+            <GradientSlider
+              value={emotionIntensity}
+              onChange={setEmotionIntensity}
+              accentColor="var(--color-trigger)"
+            />
           </div>
         )}
 
@@ -401,33 +405,11 @@ export default function TriggeredClient() {
               rows={2}
               placeholder="What was your urge?"
             />
-            <div className="rounded-card-sm bg-surface p-4 shadow-soft">
-              <div className="flex items-baseline justify-between">
-                <span className="text-[13px] font-semibold text-ink">
-                  Intensity
-                </span>
-                <span
-                  className="font-display text-[20px] leading-none"
-                  style={{ color: "var(--color-trigger)" }}
-                >
-                  {urgeIntensity}
-                  <span className="text-ink-soft text-[13px]">/10</span>
-                </span>
-              </div>
-              <input
-                type="range"
-                min={1}
-                max={10}
-                value={urgeIntensity}
-                onChange={(e) => setUrgeIntensity(Number(e.target.value))}
-                className="mt-3 h-11 w-full"
-                style={{ accentColor: "var(--color-trigger)" }}
-              />
-              <div className="flex justify-between text-[11px] font-semibold text-ink-soft">
-                <span>1 — mild</span>
-                <span>10 — overwhelming</span>
-              </div>
-            </div>
+            <GradientSlider
+              value={urgeIntensity}
+              onChange={setUrgeIntensity}
+              accentColor="var(--color-trigger)"
+            />
           </div>
         )}
       </div>

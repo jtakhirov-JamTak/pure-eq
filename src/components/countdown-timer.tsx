@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BreathingCloud } from "@/components/brand/BreathingCloud";
 
 type Props = {
   durationSeconds: number;
@@ -16,11 +17,17 @@ const HOLD = 4;
 const EXHALE = 6;
 const CYCLE = INHALE + HOLD + EXHALE;
 
-function breathingPhase(elapsed: number): string {
+function breathingPhaseLabel(elapsed: number): string {
   const pos = elapsed % CYCLE;
-  if (pos < INHALE) return "Breathe in";
-  if (pos < INHALE + HOLD) return "Hold";
-  return "Breathe out";
+  if (pos < INHALE) return `INHALE · ${INHALE}`;
+  if (pos < INHALE + HOLD) return `HOLD · ${HOLD}`;
+  return `EXHALE · ${EXHALE}`;
+}
+
+function formatClock(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
 }
 
 /**
@@ -113,11 +120,12 @@ export function CountdownTimer({
 
   const elapsed = durationSeconds - remaining;
   const progress = remaining / durationSeconds;
-
-  // Format mm:ss
-  const mins = Math.floor(remaining / 60);
-  const secs = remaining % 60;
-  const display = mins > 0 ? `${mins}:${secs.toString().padStart(2, "0")}` : `${secs}`;
+  const displayShort =
+    remaining >= 60
+      ? formatClock(remaining)
+      : `${remaining}`;
+  const totalClock = formatClock(durationSeconds);
+  const remainingClock = formatClock(remaining);
 
   function handleDone() {
     setRemaining(0);
@@ -126,52 +134,61 @@ export function CountdownTimer({
 
   return (
     <div className="flex flex-col items-center gap-6 py-4">
-      {label && (
+      {label && !breathingMode && (
         <p className="text-center text-[11px] font-bold uppercase tracking-[1.5px] text-ink-soft">
           {label}
         </p>
       )}
 
-      {/* Circular progress ring + optional breathing-cloud pulse */}
-      <div
-        className={`relative flex h-44 w-44 items-center justify-center ${
-          breathingMode ? "[animation:breathe_14s_ease-in-out_infinite]" : ""
-        }`}
-      >
-        <svg className="absolute inset-0 -rotate-90" viewBox="0 0 160 160">
-          <circle
-            cx="80"
-            cy="80"
-            r="70"
-            fill="none"
-            stroke="var(--color-surface-tint)"
-            strokeWidth="6"
-          />
-          <circle
-            cx="80"
-            cy="80"
-            r="70"
-            fill="none"
-            stroke="var(--color-brand)"
-            strokeWidth="6"
-            strokeLinecap="round"
-            strokeDasharray={2 * Math.PI * 70}
-            strokeDashoffset={2 * Math.PI * 70 * (1 - progress)}
-            className="transition-[stroke-dashoffset] duration-1000 ease-linear"
-          />
-        </svg>
-        <span
-          className="font-display text-[48px] leading-none text-ink tabular-nums"
-          style={{ letterSpacing: "-1.5px" }}
-        >
-          {display}
-        </span>
-      </div>
-
-      {breathingMode && remaining > 0 && (
-        <p className="font-display text-[18px] italic text-brand-deep">
-          {breathingPhase(elapsed)}
-        </p>
+      {breathingMode ? (
+        <BreathingCloud>
+          <p
+            className="mb-1 text-[10px] font-bold uppercase text-ink opacity-60"
+            style={{ letterSpacing: "2.5px" }}
+          >
+            {breathingPhaseLabel(elapsed)}
+          </p>
+          <p
+            className="font-display text-[48px] italic leading-none text-ink tabular-nums"
+            style={{ letterSpacing: "-1.5px" }}
+          >
+            {remainingClock}
+          </p>
+          <p className="mt-1 text-[10px] font-semibold text-ink opacity-55">
+            of {totalClock}
+          </p>
+        </BreathingCloud>
+      ) : (
+        <div className="relative flex h-44 w-44 items-center justify-center">
+          <svg className="absolute inset-0 -rotate-90" viewBox="0 0 160 160">
+            <circle
+              cx="80"
+              cy="80"
+              r="70"
+              fill="none"
+              stroke="var(--color-surface-tint)"
+              strokeWidth="6"
+            />
+            <circle
+              cx="80"
+              cy="80"
+              r="70"
+              fill="none"
+              stroke="var(--color-brand)"
+              strokeWidth="6"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 70}
+              strokeDashoffset={2 * Math.PI * 70 * (1 - progress)}
+              className="transition-[stroke-dashoffset] duration-1000 ease-linear"
+            />
+          </svg>
+          <span
+            className="font-display text-[48px] leading-none text-ink tabular-nums"
+            style={{ letterSpacing: "-1.5px" }}
+          >
+            {displayShort}
+          </span>
+        </div>
       )}
 
       <button

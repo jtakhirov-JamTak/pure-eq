@@ -5,17 +5,12 @@ import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { CountdownTimer, unlockAudio } from "@/components/countdown-timer";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import {
+  BodySilhouette,
+  type BodyRegion,
+} from "@/components/brand/BodySilhouette";
+import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
-
-const BODY_LOCATIONS = [
-  "Throat",
-  "Chest",
-  "Stomach",
-  "Jaw",
-  "Shoulders",
-  "Face",
-  "Other",
-];
 
 const AFTER_FEELINGS = [
   "Calmer",
@@ -50,7 +45,7 @@ export default function OverwhelmedClient() {
   const [step, setStep] = useState<Step>("intro");
   const [mode, setMode] = useState<Mode>("idle");
   const [beforeRating, setBeforeRating] = useState<number | null>(null);
-  const [bodyLocation, setBodyLocation] = useState<string | null>(null);
+  const [bodyLocation, setBodyLocation] = useState<BodyRegion | null>(null);
   const [feelingLabel, setFeelingLabel] = useState("");
   const [afterRating, setAfterRating] = useState<number | null>(null);
   const [afterFeeling, setAfterFeeling] = useState<string | null>(null);
@@ -240,27 +235,16 @@ export default function OverwhelmedClient() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <OverwhelmedBackground />
 
-      <div className="flex items-center gap-1.5">
-        {STEP_ORDER.slice(1).map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${
-              i < stepIndex - 1
-                ? "bg-brand"
-                : i === stepIndex - 1
-                  ? "bg-brand-deep"
-                  : "bg-white/60"
-            }`}
-          />
-        ))}
-      </div>
-      <div className="mt-3 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <span className="inline-block rounded-pill bg-brand-deep px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
           Overwhelmed
         </span>
         <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
           {stepIndex} / {totalSteps}
         </p>
+      </div>
+      <div className="mt-3">
+        <StepDots current={stepIndex - 1} total={totalSteps} />
       </div>
 
       {step === "before-rating" && (
@@ -301,39 +285,23 @@ export default function OverwhelmedClient() {
             className="font-display text-[26px] leading-[1.12] text-ink"
             style={{ letterSpacing: "-0.5px" }}
           >
-            Feel
+            Where do you <span className="italic">feel it</span> in your body?
           </h2>
-          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Close your eyes. Notice where this feeling shows up in your body.
+          <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
+            31 seconds. Just notice — no fixing.
           </p>
+          <div className="mt-5">
+            <BodySilhouette
+              selected={bodyLocation}
+              onChange={setBodyLocation}
+            />
+          </div>
           <div className="mt-5">
             <CountdownTimer
               durationSeconds={31}
               onComplete={() => {}}
               label="Body scan"
             />
-          </div>
-          <div className="mt-5">
-            <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-              Where do you feel it? (optional)
-            </p>
-            <div className="mt-2.5 flex flex-wrap gap-2">
-              {BODY_LOCATIONS.map((loc) => (
-                <button
-                  key={loc}
-                  onClick={() =>
-                    setBodyLocation(bodyLocation === loc ? null : loc)
-                  }
-                  className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition ${
-                    bodyLocation === loc
-                      ? "bg-brand text-white shadow-cta"
-                      : "bg-surface text-ink shadow-soft"
-                  }`}
-                >
-                  {loc}
-                </button>
-              ))}
-            </div>
           </div>
           <button
             onClick={() => setStep("label")}
@@ -419,24 +387,26 @@ export default function OverwhelmedClient() {
       )}
 
       {step === "regulate" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            Regulate
-          </h2>
-          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Take slow breaths: in through your nose for 4, hold for 4, out
-            through your mouth for 6.
-          </p>
-          <div className="mt-5">
+        <div className="mt-5 flex flex-col items-center">
+          <div className="w-full">
             <CountdownTimer
               durationSeconds={61}
               onComplete={() => setStep("move")}
               label="Box breathing"
               breathingMode
             />
+          </div>
+          <div className="mt-2 text-center">
+            <h2
+              className="font-display text-[22px] leading-[1.25] text-ink"
+              style={{ letterSpacing: "-0.4px" }}
+            >
+              In for 4, hold 4,{" "}
+              <span className="italic">out for 6</span>.
+            </h2>
+            <p className="mt-1.5 max-w-[260px] text-[13px] font-medium text-ink-soft">
+              You don&apos;t need to do this perfectly. Just slowly.
+            </p>
           </div>
         </div>
       )}
