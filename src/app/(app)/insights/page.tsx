@@ -9,7 +9,6 @@
 // the API endpoint's idempotency short-circuit returns the cached row
 // without calling Claude.
 import * as Sentry from "@sentry/nextjs";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { requirePaidAccessPage } from "@/lib/require-access";
@@ -28,7 +27,6 @@ import {
   IDEMPOTENCY_WINDOW_MS,
 } from "@/lib/insights/generate";
 import { reflectionOutputSchema } from "@/lib/ai/schemas";
-import type { WeeklyReflectionRow } from "@/lib/insights/types";
 
 export default async function InsightsPage() {
   const {
@@ -40,14 +38,10 @@ export default async function InsightsPage() {
 
   await requirePaidAccessPage(user);
 
-  // Fetch profile + latest weekly_reflections row in parallel. The
-  // `weekly_reflections` cast bypasses the generated Database types —
-  // they'll include the table after migration 0022 lands + db:types
-  // regenerates, at which point the cast can be dropped.
-  const db = supabase as unknown as SupabaseClient;
+  // Fetch profile + latest weekly_reflections row in parallel.
   const [profile, latestReflectionRes] = await Promise.all([
     getLatestProfile(supabase, user.id),
-    db
+    supabase
       .from("weekly_reflections")
       .select("generated_at, generator_version, ai_json")
       .eq("user_id", user.id)
@@ -74,10 +68,7 @@ export default async function InsightsPage() {
   // "Fresh" = within the 7-day idempotency window AND generator_version
   // matches the current code — a bumped generator_version is a re-compute
   // signal (symmetric read-side guard per Playbook §16.17).
-  const latest = latestReflectionRes.data as Pick<
-    WeeklyReflectionRow,
-    "generated_at" | "generator_version" | "ai_json"
-  > | null;
+  const latest = latestReflectionRes.data;
   let freshReflection:
     | { generatedAt: string; reflection: import("@/lib/ai/schemas").ReflectionOutput }
     | null = null;

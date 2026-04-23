@@ -18,6 +18,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@/types/database";
 import { buildReflectionPrompt } from "@/lib/ai/prompts";
 import {
   reflectionOutputSchema,
@@ -107,7 +108,7 @@ function buildEntryLookup(
  * the user (auth + paid-access gate) before calling.
  */
 export async function generateReflection(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
 ): Promise<GenerateOutcome> {
   // Idempotency short-circuit: if the latest row is < 7 days old, return it

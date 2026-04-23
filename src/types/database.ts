@@ -58,7 +58,7 @@ export type Database = {
           },
         ]
       }
-      derived_insights: {
+      derived_insights_v1_archive: {
         Row: {
           confidence_level: string
           derived_insight_id: string
@@ -185,7 +185,7 @@ export type Database = {
           },
         ]
       }
-      pattern_observations: {
+      pattern_observations_v1_archive: {
         Row: {
           confidence_score: number
           direction: string | null
@@ -750,19 +750,16 @@ export type Database = {
       user_feature_flags: {
         Row: {
           created_at: string
-          show_comparator: boolean
           updated_at: string
           user_id: string
         }
         Insert: {
           created_at?: string
-          show_comparator?: boolean
           updated_at?: string
           user_id: string
         }
         Update: {
           created_at?: string
-          show_comparator?: boolean
           updated_at?: string
           user_id?: string
         }
@@ -845,6 +842,48 @@ export type Database = {
           trial_ends_at?: string | null
           trial_started_at?: string | null
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      weekly_reflections: {
+        Row: {
+          ai_duration_ms: number
+          ai_json: Json
+          generated_at: string
+          generator_version: string
+          input_entry_count: number
+          input_window_days: number
+          period_end: string
+          period_start: string
+          prompt_version: string
+          reflection_id: string
+          user_id: string
+        }
+        Insert: {
+          ai_duration_ms: number
+          ai_json: Json
+          generated_at?: string
+          generator_version: string
+          input_entry_count: number
+          input_window_days?: number
+          period_end: string
+          period_start: string
+          prompt_version: string
+          reflection_id?: string
+          user_id: string
+        }
+        Update: {
+          ai_duration_ms?: number
+          ai_json?: Json
+          generated_at?: string
+          generator_version?: string
+          input_entry_count?: number
+          input_window_days?: number
+          period_end?: string
+          period_start?: string
+          prompt_version?: string
+          reflection_id?: string
           user_id?: string
         }
         Relationships: []
