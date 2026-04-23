@@ -193,8 +193,9 @@ REFLECTION RULES:
   no capitalization changes, no punctuation edits. The server verifies
   each quote by substring-matching the source entry, and drops observations
   whose quotes don't verify.
-- Each evidence item needs a source_record_id (the entry's raw_record_id,
-  a UUID) and source_date (YYYY-MM-DD, from the entry's created_at).
+- Each evidence item needs a source_record_id (copy the entry's
+  raw_record_id verbatim) and source_date (copy the entry's source_date
+  field verbatim — it is already pre-formatted as YYYY-MM-DD).
 - Do not pathologize, diagnose, or use clinical labels. Banned: "anxious
   attachment", "avoidant", "trauma response", "dysregulated nervous
   system", "attachment wound", "emotional dysregulation". Describe
@@ -221,6 +222,7 @@ export function buildReflectionPrompt(params: {
     raw_record_id: string;
     record_type: string;
     created_at: string; // ISO
+    source_date: string; // YYYY-MM-DD
     person_display_name: string | null;
     fields: Record<string, unknown>;
   }>;
@@ -235,7 +237,7 @@ export function buildReflectionPrompt(params: {
     params.entries.map((e) => ({
       raw_record_id: e.raw_record_id,
       record_type: e.record_type,
-      created_at: e.created_at,
+      source_date: e.source_date,
       person: e.person_display_name,
       fields: e.fields,
     })),
@@ -264,7 +266,7 @@ REFLECTION MODE (normal):
         {
           "quote": "string, max 240 chars — EXACT verbatim excerpt from one entry's fields",
           "source_record_id": "uuid — the raw_record_id of the source entry",
-          "source_date": "YYYY-MM-DD — from the entry's created_at"
+          "source_date": "YYYY-MM-DD — copy the entry's source_date field verbatim"
         }
       ],
       "confidence": "tentative | clear"

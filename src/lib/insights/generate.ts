@@ -42,7 +42,8 @@ const INPUT_WINDOW_MS = INPUT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 type GenerateOutcome =
   | { status: "cached"; row: WeeklyReflectionRow }
   | { status: "created"; row: WeeklyReflectionRow }
-  | { status: "profile_missing" };
+  | { status: "profile_missing" }
+  | { status: "rate_limited"; resetAt: number };
 
 export class ReflectionGenerationError extends Error {
   constructor(
@@ -53,11 +54,22 @@ export class ReflectionGenerationError extends Error {
       | "schema_mismatch"
       | "banned_phrase"
       | "api_error"
-      | "insert_failed",
+      | "insert_failed"
+      | "db_read_failed",
   ) {
     super(message);
     this.name = "ReflectionGenerationError";
   }
+}
+
+export interface GenerateOptions {
+  /**
+   * Called after cache miss but BEFORE the LLM call. Lets the caller
+   * gate expensive generation via rate limit without decrementing the
+   * bucket on cheap cache hits. Return `allowed: false` to get a
+   * `{status:"rate_limited", resetAt}` outcome from generateReflection.
+   */
+  checkRateLimit?: () => Promise<{ allowed: boolean; resetAt: number }>;
 }
 
 /**
@@ -101,6 +113,46 @@ function buildEntryLookup(
 }
 
 /**
+ * Fetch the latest fresh+current-version row for this user, validate its
+ * ai_json shape, and return it — or null if no usable cache exists.
+ *
+ * Returns null when: no row inside window, version mismatch, or ai_json
+ * fails Zod validation (legacy/hand-edited rows fall through to regen
+ * rather than render a broken card — CLAUDE.md jsonb read-side defense).
+ */
+async function readCachedReflection(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<WeeklyReflectionRow | null> {
+  const cutoff = new Date(Date.now() - IDEMPOTENCY_WINDOW_MS).toISOString();
+  const latestQuery = await supabase
+    .from("weekly_reflections")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("generator_version", GENERATOR_VERSION)
+    .gte("generated_at", cutoff)
+    .order("generated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestQuery.error) {
+    throw new ReflectionGenerationError(
+      `weekly_reflections lookup failed: ${latestQuery.error.message}`,
+      "db_read_failed",
+    );
+  }
+  if (!latestQuery.data) return null;
+
+  const aiJsonParse = reflectionOutputSchema.safeParse(latestQuery.data.ai_json);
+  if (!aiJsonParse.success) return null; // legacy shape — fall through to regen
+
+  return {
+    ...latestQuery.data,
+    ai_json: aiJsonParse.data,
+  };
+}
+
+/**
  * Generate (or return cached) weekly reflection for a user.
  *
  * `supabase` MUST be a service-role client because the INSERT bypasses RLS
@@ -110,32 +162,21 @@ function buildEntryLookup(
 export async function generateReflection(
   supabase: SupabaseClient<Database>,
   userId: string,
+  options: GenerateOptions = {},
 ): Promise<GenerateOutcome> {
-  // Idempotency short-circuit: if the latest row is < 7 days old, return it
-  // without calling Claude. This is the PRIMARY cost gate — regardless of
-  // rate limits, regardless of how many times the user refreshes, there is
-  // no way to trigger more than one LLM call per 7 days.
-  const cutoff = new Date(Date.now() - IDEMPOTENCY_WINDOW_MS).toISOString();
-  const latestQuery = await supabase
-    .from("weekly_reflections")
-    .select("*")
-    .eq("user_id", userId)
-    .gte("generated_at", cutoff)
-    .order("generated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (latestQuery.error) {
-    throw new ReflectionGenerationError(
-      `weekly_reflections lookup failed: ${latestQuery.error.message}`,
-      "insert_failed",
-    );
-  }
-  if (latestQuery.data) {
-    return {
-      status: "cached",
-      row: latestQuery.data as unknown as WeeklyReflectionRow,
-    };
+  // Idempotency short-circuit: if the latest row is < 7 days old AND matches
+  // the current generator_version, return it without calling Claude. This is
+  // the PRIMARY cost gate — regardless of rate limits, regardless of how
+  // many times the user refreshes, there is no way to trigger more than one
+  // LLM call per 7 days.
+  //
+  // The generator_version filter is the writer half of the symmetric guard
+  // in Playbook §16.17. A version bump must force regeneration even inside
+  // the 7-day window, otherwise stale-shape rows keep feeding the reader
+  // that already rejected them.
+  const cachedRow = await readCachedReflection(supabase, userId);
+  if (cachedRow) {
+    return { status: "cached", row: cachedRow };
   }
 
   // Fetch profile.
@@ -150,7 +191,7 @@ export async function generateReflection(
   if (profileRes.error) {
     throw new ReflectionGenerationError(
       `user_profiles lookup failed: ${profileRes.error.message}`,
-      "insert_failed",
+      "db_read_failed",
     );
   }
   if (!profileRes.data) {
@@ -185,13 +226,13 @@ export async function generateReflection(
   if (personsRes.error) {
     throw new ReflectionGenerationError(
       `persons lookup failed: ${personsRes.error.message}`,
-      "insert_failed",
+      "db_read_failed",
     );
   }
   if (entriesRes.error) {
     throw new ReflectionGenerationError(
       `raw_records lookup failed: ${entriesRes.error.message}`,
-      "insert_failed",
+      "db_read_failed",
     );
   }
 
@@ -220,6 +261,17 @@ export async function generateReflection(
     persons: input.persons,
     entries: input.entries,
   });
+
+  // Rate-limit gate lives here — AFTER the cache miss, BEFORE the LLM call.
+  // Placement is load-bearing: counting cache hits would lock a paid user
+  // out of their own fresh reflection after N refreshes. Only actual LLM
+  // calls decrement the bucket.
+  if (options.checkRateLimit) {
+    const rl = await options.checkRateLimit();
+    if (!rl.allowed) {
+      return { status: "rate_limited", resetAt: rl.resetAt };
+    }
+  }
 
   // Call Claude. Fresh Anthropic client — NOT shared with Coach's Sonnet
   // setup, and NOT going through runCoachModule (see file header).
@@ -270,15 +322,29 @@ export async function generateReflection(
 
   let aiOutput: ReflectionOutput = validated.data;
 
-  // Banned-phrase check on all string leaves. validateAIOutput only walks
-  // top-level keys; for the reflection shape we also need to walk theme +
-  // observation + summary + message_to_user. Flatten relevant strings.
+  // Banned-phrase check on all string leaves. validateAIOutput walks the
+  // top-level keys only — the reflection shape nests prose under theme,
+  // observation, summary, message_to_user, AND evidence[*].quote. The quote
+  // walk matters: the model can select a verbatim passage from the user's
+  // own text that contains a banned clinical phrase. We drop the observation
+  // (not just the evidence item) so the <2 → refusal path still engages.
   try {
     if (aiOutput.mode === "reflection") {
       validateAIOutput({ summary: aiOutput.summary });
-      for (const obs of aiOutput.observations) {
-        validateAIOutput({ theme: obs.theme, observation: obs.observation });
-      }
+      aiOutput = {
+        ...aiOutput,
+        observations: aiOutput.observations.filter((obs) => {
+          try {
+            validateAIOutput({ theme: obs.theme, observation: obs.observation });
+            for (const ev of obs.evidence) {
+              validateAIOutput({ quote: ev.quote });
+            }
+            return true;
+          } catch {
+            return false;
+          }
+        }),
+      };
     } else {
       validateAIOutput({ message_to_user: aiOutput.message_to_user });
     }
@@ -291,8 +357,8 @@ export async function generateReflection(
 
   // Post-process: verify quotes substring-match their cited sources. If any
   // observation has an unverifiable quote, drop the whole observation. If
-  // fewer than 2 observations survive, convert to a refusal — the model
-  // fabricated quotes and we can't serve a partial reflection.
+  // fewer than 2 observations survive (counting banned-phrase drops above),
+  // convert to a refusal — we can't serve a partial reflection.
   if (aiOutput.mode === "reflection") {
     const lookup = buildEntryLookup(rawRecords);
     const filtered = verifyQuotes(aiOutput, lookup);
@@ -329,14 +395,25 @@ export async function generateReflection(
     .single();
 
   if (insertRes.error || !insertRes.data) {
+    // Unique-violation (PG 23505) = a concurrent request won the race.
+    // Migration 0024 adds a unique index on (user_id, generated-date-UTC)
+    // so two parallel POSTs both missing the cache produce one LLM charge
+    // + one INSERT, not two. Return the winner's row as "cached".
+    if (insertRes.error?.code === "23505") {
+      const winner = await readCachedReflection(supabase, userId);
+      if (winner) return { status: "cached", row: winner };
+      // Fell through the cache read too — something odd; fail loudly.
+    }
     throw new ReflectionGenerationError(
       `weekly_reflections insert failed: ${insertRes.error?.message ?? "no row returned"}`,
       "insert_failed",
     );
   }
 
+  // Freshly-written row — ai_json is the Zod-validated aiOutput we just
+  // inserted, so narrowing here is safe (not a blind jsonb read).
   return {
     status: "created",
-    row: insertRes.data as unknown as WeeklyReflectionRow,
+    row: { ...insertRes.data, ai_json: aiOutput },
   };
 }

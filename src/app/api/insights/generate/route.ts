@@ -50,29 +50,21 @@ export async function POST(req: Request) {
   const paidGate = await requirePaidAccessApi(user);
   if (paidGate) return paidGate;
 
-  // Defense-in-depth rate limit. Real cost gate is the 7-day idempotency
-  // inside generateReflection(); this just caps pathological request rates.
-  const rlWeek = await rateLimit(`insights-generate:week:${user.id}`, {
-    limit: 3,
-    windowMs: 7 * 24 * 60 * 60 * 1000,
-  });
-  if (!rlWeek.allowed) {
-    return NextResponse.json(
-      { error: "Too many generation attempts this week" },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(Math.ceil((rlWeek.resetAt - Date.now()) / 1000)),
-        },
-      },
-    );
-  }
-
   // Service-role client — the INSERT bypasses RLS (no INSERT policy).
   const serviceClient = createServiceClient();
 
   try {
-    const result = await generateReflection(serviceClient, user.id);
+    const result = await generateReflection(serviceClient, user.id, {
+      // Rate-limit gate runs INSIDE generateReflection after the cache miss
+      // so cheap cache hits don't decrement the bucket. Returning
+      // `allowed: false` produces a {status:"rate_limited"} outcome that we
+      // translate to a 429 below.
+      checkRateLimit: () =>
+        rateLimit(`insights-generate:week:${user.id}`, {
+          limit: 3,
+          windowMs: 7 * 24 * 60 * 60 * 1000,
+        }),
+    });
 
     if (result.status === "profile_missing") {
       return NextResponse.json(
@@ -81,6 +73,20 @@ export async function POST(req: Request) {
             "Complete your Communication Profile before generating a reflection.",
         },
         { status: 409 },
+      );
+    }
+
+    if (result.status === "rate_limited") {
+      return NextResponse.json(
+        { error: "Too many generation attempts this week" },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": String(
+              Math.ceil((result.resetAt - Date.now()) / 1000),
+            ),
+          },
+        },
       );
     }
 

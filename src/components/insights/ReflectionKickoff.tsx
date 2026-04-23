@@ -1,8 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import type { ReflectionOutput } from "@/lib/ai/schemas";
+import { reflectionOutputSchema, type ReflectionOutput } from "@/lib/ai/schemas";
 import { ReflectionCard } from "./ReflectionCard";
+
+// Kind values sent by the API route (from ReflectionGenerationError.kind).
+// Map each to a short human label so a silent writer regression is
+// visible to the user per the migration-0018 defense.
+const KIND_LABELS: Record<string, string> = {
+  insert_failed: "couldn't save",
+  db_read_failed: "couldn't read your entries",
+  api_error: "AI service issue",
+  schema_mismatch: "unexpected AI response",
+  json_parse: "unexpected AI response",
+  no_text: "unexpected AI response",
+  banned_phrase: "response blocked by content filter",
+};
 
 interface Props {
   // When true, the page already had a fresh reflection and this component
@@ -67,9 +80,25 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
           return;
         }
 
+        // Defensive Zod re-parse — the server validates before INSERT, but
+        // the cache-hit branch returns a stored row whose ai_json could
+        // have drifted (hand-edit, partial migration). Fall through to
+        // error rather than render a broken card.
+        const parsed = reflectionOutputSchema.safeParse(
+          data.reflection.ai_json,
+        );
+        if (!parsed.success) {
+          setState({
+            phase: "error",
+            message: "Generation returned an unexpected shape.",
+            kind: "schema_mismatch",
+          });
+          return;
+        }
+
         setState({
           phase: "ready",
-          reflection: data.reflection.ai_json as ReflectionOutput,
+          reflection: parsed.data,
           generatedAt: data.reflection.generated_at as string,
         });
       } catch {
@@ -97,6 +126,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   }
 
   if (state.phase === "error") {
+    const kindLabel = state.kind ? KIND_LABELS[state.kind] : null;
     return (
       <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
         <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
@@ -106,6 +136,11 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
           Something went wrong generating this week&apos;s reflection —
           we&apos;ve been notified. Try reloading in a minute.
         </p>
+        {kindLabel ? (
+          <p className="mt-2 text-[12px] font-medium text-ink-soft">
+            Reason: {kindLabel}.
+          </p>
+        ) : null}
         {hasStaleCached ? (
           <p className="mt-2 text-[12px] font-medium text-ink-muted">
             Your previous reflection is no longer current.

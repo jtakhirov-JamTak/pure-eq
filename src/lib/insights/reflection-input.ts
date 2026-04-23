@@ -23,6 +23,7 @@ export interface BuiltReflectionInput {
     raw_record_id: string;
     record_type: string;
     created_at: string;
+    source_date: string; // YYYY-MM-DD — pre-formatted so the model copies verbatim
     person_display_name: string | null;
     fields: Record<string, unknown>;
   }>;
@@ -73,6 +74,7 @@ export function buildReflectionInput(
     raw_record_id: r.raw_record_id,
     record_type: r.record_type,
     created_at: r.created_at,
+    source_date: r.created_at.slice(0, 10),
     person_display_name: r.person_id
       ? personMap.get(r.person_id)?.display_name ?? null
       : null,
