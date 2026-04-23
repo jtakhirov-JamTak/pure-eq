@@ -73,7 +73,7 @@ export default async function CoachPage() {
         >
           {greeting}
           <br />
-          <span className="italic">What do you need today?</span>
+          <span className="italic">Blue Skies ahead.</span>
         </h1>
         <p className="mt-2 text-[15px] font-medium leading-[1.5] text-ink-soft">
           Prepare, Review, or Repair a conversation.
