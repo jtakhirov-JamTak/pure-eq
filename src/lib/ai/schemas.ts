@@ -56,6 +56,46 @@ export const refusalShape = z.object({
   suggested_resource: z.enum(REFUSAL_RESOURCES),
 });
 
+// ============================================================
+// Weekly Insights reflection output (new, replaces tag-counter)
+// ============================================================
+// Each observation MUST be grounded in at least one verbatim quote from
+// the user's own entries. The API route post-processes the response and
+// drops any observation whose quotes don't substring-match the cited
+// source entries — fabricated quotes are filtered out before persist.
+
+export const evidenceShape = z.object({
+  quote: z.string().trim().min(1).max(240),
+  source_record_id: z.string().uuid(),
+  // YYYY-MM-DD (from raw_records.created_at, passed through to the model).
+  source_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "source_date must be YYYY-MM-DD"),
+});
+
+export const observationShape = z.object({
+  theme: z.string().trim().min(1).max(120),
+  observation: z.string().trim().min(1).max(500),
+  evidence: z.array(evidenceShape).min(1).max(3),
+  confidence: z.enum(["tentative", "clear"]),
+});
+
+export const reflectionNormalShape = z.object({
+  mode: z.literal("reflection"),
+  summary: z.string().trim().min(1).max(300),
+  observations: z.array(observationShape).min(2).max(3),
+});
+
+export const reflectionOutputSchema = z.discriminatedUnion("mode", [
+  reflectionNormalShape,
+  refusalShape,
+]);
+
+export type ReflectionOutput = z.infer<typeof reflectionOutputSchema>;
+export type ReflectionNormal = z.infer<typeof reflectionNormalShape>;
+export type ReflectionObservation = z.infer<typeof observationShape>;
+export type ReflectionEvidence = z.infer<typeof evidenceShape>;
+
 /**
  * Check AI output for banned phrases before displaying to user.
  * Returns the first banned phrase found, or null if clean.
