@@ -2,12 +2,13 @@ import { describe, it, expect } from "vitest";
 import { isLegacyV1, isRefusal } from "@/lib/coach/output-shape";
 
 // A realistic legacy-v1 Prepare output. No `mode` discriminator; only
-// the per-module coaching fields.
+// the per-module coaching fields. (Pre-Insights-rebuild outputs also
+// carried a `pattern_tag` field — dropped from the schema in commit
+// ca59044 but still present on stored legacy rows.)
 const legacyV1Prepare = {
   reality_check_question: "What is the outcome you want from this?",
   thing_not_to_do: "Don't open with 'we need to talk.'",
   best_next_move: "Lead with a concrete question about the project scope.",
-  pattern_tag: "defended_intent_early",
 };
 
 // Realistic refusal output per refusalShape (Coach v2 commit 1).
@@ -29,7 +30,6 @@ const v2Normal = {
   reality_check_question: "What would 'good enough' look like to you?",
   thing_not_to_do: "Don't lead with the list of grievances.",
   best_next_move: "Open by naming your own intent for the conversation.",
-  pattern_tag: "defended_intent_early",
 };
 
 describe("isLegacyV1", () => {
