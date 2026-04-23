@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BANNED_PHRASES, OBSERVATION_TAGS } from "@/types";
+import { BANNED_PHRASES } from "@/types";
 
 // All string fields chain `.trim().min(1)` so a model returning "" or "   "
 // fails Zod parse server-side and the route retries or surfaces the
@@ -12,20 +12,17 @@ export const prepareOutputSchema = z.object({
   reality_check_question: z.string().trim().min(1).max(300),
   thing_not_to_do: z.string().trim().min(1).max(300),
   best_next_move: z.string().trim().min(1).max(300),
-  pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
 export const repairOutputSchema = z.object({
   repair_strategy: z.string().trim().min(1).max(300),
   thing_not_to_say: z.string().trim().min(1).max(300),
   recommended_timing: z.string().trim().min(1).max(300),
-  pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
 export const reviewOutputSchema = z.object({
   how_user_likely_came_across: z.string().trim().min(1).max(300),
   alternative_explanation: z.string().trim().min(1).max(300),
-  pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
 // Coach v2 refusal output. When the safety floor triggers (abuse, crisis,

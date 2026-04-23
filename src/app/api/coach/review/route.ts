@@ -27,7 +27,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "review_entry_id",
   aiJsonColumn: "ai_reflection_json",
   aiVersionColumn: "ai_reflection_version",
-  aiVersionValue: 3,
+  aiVersionValue: 4,
 
   buildPayloadFields: (input) => ({
     whatHappened: input.whatHappened,
@@ -63,14 +63,6 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       validatedAssumptions: input.validatedAssumptions ?? "",
       unresolvedAndNext: input.unresolvedAndNext,
     }),
-
-  observationConfidence: 0.8,
-  observationSource: "observed",
-  extractorVersion: "review_v2",
-
-  buildSupportingEvidence: (aiOutput) => ({
-    alternative_explanation: aiOutput.alternative_explanation,
-  }),
 
   buildResponseExtras: (derivedEntryId) => ({
     reviewEntryId: derivedEntryId,

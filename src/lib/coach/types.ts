@@ -18,7 +18,7 @@ type SubscriptionGateConfig =
 
 interface BaseCoachModuleConfig<
   TInput extends Record<string, unknown>,
-  TAiOutput extends { pattern_tag?: string },
+  TAiOutput extends Record<string, unknown>,
 > {
   /** Module identifier used in logs, rate-limit keys, and record_type. */
   moduleName: string;
@@ -69,18 +69,6 @@ interface BaseCoachModuleConfig<
     profile: ProfileType,
   ) => { system: string; user: string };
 
-  // -- Observation --
-
-  observationConfidence: number;
-  observationSource: "predictive" | "observed";
-  extractorVersion: string;
-
-  /** Build the supporting_evidence_json for the pattern observation. */
-  buildSupportingEvidence: (
-    aiOutput: TAiOutput,
-    input: TInput,
-  ) => Record<string, unknown>;
-
   // -- Response --
 
   /** Extra fields to include in the response beyond the standard ones. */
@@ -95,5 +83,5 @@ interface BaseCoachModuleConfig<
 /** Per-module configuration that captures all differences between Prepare, Review, and Repair. */
 export type CoachModuleConfig<
   TInput extends Record<string, unknown>,
-  TAiOutput extends { pattern_tag?: string },
+  TAiOutput extends Record<string, unknown>,
 > = BaseCoachModuleConfig<TInput, TAiOutput> & SubscriptionGateConfig;

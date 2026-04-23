@@ -25,7 +25,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  aiVersionValue: 3,
+  aiVersionValue: 4,
 
   buildPayloadFields: (input) => ({
     personName: input.personName,
@@ -58,15 +58,6 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       realityCheckQuestion: input.realityCheckQuestion,
       triggerPlan: input.triggerPlan,
     }),
-
-  observationConfidence: 0.5,
-  observationSource: "predictive",
-  extractorVersion: "prepare_v2",
-
-  buildSupportingEvidence: (aiOutput) => ({
-    reality_check_question: aiOutput.reality_check_question,
-    best_next_move: aiOutput.best_next_move,
-  }),
 
   buildResponseExtras: () => ({}),
 

@@ -26,7 +26,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "repair_entry_id",
   aiJsonColumn: "ai_strategy_json",
   aiVersionColumn: "ai_strategy_version",
-  aiVersionValue: 3,
+  aiVersionValue: 4,
 
   buildPayloadFields: (input) => ({
     whatNeedsRepair: input.whatNeedsRepair,
@@ -56,15 +56,6 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       channel: input.channel,
       timing: input.timing,
     }),
-
-  observationConfidence: 0.8,
-  observationSource: "observed",
-  extractorVersion: "repair_v1",
-
-  buildSupportingEvidence: (aiOutput, input) => ({
-    repair_strategy: aiOutput.repair_strategy,
-    desired_outcome: input.desiredOutcome,
-  }),
 
   buildResponseExtras: (derivedEntryId) => ({
     repairEntryId: derivedEntryId,

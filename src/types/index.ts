@@ -88,26 +88,21 @@ export interface ReviewEntry {
 }
 
 // AI output types — structured JSON, never free-form.
-// pattern_tag is carried on all three payloads for extraction into
-// pattern_observations, but never surfaced to the user in the UI.
 export interface PrepareAIOutput {
   reality_check_question: string;
   thing_not_to_do: string;
   best_next_move: string;
-  pattern_tag: string;
 }
 
 export interface ReviewAIOutput {
   how_user_likely_came_across: string;
   alternative_explanation: string;
-  pattern_tag: string;
 }
 
 export interface RepairAIOutput {
   repair_strategy: string;
   thing_not_to_say: string;
   recommended_timing: string;
-  pattern_tag: string;
 }
 
 // Tools types
@@ -140,31 +135,6 @@ export interface TriggerEntry {
   createdAt: string;
   completedAt: string | null;
 }
-
-// Pattern observation taxonomy — controlled, no runtime invention
-export const OBSERVATION_TAGS = [
-  "defended_intent_early",
-  "assumed_meaning_without_checking",
-  "delayed_direct_ask",
-  "withdrew_under_tension",
-  "over_explained_when_misunderstood",
-  "moved_to_solution_too_fast",
-  "validation_present",
-  "repair_attempt_helped",
-  "repair_attempt_missed_ownership",
-  "escalated_after_trigger",
-  "recurring_trigger_criticism",
-  "recurring_trigger_pressure",
-  "prepare_plan_not_used",
-  "jumped_to_conclusion_under_ambiguity",
-  "pushed_for_resolution_when_activated",
-  "late_regulation_in_the_moment",
-] as const;
-
-export type ObservationTag = (typeof OBSERVATION_TAGS)[number];
-
-// Evidence states for insights
-export type EvidenceState = "not_enough" | "emerging" | "established";
 
 // Subscription states
 export type SubscriptionStatus =

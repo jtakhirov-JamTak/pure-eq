@@ -14,22 +14,11 @@ import { checkSubscription, reserveFreeUse } from "@/lib/subscription";
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { validateAIOutput } from "@/lib/ai/schemas";
-import {
-  OBSERVATION_TAG_COPY,
-  OBSERVATION_TYPE_FOR_TAG,
-} from "@/lib/insights";
-import { regenerateInsights } from "@/lib/insights-writer";
-import type { ProfileType, ObservationTag } from "@/types";
+import type { ProfileType } from "@/types";
 import type { CoachModuleConfig } from "./types";
 
 const MAX_RETRIES = 1;
 const ANTHROPIC_TIMEOUT_MS = 30_000;
-
-// Cooldown latch on observation upsert error captures. Without it a recurring
-// DB-layer failure (RLS drift, schema drift) would burn the Sentry quota
-// before anyone notices. Same pattern as rate-limit.ts and insights-writer.ts.
-const OBS_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
-let lastObsCaptureAt = 0;
 
 const PROFILE_VALUES: ProfileType[] = [
   "direct",
@@ -42,7 +31,7 @@ const PROFILE_VALUES: ProfileType[] = [
 
 export async function runCoachModule<
   TInput extends Record<string, unknown>,
-  TAiOutput extends { pattern_tag?: string },
+  TAiOutput extends Record<string, unknown>,
 >(
   req: Request,
   config: CoachModuleConfig<TInput, TAiOutput>,
@@ -439,64 +428,7 @@ export async function runCoachModule<
     }
   }
 
-  // 14. Extract pattern observation (fire-and-forget).
-  // Review stays single-tag per entry — AI picks one primary tag from the
-  // closed list. Idempotency is DB-enforced via the unique index on
-  // (user_id, source_raw_record_id, observation_tag); retries + concurrent
-  // submits no-op at the DB layer instead of racing at the app layer.
-  if (aiOutput?.pattern_tag) {
-    try {
-      const tag = aiOutput.pattern_tag as ObservationTag;
-      const tagDesc = OBSERVATION_TAG_COPY[tag];
-      if (tagDesc) {
-        const { error: obsErr } = await supabase
-          .from("pattern_observations")
-          .upsert(
-            {
-              user_id: user.id,
-              source_raw_record_id: rawRecordId,
-              source_interaction_entry_id: derivedEntryId,
-              person_id: effectivePersonId,
-              thread_id: effectiveThreadId,
-              observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
-              observation_tag: tag,
-              direction: tagDesc.direction,
-              confidence_score: config.observationConfidence,
-              observation_source: config.observationSource,
-              extractor_version: config.extractorVersion,
-              supporting_evidence_json: config.buildSupportingEvidence(aiOutput, input as TInput) as unknown as Json,
-            },
-            {
-              onConflict: "user_id,source_raw_record_id,observation_tag",
-              ignoreDuplicates: true,
-            },
-          );
-        if (obsErr) {
-          // Supabase JS does NOT throw on PostgREST errors — the wrapping
-          // try/catch only catches thrown exceptions. Inspect .error explicitly
-          // and capture, otherwise an RLS/schema drift silently stops all
-          // observation writes from this module.
-          console.error(`${name}: pattern observation upsert failed`, obsErr.code);
-          const now = Date.now();
-          if (now - lastObsCaptureAt >= OBS_CAPTURE_COOLDOWN_MS) {
-            lastObsCaptureAt = now;
-            Sentry.captureException(new Error("observation_upsert_failed"), {
-              tags: { area: "coach", kind: "observation_upsert", module: name },
-            });
-          }
-        }
-      }
-    } catch {
-      console.error(`${name}: pattern observation insert failed`);
-    }
-  }
-
-  // 15. Regenerate cached insights (fire-and-forget).
-  regenerateInsights(supabase, user.id).catch(() => {
-    console.error(`${name}: insight regeneration failed`);
-  });
-
-  // 16. Response.
+  // 14. Response.
   return NextResponse.json({
     success: true,
     aiOutput,

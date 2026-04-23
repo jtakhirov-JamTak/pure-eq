@@ -4,11 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { immediateOutcomeSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
-import {
-  OBSERVATION_TAG_COPY,
-  OBSERVATION_TYPE_FOR_TAG,
-} from "@/lib/insights";
-import type { ObservationTag } from "@/types";
 
 export const runtime = "nodejs";
 
@@ -117,43 +112,6 @@ export async function PATCH(req: Request) {
       });
     if (rawErr) {
       console.error("review outcome: raw_records insert failed", rawErr.code);
-    }
-  }
-
-  // Extract pattern observation: prepare_plan_not_used
-  if (input.usedPreparePlan === "no") {
-    try {
-      const tag: ObservationTag = "prepare_plan_not_used";
-      const tagDesc = OBSERVATION_TAG_COPY[tag];
-
-      // Use the review's raw_record_id for observation linking
-      const { data: existingObs } = await supabase
-        .from("pattern_observations")
-        .select("pattern_observation_id")
-        .eq("user_id", user.id)
-        .eq("source_raw_record_id", entry.raw_record_id)
-        .eq("observation_tag", tag)
-        .maybeSingle();
-
-      if (!existingObs) {
-        await supabase.from("pattern_observations").insert({
-          user_id: user.id,
-          source_raw_record_id: entry.raw_record_id,
-          source_interaction_entry_id: input.reviewEntryId,
-          observation_type: OBSERVATION_TYPE_FOR_TAG[tag],
-          observation_tag: tag,
-          direction: tagDesc.direction,
-          confidence_score: 0.7,
-          observation_source: "observed",
-          extractor_version: "outcome_v1",
-          supporting_evidence_json: {
-            used_prepare_plan: input.usedPreparePlan,
-            moved_forward: input.movedForward,
-          },
-        });
-      }
-    } catch {
-      console.error("review outcome: observation insert failed");
     }
   }
 

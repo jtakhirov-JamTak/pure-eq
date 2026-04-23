@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
-import { regenerateInsights } from "@/lib/insights-writer";
 
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -172,35 +171,7 @@ export async function softDeleteEntries(
     };
   }
 
-  // 3) Hard-delete pattern_observations derived from these entries.
-  // Observations are rebuildable from raw_records if undelete ever ships,
-  // and leaving them around means deleted entries keep shaping insights.
-  const { error: obsErr } = await supabase
-    .from("pattern_observations")
-    .delete()
-    .eq("user_id", user.id)
-    .in("source_raw_record_id", validIds);
-  if (obsErr) {
-    // Not fatal enough to reject — raw + derived are marked deleted, so
-    // the entries no longer appear anywhere the user can see. But the
-    // observations will keep shaping insights until a later regeneration
-    // pass with full data drops them. Log so this doesn't vanish.
-    console.error("history-delete: observation cleanup failed", obsErr.code);
-  }
-
-  // 4) Rebuild cached insights BEFORE revalidating paths. If we don't
-  // await here, revalidatePath triggers an immediate re-render of
-  // /insights reading stale derived_insights rows that still reflect
-  // the deleted observations. Trade-off: delete takes 1-3s longer, but
-  // the confirm modal already preps the user for a destructive action.
-  try {
-    await regenerateInsights(supabase, user.id);
-  } catch {
-    console.error("history-delete: insight regeneration failed");
-  }
-
   revalidatePath("/history");
-  revalidatePath("/insights");
 
   return { success: true, deleted: validIds.length };
 }
