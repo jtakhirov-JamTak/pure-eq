@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Clock, LogOut } from "lucide-react";
+import { Clock, LogOut, Settings } from "lucide-react";
 import { Wordmark } from "./brand/Wordmark";
 
 const TABS = [
@@ -101,6 +101,14 @@ export function AppShell({
                 >
                   <Clock className="h-4 w-4" />
                   History
+                </Link>
+                <Link
+                  href="/settings"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-tint"
+                >
+                  <Settings className="h-4 w-4" />
+                  Settings
                 </Link>
                 <button
                   onClick={handleLogout}

@@ -12,6 +12,15 @@ function firstNameFromEmail(email: string | null | undefined): string {
   return chunk.charAt(0).toUpperCase() + chunk.slice(1).toLowerCase();
 }
 
+function readFirstName(
+  metadata: Record<string, unknown> | null | undefined,
+): string {
+  const raw = metadata?.first_name;
+  if (typeof raw !== "string") return "";
+  const trimmed = raw.trim();
+  return trimmed.slice(0, 50);
+}
+
 export default async function CoachPage() {
   const t0 = Date.now();
   const {
@@ -56,7 +65,8 @@ export default async function CoachPage() {
   const personMap = new Map(
     (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
   );
-  const firstName = firstNameFromEmail(user.email);
+  const firstName =
+    readFirstName(user.user_metadata) || firstNameFromEmail(user.email);
   const greeting = firstName ? `Hi, ${firstName}.` : "Hi there.";
 
   console.log(`[perf] coach hub ${Date.now() - t0}ms threads=${threads.length}`);

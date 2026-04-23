@@ -7,6 +7,7 @@ import { Wordmark } from "@/components/brand/Wordmark";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 
 export default function SignupPage() {
+  const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -19,12 +20,14 @@ export default function SignupPage() {
     setAlreadyRegistered(false);
     setLoading(true);
 
+    const trimmedName = firstName.trim().slice(0, 50);
     const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/api/auth/callback`,
+        data: trimmedName ? { first_name: trimmedName } : undefined,
       },
     });
 
@@ -70,6 +73,27 @@ export default function SignupPage() {
         </p>
 
         <form onSubmit={handleSignup} className="mt-8 space-y-4">
+          <div>
+            <label
+              htmlFor="firstName"
+              className="block text-[13px] font-semibold text-ink"
+            >
+              First name
+            </label>
+            <input
+              id="firstName"
+              type="text"
+              inputMode="text"
+              autoComplete="given-name"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              maxLength={50}
+              required
+              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
+              placeholder="Jane"
+            />
+          </div>
+
           <div>
             <label
               htmlFor="email"
