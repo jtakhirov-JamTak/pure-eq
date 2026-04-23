@@ -392,7 +392,6 @@ export default function OverwhelmedClient() {
             <CountdownTimer
               durationSeconds={61}
               onComplete={() => setStep("move")}
-              label="Box breathing"
               breathingMode
             />
           </div>

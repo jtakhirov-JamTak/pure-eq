@@ -10,28 +10,29 @@ export const BODY_REGIONS = [
 
 export type BodyRegion = (typeof BODY_REGIONS)[number];
 
-const REGION_TEXTURE: Record<BodyRegion, string> = {
-  Chest: "tight",
-  Throat: "lump",
-  Stomach: "knot",
-  Head: "buzz",
-  Shoulders: "braced",
+type SinglePoint = { kind: "single"; cx: number; cy: number; r: number; haloR?: number };
+type DoublePoint = {
+  kind: "double";
+  points: [{ cx: number; cy: number; r: number }, { cx: number; cy: number; r: number }];
 };
 
-type Hotspot = {
-  cx: number;
-  cy: number;
-  r: number;
-  haloR?: number;
+type Hotspot = (SinglePoint | DoublePoint) & {
   tone: "warm" | "brand";
 };
 
 const HOTSPOTS: Record<BodyRegion, Hotspot> = {
-  Chest: { cx: 65, cy: 78, r: 16, haloR: 22, tone: "warm" },
-  Throat: { cx: 65, cy: 48, r: 8, tone: "brand" },
-  Stomach: { cx: 65, cy: 105, r: 12, haloR: 18, tone: "brand" },
-  Head: { cx: 65, cy: 26, r: 10, haloR: 14, tone: "warm" },
-  Shoulders: { cx: 65, cy: 55, r: 14, haloR: 20, tone: "brand" },
+  Chest: { kind: "single", cx: 65, cy: 78, r: 16, haloR: 22, tone: "warm" },
+  Throat: { kind: "single", cx: 65, cy: 48, r: 8, tone: "brand" },
+  Stomach: { kind: "single", cx: 65, cy: 105, r: 12, haloR: 18, tone: "brand" },
+  Head: { kind: "single", cx: 65, cy: 26, r: 10, haloR: 14, tone: "warm" },
+  Shoulders: {
+    kind: "double",
+    points: [
+      { cx: 42, cy: 58, r: 7 },
+      { cx: 88, cy: 58, r: 7 },
+    ],
+    tone: "brand",
+  },
 };
 
 type Props = {
@@ -69,29 +70,40 @@ export function BodySilhouette({ selected, onChange }: Props) {
           const h = HOTSPOTS[selected];
           const color =
             h.tone === "warm" ? "var(--color-warm)" : "var(--color-brand)";
+          if (h.kind === "single") {
+            return (
+              <g>
+                {h.haloR && (
+                  <circle cx={h.cx} cy={h.cy} r={h.haloR} fill={color} opacity={0.25} />
+                )}
+                <circle cx={h.cx} cy={h.cy} r={h.r} fill={color} opacity={0.85} />
+              </g>
+            );
+          }
           return (
             <g>
-              {h.haloR && (
-                <circle cx={h.cx} cy={h.cy} r={h.haloR} fill={color} opacity={0.25} />
-              )}
-              <circle cx={h.cx} cy={h.cy} r={h.r} fill={color} opacity={0.85} />
+              {h.points.map((p, i) => (
+                <g key={i}>
+                  <circle cx={p.cx} cy={p.cy} r={p.r + 5} fill={color} opacity={0.25} />
+                  <circle cx={p.cx} cy={p.cy} r={p.r} fill={color} opacity={0.85} />
+                </g>
+              ))}
             </g>
           );
         })()}
       </svg>
       <div className="flex flex-1 flex-col justify-center pl-3.5">
-        <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.8px] text-ink-muted">
+        <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.8px] text-ink-soft">
           Tap where
         </p>
         {BODY_REGIONS.map((region) => {
           const on = selected === region;
           const tone = HOTSPOTS[region].tone;
-          const dotColor =
-            on
-              ? tone === "warm"
-                ? "var(--color-warm)"
-                : "var(--color-brand)"
-              : "var(--color-hair)";
+          const dotColor = on
+            ? tone === "warm"
+              ? "var(--color-warm)"
+              : "var(--color-brand)"
+            : "var(--color-hair)";
           return (
             <button
               key={region}
@@ -102,18 +114,19 @@ export function BodySilhouette({ selected, onChange }: Props) {
                   ? "font-bold text-ink"
                   : "font-medium text-ink-soft active:opacity-70"
               }`}
-              style={on ? { backgroundColor: `color-mix(in oklab, ${tone === "warm" ? "var(--color-warm)" : "var(--color-brand)"} 14%, transparent)` } : undefined}
+              style={
+                on
+                  ? {
+                      backgroundColor: `color-mix(in oklab, ${tone === "warm" ? "var(--color-warm)" : "var(--color-brand)"} 14%, transparent)`,
+                    }
+                  : undefined
+              }
             >
               <span
                 className="inline-block h-1.5 w-1.5 rounded-full"
                 style={{ backgroundColor: dotColor }}
               />
               {region}
-              {on && (
-                <span className="ml-1 text-[11px] font-semibold text-ink-soft">
-                  · {REGION_TEXTURE[region]}
-                </span>
-              )}
             </button>
           );
         })}

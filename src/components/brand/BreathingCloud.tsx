@@ -6,15 +6,13 @@ type Props = {
 
 export function BreathingCloud({ children }: Props) {
   return (
-    <div
-      className="relative flex h-[200px] w-[240px] items-center justify-center [animation:breathe_14s_ease-in-out_infinite] motion-reduce:animate-none"
-      aria-hidden
-    >
+    <div className="relative flex h-[200px] w-[240px] items-center justify-center [animation:breathe_14s_ease-in-out_infinite] motion-reduce:animate-none">
       <svg
         width="240"
         height="200"
         viewBox="0 0 240 200"
         style={{ filter: "drop-shadow(0 20px 30px rgba(14,39,72,0.20))" }}
+        aria-hidden
       >
         <circle cx="60" cy="120" r="46" fill="#FFFFFF" />
         <circle cx="108" cy="80" r="60" fill="#FFFFFF" />
