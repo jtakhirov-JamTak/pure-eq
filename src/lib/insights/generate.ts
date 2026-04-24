@@ -19,7 +19,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { buildReflectionPrompt } from "@/lib/ai/prompts";
+import { buildReflectionPrompt, type BehavioralContext } from "@/lib/ai/prompts";
 import {
   reflectionOutputSchema,
   validateAIOutput,
@@ -30,7 +30,10 @@ import { buildReflectionInput } from "./reflection-input";
 import type { ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 
-export const GENERATOR_VERSION = "reflection_v1";
+// v2 (2026-04-23): reflection prompt now includes FIELD GLOSSARY + optional
+// BEHAVIORAL CONTEXT block (BYS verdicts + Review repair-branch counters).
+// Bump forces old v1 rows to regenerate per symmetric writer/reader guard.
+export const GENERATOR_VERSION = "reflection_v2";
 export const IDEMPOTENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const INPUT_WINDOW_DAYS = 28;
 
@@ -89,6 +92,61 @@ function verifyQuotes(
     });
   });
   return { ...reflection, observations: verified };
+}
+
+/**
+ * Aggregate derived-table rows into the BehavioralContext framing block
+ * passed to the reflection prompt. Never quoted as evidence — purely
+ * framing for what patterns the model should look for.
+ *
+ * Exported for unit tests. Callers should always invoke via generate(),
+ * which wires in the actual DB reads + window.
+ */
+export function aggregateBehavioralContext(
+  bysRows: Array<{ ai_verdict_json: unknown }>,
+  reviewRows: Array<{ repair_branch_active: boolean; needs_to_happen_next: string | null }>,
+): BehavioralContext {
+  const bys = { total: 0, safe: 0, risky: 0, do_not_send: 0 };
+  for (const row of bysRows) {
+    const verdict =
+      row.ai_verdict_json &&
+      typeof row.ai_verdict_json === "object" &&
+      !Array.isArray(row.ai_verdict_json)
+        ? (row.ai_verdict_json as Record<string, unknown>).verdict
+        : null;
+    if (verdict === "safe") {
+      bys.safe += 1;
+      bys.total += 1;
+    } else if (verdict === "risky") {
+      bys.risky += 1;
+      bys.total += 1;
+    } else if (verdict === "do_not_send") {
+      bys.do_not_send += 1;
+      bys.total += 1;
+    }
+    // Unknown verdict strings (legacy rows, schema drift) don't count.
+  }
+
+  const review = {
+    total: 0,
+    repair_branch_active: 0,
+    no_repair_branch: 0,
+    needs_next: {} as Record<string, number>,
+  };
+  for (const row of reviewRows) {
+    review.total += 1;
+    if (row.repair_branch_active) {
+      review.repair_branch_active += 1;
+    } else {
+      review.no_repair_branch += 1;
+    }
+    if (row.needs_to_happen_next) {
+      review.needs_next[row.needs_to_happen_next] =
+        (review.needs_next[row.needs_to_happen_next] ?? 0) + 1;
+    }
+  }
+
+  return { windowDays: INPUT_WINDOW_DAYS, bys, review };
 }
 
 /**
@@ -199,12 +257,15 @@ export async function generateReflection(
   }
   const profile = profileRes.data.primary_profile as ProfileType;
 
-  // Fetch persons + recent raw entries in parallel.
+  // Fetch persons + recent raw entries + BYS + Review aggregates in parallel.
+  // BYS and Review queries drive the BEHAVIORAL CONTEXT block in the prompt
+  // — framing only, never quoted as evidence. On error we emit empty
+  // counters rather than failing the reflection (supplementary enrichment).
   const periodStartMs = Date.now() - INPUT_WINDOW_MS;
   const periodStart = new Date(periodStartMs).toISOString();
   const periodEnd = new Date().toISOString();
 
-  const [personsRes, entriesRes] = await Promise.all([
+  const [personsRes, entriesRes, bysRes, reviewRes] = await Promise.all([
     supabase
       .from("persons")
       .select("person_id, display_name, relationship_domain")
@@ -221,6 +282,23 @@ export async function generateReflection(
       .gte("created_at", periodStart)
       .order("created_at", { ascending: false })
       .limit(100),
+    supabase
+      .from("before_you_send_entries")
+      .select("ai_verdict_json")
+      .eq("user_id", userId)
+      .eq("is_complete", true)
+      .is("deleted_at", null)
+      .gte("created_at", periodStart)
+      .not("ai_verdict_json", "is", null)
+      .limit(200),
+    supabase
+      .from("review_entries")
+      .select("repair_branch_active, needs_to_happen_next")
+      .eq("user_id", userId)
+      .eq("is_complete", true)
+      .is("deleted_at", null)
+      .gte("created_at", periodStart)
+      .limit(200),
   ]);
 
   if (personsRes.error) {
@@ -235,9 +313,22 @@ export async function generateReflection(
       "db_read_failed",
     );
   }
+  // BYS + Review aggregate errors are non-fatal — counters are supplementary
+  // framing for the prompt. Log to console (captured via Sentry breadcrumbs)
+  // and emit empty counters so the reflection still generates.
+  if (bysRes.error) {
+    console.error("insights: before_you_send_entries aggregate failed", bysRes.error.code);
+  }
+  if (reviewRes.error) {
+    console.error("insights: review_entries aggregate failed", reviewRes.error.code);
+  }
 
   const rawRecords = entriesRes.data ?? [];
   const persons = personsRes.data ?? [];
+  const behavioralContext = aggregateBehavioralContext(
+    bysRes.data ?? [],
+    reviewRes.data ?? [],
+  );
 
   // Build the structured USER INPUT block. Caps entries at 50 + truncates
   // each field to 400 chars for a deterministic token budget.
@@ -260,6 +351,7 @@ export async function generateReflection(
     profile,
     persons: input.persons,
     entries: input.entries,
+    behavioralContext,
   });
 
   // Rate-limit gate lives here — AFTER the cache miss, BEFORE the LLM call.
