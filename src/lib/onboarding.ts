@@ -118,6 +118,8 @@ export const QUESTIONS: OnboardingQuestion[] = [
   },
 ];
 
+export type RecommendedModule = "prepare" | "review" | "repair" | "before_send";
+
 // Forecast → module routing. Replaces the old aspiration GOAL_MAPPING.
 // A and C land on Prepare (default safe path); B lands on Before-You-Send
 // (the user is mid-conversation and needs a verdict on a draft message).
@@ -137,7 +139,15 @@ export const V0_MODULES_ENABLED: Record<RecommendedModule, boolean> = {
   repair: false,
 };
 
-export type RecommendedModule = "prepare" | "review" | "repair" | "before_send";
+// Module → app route. Lives here (not in submit/route.ts) so unit tests can
+// import it as a binding canary against the RecommendedModule union.
+// Underscored enum vs hyphenated path is the reason this lookup exists.
+export const MODULE_TO_PATH: Record<RecommendedModule, string> = {
+  prepare: "/coach/prepare",
+  before_send: "/coach/before-send",
+  review: "/coach/review",
+  repair: "/coach/repair",
+};
 
 export function clampToEnabledModule(natural: RecommendedModule): RecommendedModule {
   return V0_MODULES_ENABLED[natural] ? natural : "prepare";

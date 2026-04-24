@@ -3,22 +3,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { submitQuizSchema } from "@/lib/validation";
 import {
+  MODULE_TO_PATH,
   QUESTIONS,
   SCORING_VERSION,
   scoreProfile,
   type QuizOption,
-  type RecommendedModule,
 } from "@/lib/onboarding";
-
-// Module → app route. Kept here (not in onboarding.ts) because the path
-// shape is a server concern; client never routes by module name. Hyphenated
-// before-send vs the underscored enum is the reason the map exists at all.
-const MODULE_TO_PATH: Record<RecommendedModule, string> = {
-  prepare: "/coach/prepare",
-  before_send: "/coach/before-send",
-  review: "/coach/review",
-  repair: "/coach/repair",
-};
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 

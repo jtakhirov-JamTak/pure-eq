@@ -7,6 +7,12 @@ export const quizAnswerSchema = z.object({
   selectedOption: z.enum(["A", "B", "C", "D", "E"]),
 });
 
+// Per-question option allowlist. Q9 (forecast) only renders A/B/C in the UI;
+// the broader A|B|C|D|E enum stays on quizAnswerSchema for back-compat with
+// stored payloads, but the API rejects D/E on Q9 so the audit trail in
+// payload_json never references an option the question_snapshot lacks.
+const Q9_ALLOWED = new Set(["A", "B", "C"]);
+
 export const submitQuizSchema = z
   .object({
     answers: z.array(quizAnswerSchema).length(9),
@@ -20,6 +26,13 @@ export const submitQuizSchema = z
       return true;
     },
     { message: "answers must cover each questionIndex 0-8 exactly once" }
+  )
+  .refine(
+    (data) => {
+      const q9 = data.answers.find((a) => a.questionIndex === 8);
+      return !q9 || Q9_ALLOWED.has(q9.selectedOption);
+    },
+    { message: "Q9 forecast must be A, B, or C" }
   );
 
 // ============================================================

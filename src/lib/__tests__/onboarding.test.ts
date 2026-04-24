@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { scoreProfile } from "@/lib/onboarding";
-import type { QuizOption } from "@/lib/onboarding";
+import {
+  MODULE_TO_PATH,
+  V0_MODULES_ENABLED,
+  scoreProfile,
+} from "@/lib/onboarding";
+import type { QuizOption, RecommendedModule } from "@/lib/onboarding";
+import { submitQuizSchema } from "@/lib/validation";
 
 describe("scoreProfile", () => {
   it("scores a clear winner correctly", () => {
@@ -81,6 +86,16 @@ describe("scoreProfile", () => {
     expect(() => scoreProfile(answers)).toThrow("no scorable answers");
   });
 
+  it("Q9=null falls through to prepare (defensive default)", () => {
+    // All scoring questions answered, Q9 missing. scoreProfile must not throw
+    // and must default routing to "prepare" — guards against an upstream
+    // submit path stripping Q9 without us noticing.
+    const answers: (QuizOption | null)[] = [
+      "A", "A", "A", "A", "A", "A", "A", "A", null,
+    ];
+    expect(scoreProfile(answers).recommendedModule).toBe("prepare");
+  });
+
   it("Q5-A secondary rule adds +1 to direct", () => {
     // Q5-A maps primary to "intense" (2 pts) and secondary +1 to "direct"
     // Set Q5=A, everything else null to isolate.
@@ -90,5 +105,45 @@ describe("scoreProfile", () => {
     expect(result.scores.intense).toBe(2); // Q5 primary mapping
     expect(result.scores.direct).toBe(1); // Q5 secondary rule
     expect(result.primary).toBe("intense"); // 2 > 1
+  });
+});
+
+describe("MODULE_TO_PATH (binding canary)", () => {
+  it("before_send maps to the hyphenated route", () => {
+    // The whole reason MODULE_TO_PATH exists is the underscore-vs-hyphen
+    // gap. If this assertion fails, /api/onboarding/submit is returning
+    // /coach/before_send (404) for Q9=B users.
+    expect(MODULE_TO_PATH.before_send).toBe("/coach/before-send");
+  });
+
+  it("covers every RecommendedModule key with a non-empty path starting with /", () => {
+    for (const key of Object.keys(V0_MODULES_ENABLED) as RecommendedModule[]) {
+      const path = MODULE_TO_PATH[key];
+      expect(path).toBeTruthy();
+      expect(path.startsWith("/")).toBe(true);
+    }
+  });
+});
+
+describe("submitQuizSchema Q9 superRefine", () => {
+  function build(q9: "A" | "B" | "C" | "D" | "E") {
+    return {
+      answers: Array.from({ length: 9 }, (_, i) => ({
+        questionIndex: i,
+        selectedOption: i === 8 ? q9 : "A",
+      })),
+    };
+  }
+
+  it("accepts Q9=A, B, C", () => {
+    for (const q9 of ["A", "B", "C"] as const) {
+      expect(submitQuizSchema.safeParse(build(q9)).success).toBe(true);
+    }
+  });
+
+  it("rejects Q9=D and Q9=E (UI cannot submit them; curl bypass blocked)", () => {
+    for (const q9 of ["D", "E"] as const) {
+      expect(submitQuizSchema.safeParse(build(q9)).success).toBe(false);
+    }
   });
 });
