@@ -1,4 +1,5 @@
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import { BANNED_PHRASES, OBSERVATION_TAGS } from "@/types";
 
 // ============================================================
@@ -49,7 +50,10 @@ const prepareNormalShape = z.object({
   reality_check_question: z.string().trim().min(1).max(300),
   thing_not_to_do: z.string().trim().min(1).max(300),
   they_might_need: z.string().trim().min(1).max(300),
-  best_next_move: z.string().trim().min(1).max(300),
+  // Action field — tighter cap + nullable per the editorial contract.
+  // The model returns null when no real verb+object+trigger action
+  // fits; stripGeneric nullifies "be more patient"-class filler.
+  best_next_move: z.string().trim().min(1).max(120).nullable(),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
@@ -81,9 +85,11 @@ const reviewNormalShape = z.object({
   alternative_explanation: z.string().trim().min(1).max(300),
   question_you_missed: z.string().trim().min(1).max(300),
   // Repair branch — populated only when repairBranchActive is true.
-  what_to_own: z.string().trim().min(1).max(300).optional(),
+  // what_to_own + thing_not_to_say are action fields: 120-cap, nullable
+  // (the model can omit the key OR explicitly return null).
+  what_to_own: z.string().trim().min(1).max(120).nullable().optional(),
   impact_on_them: z.string().trim().min(1).max(300).optional(),
-  thing_not_to_say: z.string().trim().min(1).max(300).optional(),
+  thing_not_to_say: z.string().trim().min(1).max(120).nullable().optional(),
   recommended_timing: z.string().trim().min(1).max(300).optional(),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
@@ -109,7 +115,8 @@ const beforeYouSendNormalShape = z.object({
   verdict: z.enum(["safe", "risky", "do_not_send"]),
   how_this_will_land: z.string().trim().min(1).max(300),
   what_its_missing: z.string().trim().min(1).max(300),
-  thing_to_cut: z.string().trim().min(1).max(300),
+  // Action field — tighter cap + nullable per the editorial contract.
+  thing_to_cut: z.string().trim().min(1).max(120).nullable(),
   check_in_question: z.string().trim().min(1).max(300),
 });
 
@@ -172,9 +179,57 @@ export function checkBannedPhrases(text: string): string | null {
   return null;
 }
 
+// Action-copy fields that must be verb + object + trigger, or null.
+// stripGeneric nullifies filler like "be more patient" so the navy
+// action card is a pure function of the payload.
+const ACTION_FIELDS = new Set([
+  "best_next_move",
+  "what_to_own",
+  "thing_not_to_say",
+  "thing_to_cut",
+]);
+
+// Generic-filler rules. Each has a stable `name` so Sentry's `pattern`
+// tag is filterable by human-readable label, not a regex literal.
+// `leading_try_to` requires a trailing space so "Try a Prepare..." does
+// not match.
+const GENERIC_RULES: { name: string; test: RegExp }[] = [
+  { name: "leading_be", test: /^be\s/i },
+  { name: "leading_try_to", test: /^try to\s/i },
+  { name: "leading_remember_to", test: /^remember to\s/i },
+  { name: "leading_dont_forget", test: /^don't forget\s/i },
+  { name: "leading_consider", test: /^consider\s/i },
+  { name: "leading_maybe", test: /^maybe\s/i },
+  { name: "exact_be_more_patient", test: /^be more patient\.?$/i },
+  { name: "exact_listen_more", test: /^listen more\.?$/i },
+  { name: "exact_communicate_better", test: /^communicate better\.?$/i },
+];
+
+// Module-level cooldown latch — mirrors src/lib/rate-limit.ts upstash
+// capture latch. Caps captures at one per 5 min per instance during a
+// bad-prompt or model-drift incident.
+const GENERIC_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastGenericCaptureAt = 0;
+
+function captureGenericNullification(field: string, pattern: string): void {
+  const now = Date.now();
+  if (now - lastGenericCaptureAt < GENERIC_CAPTURE_COOLDOWN_MS) return;
+  lastGenericCaptureAt = now;
+  // sentry-scrub.ts redacts exception.values[*].value, so tags carry
+  // the triage signal. NEVER put the original string in the event —
+  // the scrubber drops it anyway.
+  Sentry.captureException(new Error("generic_output"), {
+    tags: { kind: "generic_output", field, pattern },
+  });
+}
+
 /**
- * Validate all string fields in an AI output object for banned phrases.
- * Returns true if clean, throws if a banned phrase is found.
+ * Validate all string fields in an AI output object for banned phrases,
+ * then nullify action-copy fields that match a generic-filler rule.
+ *
+ * Returns true on success, throws on banned phrase. Mutates the input
+ * object in place for stripGeneric — callers using the same reference
+ * downstream pick up the nullification automatically.
  *
  * Walks top-level keys only. The discriminated-union outputs in this
  * file are flat (no nested objects), so this catches every user-visible
@@ -189,6 +244,17 @@ export function validateAIOutput(output: Record<string, unknown>): boolean {
         throw new Error(
           `AI output field "${key}" contains banned phrase: "${banned}"`
         );
+      }
+    }
+  }
+  for (const key of ACTION_FIELDS) {
+    const value = output[key];
+    if (typeof value !== "string" || value.trim().length === 0) continue;
+    for (const rule of GENERIC_RULES) {
+      if (rule.test.test(value)) {
+        output[key] = null;
+        captureGenericNullification(key, rule.name);
+        break;
       }
     }
   }

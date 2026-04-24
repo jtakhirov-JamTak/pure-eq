@@ -97,9 +97,9 @@ describe("buildReflectionPrompt", () => {
     expect(out.user).toMatch(/framing only.*do NOT quote/);
   });
 
-  it("uses prompt_version 3.1.0", () => {
+  it("uses prompt_version 4.0.0", () => {
     const out = buildReflectionPrompt(baseParams);
-    expect(out.prompt_version).toBe("3.1.0");
+    expect(out.prompt_version).toBe("4.0.0");
   });
 });
 
