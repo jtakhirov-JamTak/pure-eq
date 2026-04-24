@@ -70,14 +70,17 @@ const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
 ];
 
 const VERDICT_LABEL: Record<AiNormal["verdict"], string> = {
-  safe: "Safe to send",
-  risky: "Risky",
-  do_not_send: "Do not send",
+  safe: "Safe to send.",
+  risky: "Risky.",
+  do_not_send: "Do not send.",
 };
 
-const VERDICT_PILL: Record<AiNormal["verdict"], string> = {
-  safe: "bg-brand text-white",
-  risky: "bg-warm-soft text-ink",
+// Flat single-tint ribbon, not a pill. Muted green on safe so the
+// verdict reads as context, not a bright ad bar competing with the
+// action card below.
+const VERDICT_RIBBON: Record<AiNormal["verdict"], string> = {
+  safe: "bg-[#DFF5E7] text-[#166A3A]",
+  risky: "bg-warm text-ink",
   do_not_send: "bg-danger text-white",
 };
 
@@ -288,12 +291,10 @@ export default function BeforeYouSendPage() {
             Before you send
           </span>
 
-          <div className="mt-3 flex items-center gap-2">
-            <span
-              className={`rounded-pill px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.8px] ${VERDICT_PILL[verdict]}`}
-            >
-              {VERDICT_LABEL[verdict]}
-            </span>
+          <div
+            className={`-mx-5 mt-3 px-5 py-2 text-[14px] font-semibold ${VERDICT_RIBBON[verdict]}`}
+          >
+            {VERDICT_LABEL[verdict]}
           </div>
 
           {verdict === "do_not_send" && (
