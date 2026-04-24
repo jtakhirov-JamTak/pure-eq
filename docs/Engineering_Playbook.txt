@@ -1981,3 +1981,536 @@ Don't apply to:
 - Pure structural invariants: numeric ranges (`check (x >= 0)`),
   timestamp ordering (`check (end >= start)`), array cardinality.
   Those aren't enum strings; they can't drift by rename.
+
+§16.24 Unique index must encode every component the writer dedups on
+
+Pending cross-app validation.
+
+If a version-stamped write-cache table exists — rows keyed by
+`(user_id, period_key, version)` — the Postgres UNIQUE index must
+include every component the writer considers part of identity. Leaving
+`version` out of the index creates a specific class of race when the
+version constant bumps mid-deploy.
+
+Problem shape: v1 writer wrote rows with `generator_version = "v1"`.
+The unique index is `(user_id, period_key)` — no version. v2 ships.
+v2 writer wants a fresh row per user in the new period window. The
+INSERT hits 23505 against the v1 row. The writer's 23505 handler falls
+through to an UPDATE-by-(user_id, period_key) to overwrite the v1 row
+with v2 content. Race: two v2 writers racing past the `SELECT ... version
+= v2` check both see the v1 row, both INSERT, both 23505, both UPDATE
+— one UPDATE is lost. Or: one writer UPDATEs v1→v2, another reader sees
+v2 and thinks the cache is fresh, writer 2 then re-UPDATES — duplicate
+LLM call burnt.
+
+WRONG — index omits the version component the writer keys on:
+
+    CREATE UNIQUE INDEX reflections_user_day_idx
+      ON weekly_reflections (user_id, ((generated_at AT TIME ZONE 'UTC')::date));
+
+    -- writer
+    const { error } = await sb.insert(row);
+    if (error?.code === "23505") {
+      // Fallback: UPDATE the existing row. Race: two racers both UPDATE;
+      // reader between UPDATEs sees an intermediate state.
+      await sb.update({ ai_json, generator_version: "v2" })
+        .eq("user_id", userId).eq("date", today);
+    }
+
+RIGHT — index encodes the version component:
+
+    CREATE UNIQUE INDEX reflections_user_day_version_idx
+      ON weekly_reflections (user_id, ((generated_at AT TIME ZONE 'UTC')::date), generator_version);
+
+    -- writer: clean INSERT, 23505 means someone else already wrote a
+    -- v2 row for today — short-circuit to that row instead of UPDATEing.
+    const { error } = await sb.insert(row);
+    if (error?.code === "23505") {
+      const { data: existing } = await sb
+        .from("weekly_reflections")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("generator_version", GENERATOR_VERSION)
+        .order("generated_at", { ascending: false })
+        .limit(1).maybeSingle();
+      return existing;
+    }
+
+The index change turns 23505 into a benign "another request beat us to
+it" signal. No UPDATE fallback, no lost-write, no double-work.
+
+Migration the index with a pre-flight dedup CTE (the §16-adjacent rule)
+— drop the old index, DELETE older duplicates per `(user_id, date,
+version)` tuple, create the new index. Idempotent on a clean table.
+
+Apply when:
+- Table has a `*_version` / `generation_version` / `schema_version`
+  column AND the writer bumps it on ship without a DB migration.
+- Cache table where the semantic identity is "one row per user per
+  period per writer-version" but the index reads "one row per user
+  per period".
+- Any ON CONFLICT path where the conflict resolution is "UPDATE to
+  match new shape" — that's the signal the index should have included
+  the shape discriminator.
+
+Don't apply when:
+- The version column is a read-side hint only, never part of write
+  identity (writer overwrites in place on every call). UPDATE-by-
+  (user_id, period) is the correct shape there.
+- One-row-per-user invariants where the version is global and migrates
+  in lockstep with a DB migration that rewrites every row.
+
+Same family as §16.17 (symmetric version guards on reader + writer)
+and §16.23 (writer-reader drift). This is the index-side corollary:
+if the writer distinguishes by version, the uniqueness constraint
+must too.
+
+§16.25 Mutation-returning functions signal mutation in their signature
+
+Pending cross-app validation.
+
+A function that mutates its argument in place and returns `boolean` /
+`void` reads as a pure validator. Callers who assume read-only input
+pass a shared reference and are surprised when downstream code sees
+modified values. The fix is a one-line signature change: return the
+(possibly mutated) value, typed as `T → T`. The return type is the
+documentation.
+
+WRONG — boolean return hides in-place mutation:
+
+    // Looks like a validator. Actually strips fields from `output` in place.
+    function validateAIOutput(output: CoachOutput): boolean {
+      for (const key of Object.keys(output)) {
+        if (isGeneric(output[key])) output[key] = null;  // mutates!
+      }
+      return true;
+    }
+
+    // caller
+    const output = JSON.parse(raw);
+    validateAIOutput(output);
+    return output;  // silently different from what JSON.parse returned
+
+RIGHT — return type tells the caller something was returned:
+
+    function validateAIOutput<T extends CoachOutput>(output: T): T {
+      for (const key of Object.keys(output)) {
+        if (isGeneric(output[key])) output[key] = null;
+      }
+      return output;
+    }
+
+    // caller
+    const output = validateAIOutput(JSON.parse(raw));
+    return output;
+
+No new allocations required; same mutation still happens. But the type
+system now signals "this function returns a result, use it" — callers
+that drop the return value lose nothing today but become visibly wrong
+if the function ever changes to return a non-mutating copy.
+
+Apply to:
+- Any validator/sanitizer/normalizer that mutates its argument.
+- Any helper that conditionally replaces fields on the input object
+  (null-out, trim, lower-case, strip-pii).
+
+Don't apply to:
+- Pure predicates that ONLY read (`isValid(x): boolean`). Signature
+  is honest.
+- Functions that return a NEW object (immutable-style). Already
+  explicit via the return value.
+
+§16.26 AI-output generic-phrase filter as a schema post-pass
+
+Pending cross-app validation.
+
+Any AI-coaching / AI-advice flow where the model can emit filler
+phrases ("be more patient", "try to listen better", "remember to
+communicate") needs a post-Zod nullifying pass. Length caps (§16.13)
+prevent long filler but not short filler. The user sees a rendered
+card under a strong label ("Your next move") containing "be more
+patient" — the feature looks broken even though the pipeline ran
+cleanly.
+
+Shape:
+
+- Pure function `stripGeneric(value, field): string | null`. Runs on
+  every string output field after Zod validates shape but before the
+  value is persisted or rendered.
+- Rule list ordered exact-match BEFORE leading-match. First-match-wins.
+  `"be more patient."` must tag as `exact_be_more_patient`, not
+  `leading_be`, for Sentry triage fidelity.
+- Return `null` on match, original string on non-match. Renderers
+  already skip null fields via the "field-presence" contract.
+- Zod field shape moves to `.nullable()` — the model is instructed
+  to emit null when no non-generic action fits. The post-pass catches
+  cases where the model emits generic text anyway.
+
+Drift observability:
+
+- Every null-out fires a Sentry capture with `kind=generic_output`,
+  `field=<the field name>`, `pattern=<the rule name>`. Error message
+  is the rule name itself — short, no user content — so the default
+  scrubber leaves it intact.
+- Cooldown map keyed on `(field, pattern)`, 5-minute TTL. A single
+  latch would collapse distinct drift events (model going generic on
+  "best_next_move" vs on "thing_to_cut") into one Sentry event,
+  losing the triage signal. Per-(field, pattern) preserves which
+  field's prompt needs tuning.
+
+Prompt side:
+
+- Dedicated "ACTION RULE" (or equivalent) block attached to the
+  prompts for action-flavored flows only. Instructs the model to
+  return null when no verb+object+trigger action fits. Prompt says
+  what "generic" means in domain terms so the model can self-filter
+  before the post-pass catches it.
+- Bump `PROMPT_VERSION` + `aiVersionValue` (major version bump;
+  nullable shape is a breaking change). See CLAUDE.md / §16.17 on
+  version stamps.
+
+Apply when:
+- The product renders labeled action cards from AI output ("Your
+  next move:", "What to own:", "What to cut:").
+- Empirical review shows the model falling back to vague advice
+  under certain inputs.
+
+Don't apply when:
+- Output is free-form narrative (journal reflection, summary). The
+  user wouldn't read "be patient" as a labeled directive. Length cap
+  alone is enough.
+- Output is purely structural (tags, scores, enums). Generic-phrase
+  filter doesn't apply to non-prose fields.
+
+Related: §16.13 (length caps), §16.21 (enum-tuple binding), §16.23
+(writer-reader drift). This is the text-quality counterpart to those
+structural guards.
+
+§16.27 PWA standalone + third-party OAuth: detect and degrade
+
+Pending cross-app validation.
+
+iOS PWAs running in standalone mode (added to Home Screen, launched
+from the icon) cannot complete a third-party OAuth redirect that
+involves Safari. The consent screen opens in Safari, the callback
+cookie lands in Safari, the PWA never sees the session. The user
+returns to the PWA and the sign-in appears to have silently failed.
+No amount of server-side fixes helps — it's a platform isolation
+boundary.
+
+Mitigation (minimal — the deep fix is a multi-hour PKCE popup
+rearchitecture):
+
+- Detect standalone at render time:
+      const isStandalone =
+        typeof window !== "undefined" &&
+        (window.matchMedia("(display-mode: standalone)").matches ||
+         (navigator as { standalone?: boolean }).standalone === true);
+- Disable the social sign-in CTA; render an inline note: "Social
+  sign-in doesn't work inside the installed app. Use email below,
+  or open {product name} in Safari to use {provider}."
+- Email auth continues to work in standalone (same-origin POST,
+  cookie lands in the PWA WebView correctly).
+
+This is a UX acknowledgment, not a workaround. The fraction of users
+affected is the intersection of (installed the PWA) AND (uses social
+sign-in). Small for a pre-launch product; revisit if the cohort grows.
+
+Deep fix (deferred, costly):
+- PKCE flow with a `window.open` popup to the provider, redirect to
+  an in-app callback page, postMessage the code back, close the
+  popup. Multi-hour auth-flow rearchitecture; rare browsers block the
+  popup. Not worth the engineering for small PWA-install cohorts.
+- Native wrapper (iOS app store). Adds Apple Developer fees, 15–30%
+  subscription tax, mandatory Apple Sign-In. Wrong economics unless
+  the PWA-install cohort drives meaningful revenue.
+
+Apply when:
+- PWA uses third-party OAuth (Google, Apple, Microsoft, GitHub).
+- Users install to Home Screen.
+
+Don't apply when:
+- Web-only product (no standalone install path).
+- Auth is email-only or magic-link (both work in standalone).
+
+§16.28 Reduced-motion overrides must zero animation-delay, not just keyframes
+
+Pending cross-app validation.
+
+A `prefers-reduced-motion: reduce` media block that sets `animation:
+none` or shortens keyframe durations but leaves `animation-delay`
+unchanged produces a distinct bug: users who prefer reduced motion
+see content that is invisible for the delay duration and then
+appears instantly.
+
+The trap: most reduced-motion CSS tutorials show
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+— which correctly collapses the keyframe. But if the element's
+`opacity` starts at 0 in the keyframe (fade-in) AND has a
+`animation-delay: 100ms`, the delay still applies. For 100ms the
+element is invisible, then flashes in.
+
+WRONG — keyframes collapse, delay doesn't:
+
+    .card-in { animation: card-in 150ms ease-out 0ms; }
+    .action-in { animation: card-in 150ms ease-out 100ms; }  /* delayed */
+    @keyframes card-in { from { opacity: 0; } to { opacity: 1; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card-in, .action-in { animation-duration: 0.01ms !important; }
+      /* 100ms of opacity:0 still renders for .action-in */
+    }
+
+RIGHT — collapse delay too:
+
+    @media (prefers-reduced-motion: reduce) {
+      .card-in, .action-in {
+        animation-duration: 0.01ms !important;
+        animation-delay: 0ms !important;
+      }
+    }
+
+Better: author the keyframe so the final state is the default state
+at rest — opacity:1 and transform:none at the end of the keyframe,
+and the element's at-rest style matches the end state. If the
+animation never fires, the element is already visible. The
+reduced-motion rule then becomes a safety net rather than the
+primary mechanism.
+
+Apply when:
+- Any keyframe animation uses `animation-delay` for stagger effects.
+- Any fade-in animation starts at opacity:0.
+
+Don't apply when:
+- Animation is purely decorative and opacity:0 isn't in the keyframe
+  (e.g., a shimmer or pulse on an already-visible element).
+
+§16.29 Reset / abandon controls gate on in-flight submit state
+
+Pending cross-app validation.
+
+A multi-step form with a "reset" / "start over" / "this doesn't feel
+right" control must disable that control while the submit is in
+flight. Otherwise the user can tap submit (state:submitting), then
+tap reset (state wiped + component unmount scheduled), and the
+submit's success handler fires `router.replace("/next")` against a
+page whose state was wiped underneath it. The user lands on the next
+page with zero context for how they got there.
+
+WRONG — reset doesn't gate on submit state:
+
+    <button onClick={handleSubmit}>{submitting ? "Submitting…" : "Continue"}</button>
+    <button onClick={handleReset}>This doesn't feel right</button>
+
+    // handleSubmit → router.replace(redirectTo)  (fires even after reset)
+    // handleReset  → setAnswers({}); setStep(0)
+
+RIGHT — reset disabled while submit is in flight:
+
+    <button onClick={handleSubmit} disabled={submitting}>…</button>
+    <button onClick={handleReset} disabled={submitting}>This doesn't feel right</button>
+
+The disable is not about race-condition aesthetics — it's about the
+user's mental model. They tapped reset; they expect to be on the
+reset state, not navigated forward. Gating on the submit-state ref
+(or state) is the smallest fix.
+
+Apply when:
+- A page has both a forward-CTA and a backward-CTA (reset, abandon,
+  cancel, restart).
+- The forward-CTA triggers navigation on success.
+
+Don't apply when:
+- Reset is inline-only (clears a single field; no navigation). No
+  race with submit.
+
+§16.30 Client-side getUser() for personalization needs try/catch + Sentry
+
+Pending cross-app validation.
+
+When a client component fetches the logged-in user solely to
+personalize rendered copy (`"Welcome back, {firstName}."`), a silent
+`supabase.auth.getUser()` failure renders a bare fallback string ("")
+interpolated into the copy (`"Welcome back, ."` or `"Welcome back,
+friend."` with a placeholder). The feature looks cosmetic, so the
+failure looks cosmetic. No operator signal fires; the only
+indication is the user reading a stilted greeting.
+
+But the failure isn't cosmetic — it's a signal that the session
+cookie is unreadable, the middleware misfired, or the Supabase
+SDK is reporting an auth error the client is swallowing. Every
+authenticated feature on the page is in the same boat; the greeting
+is just the most visible symptom.
+
+WRONG — silent swallow:
+
+    const [firstName, setFirstName] = useState("");
+    useEffect(() => {
+      supabase.auth.getUser().then(({ data }) => {
+        setFirstName(data.user?.user_metadata?.first_name ?? "");
+      });  // no catch — any thrown error becomes an unhandled rejection
+    }, []);
+
+RIGHT — try/catch + Sentry + graceful fallback:
+
+    const [firstName, setFirstName] = useState("");
+    useEffect(() => {
+      (async () => {
+        try {
+          const { data, error } = await supabase.auth.getUser();
+          if (error) throw error;
+          setFirstName(data.user?.user_metadata?.first_name ?? "friend");
+        } catch (err) {
+          Sentry.captureException(err, {
+            tags: { area: "onboarding_client", kind: "auth_get_user_failed" },
+          });
+          setFirstName("friend");
+        }
+      })();
+    }, []);
+
+The fallback string ("friend" / empty / a neutral greeting) is
+intentional — the user experience degrades gracefully — but the
+Sentry capture ensures an operator can diagnose WHY the fallback
+fired. Tag with `kind=auth_get_user_failed` (or similar) so it's
+distinguishable from other auth captures.
+
+Apply when:
+- Any client component reads user metadata to personalize visible
+  copy, avatars, or initial form state.
+- The feature is designed to work without the user fetch (fallback
+  path exists).
+
+Don't apply when:
+- The feature can't proceed without user data (redirect to /login
+  on failure is the right escalation, not a silent fallback).
+- Server-component fetch (a thrown error already surfaces as a 500
+  page, which is its own signal).
+
+§16.31 Pure lookup tables: placement optimizes for test importability
+
+Pending cross-app validation.
+
+A pure const lookup table — `Record<K, V>` with no runtime state, no
+I/O, no dependencies — should live where unit tests can import it as
+a binding-canary, not where the "semantic home" (e.g., the route
+file that consumes it) would suggest.
+
+The canary test iterates the map and asserts invariants: every key
+resolves to a valid value, every V appears in some expected downstream
+union, a rename in the K or V enum fails the test. The map is the
+silent-rename trap's weakest link — introducing a new key without
+updating the map, or mistyping a value ("before_send" vs
+"before-send"), are exactly the errors the canary catches.
+
+If the map lives in `src/app/api/.../route.ts`, tests can still import
+it (route files are importable), but the ergonomics fight you:
+route-file imports pull in Next.js server-only type noise, the test
+directory is far from the file, and a future reader sees
+`MODULE_TO_PATH` and thinks it's a route-internal helper — they edit
+the map and skip the test.
+
+WRONG — server-only placement for a pure lookup:
+
+    // src/app/api/onboarding/submit/route.ts
+    const MODULE_TO_PATH: Record<RecommendedModule, string> = {
+      prepare: "/coach/prepare",
+      before_send: "/coach/before-send",  // hyphen in path, underscore in key
+      ...
+    };
+
+RIGHT — pure lookups live in a testable module:
+
+    // src/lib/onboarding.ts
+    export const MODULE_TO_PATH: Record<RecommendedModule, string> = {
+      prepare: "/coach/prepare",
+      before_send: "/coach/before-send",
+      ...
+    };
+
+    // src/lib/__tests__/onboarding.test.ts
+    it("MODULE_TO_PATH has an entry for every RecommendedModule", () => {
+      for (const m of RECOMMENDED_MODULES) expect(MODULE_TO_PATH[m]).toBeTruthy();
+    });
+    it("MODULE_TO_PATH translates underscores to hyphens in paths", () => {
+      expect(MODULE_TO_PATH.before_send).toBe("/coach/before-send");
+    });
+
+First-instinct placement is the file that uses the map; override
+for testability.
+
+Apply to:
+- Any pure `Record<K, V>` lookup where K is an enum/union and V is
+  a string/URL/identifier.
+- Any mapping table that encodes a silent-rename trap (key shape
+  differs from value shape, e.g., snake_case → kebab-case, or
+  internal → external id translation).
+
+Don't apply to:
+- Helpers that encapsulate I/O or server-only state (createClient,
+  service role accessors). Those belong in server-only files.
+- Lookups generated from a Zod enum via `.options` / `.enum` — the
+  enum IS the canary; a second map isn't needed.
+
+Related: §16.21 (enum-tuple binding). This is the runtime-map
+counterpart: §16.21 binds prompt strings to the enum, §16.31 binds
+runtime lookup values to the enum.
+
+§16.32 Don't bump algorithm-version when the algorithm didn't change
+
+Pending cross-app validation.
+
+A `*_VERSION` / `generator_version` / `schema_version` constant is
+a contract with downstream analysis: "rows with this version were
+produced by this algorithm." Bumping the version when only a
+presentation or routing concern changed — not the algorithm itself
+— lies to cohort analysis that depends on the contract.
+
+The flip side of §16.17 (bump on shape change): DON'T bump on
+non-shape changes. The trap is a reviewer flagging "you changed
+the scoring file, bump SCORING_VERSION" as an uncritical
+review-fix. The reviewer is correct that the file changed, but the
+algorithm may not have.
+
+Example: a quiz routes users to different next screens based on
+the final question. Changing the routing table (A → /foo, B → /bar
+becomes A → /baz, B → /bar) is NOT an algorithm change. The
+computed score is identical. Bumping SCORING_VERSION would make
+a dashboard split "v1 vs v2" users, but v1 and v2 would be
+scored identically — the split would encode "who took the quiz
+before vs after the routing change", which is a deploy-time fact,
+not an algorithm fact.
+
+If cohort disambiguation is actually needed across the routing
+change, use a different signal — a field that records the routing
+decision, or a null sentinel on a deprecated field — rather than
+inflating the version.
+
+Rules:
+- Bump the version constant iff the OUTPUT of the algorithm has
+  changed for at least some input. Shape change (new field,
+  nullable-ification) always qualifies. Algorithm change (different
+  classifier, different weights, different normalization) always
+  qualifies.
+- Routing changes, copy changes, UI changes, downstream-consumer
+  changes do NOT qualify. Same input → same output → same version.
+- If a reviewer asks "why didn't you bump the version?", the answer
+  should be "because for every possible input, the output is
+  bit-identical to before." If that's not true, bump.
+
+Apply to:
+- Any `*_VERSION` / `generator_version` / `schema_version` constant
+  paired with a DB column of the same name.
+- Any write-path that stamps the version into a persisted row.
+
+Don't apply to:
+- A generic `build_version` / `deploy_sha` stamped on every row
+  unconditionally — that's a deploy trace, not an algorithm
+  contract. Changes on every deploy are expected.
