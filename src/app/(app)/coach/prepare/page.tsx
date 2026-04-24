@@ -213,7 +213,10 @@ export default function PreparePage() {
     idempotencyKeyRef.current = safeUUID();
   }
 
-  const STEPS = path === "path_a" ? STEPS_PATH_A : STEPS_PATH_B;
+  // Default to Path A when path is null (pre-entry-choice). Early returns
+  // gate render before STEPS is read today, so no bug fires either way,
+  // but Path A is the happier default if the render path ever moves.
+  const STEPS = path === "path_b" ? STEPS_PATH_B : STEPS_PATH_A;
   const currentStep = path ? STEPS[step] : null;
   const value = currentStep ? data[currentStep.key] || "" : "";
 
