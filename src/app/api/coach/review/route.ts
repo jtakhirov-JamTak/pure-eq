@@ -28,7 +28,11 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "review_entry_id",
   aiJsonColumn: "ai_reflection_json",
   aiVersionColumn: "ai_reflection_version",
-  aiVersionValue: 5,
+  // 2026-04-23: bump 5 → 6 alongside PROMPT_VERSION 3.1.0 → 4.0.0 and the
+  // nullable-action-field shape change (what_to_own, thing_not_to_say).
+  // Distinguishes post-shape rows that may contain explicit null action
+  // values from legacy 5-rows that guaranteed non-null strings.
+  aiVersionValue: 6,
 
   buildPayloadFields: (input) => ({
     whatHappened: input.whatHappened,

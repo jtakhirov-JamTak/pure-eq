@@ -37,7 +37,10 @@ const configA: CoachModuleConfig<InputA, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  aiVersionValue: 5,
+  // 2026-04-23: bump 5 → 6 alongside PROMPT_VERSION 3.1.0 → 4.0.0 and the
+  // nullable-action-field shape change (best_next_move). Distinguishes
+  // post-shape rows that may contain explicit null from legacy 5-rows.
+  aiVersionValue: 6,
 
   buildPayloadFields: (input) => ({
     path: "path_a",
@@ -106,7 +109,9 @@ const configB: CoachModuleConfig<InputB, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  aiVersionValue: 5,
+  // Same 5 → 6 bump as Path A — they share the same derived table and
+  // ai_plan_json shape.
+  aiVersionValue: 6,
 
   buildPayloadFields: (input) => ({
     path: "path_b",
