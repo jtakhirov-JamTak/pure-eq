@@ -128,11 +128,11 @@ describe("prepareOutputSchema", () => {
     expect(prepareOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects a best_next_move over 300 chars", () => {
+  it("rejects a best_next_move over 120 chars", () => {
     expect(
       prepareOutputSchema.safeParse({
         ...validPrepareNormal,
-        best_next_move: "a".repeat(301),
+        best_next_move: "a".repeat(121),
       }).success,
     ).toBe(false);
   });

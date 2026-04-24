@@ -181,8 +181,10 @@ export function checkBannedPhrases(text: string): string | null {
 
 // Action-copy fields that must be verb + object + trigger, or null.
 // stripGeneric nullifies filler like "be more patient" so the navy
-// action card is a pure function of the payload.
-const ACTION_FIELDS = new Set([
+// action card is a pure function of the payload. Exported so renderers
+// can drive action-vs-non-action UI off the same taxonomy (single
+// source of truth — add/rename here and everywhere stays in sync).
+export const ACTION_FIELDS = new Set([
   "best_next_move",
   "what_to_own",
   "thing_not_to_say",
@@ -191,30 +193,37 @@ const ACTION_FIELDS = new Set([
 
 // Generic-filler rules. Each has a stable `name` so Sentry's `pattern`
 // tag is filterable by human-readable label, not a regex literal.
+// Exact-match rules come first so "be more patient." gets tagged
+// `exact_be_more_patient` (specific) rather than `leading_be` (generic)
+// — first-match-wins means order drives Sentry triage fidelity.
 // `leading_try_to` requires a trailing space so "Try a Prepare..." does
 // not match.
 const GENERIC_RULES: { name: string; test: RegExp }[] = [
+  { name: "exact_be_more_patient", test: /^be more patient\.?$/i },
+  { name: "exact_listen_more", test: /^listen more\.?$/i },
+  { name: "exact_communicate_better", test: /^communicate better\.?$/i },
   { name: "leading_be", test: /^be\s/i },
   { name: "leading_try_to", test: /^try to\s/i },
   { name: "leading_remember_to", test: /^remember to\s/i },
   { name: "leading_dont_forget", test: /^don't forget\s/i },
   { name: "leading_consider", test: /^consider\s/i },
   { name: "leading_maybe", test: /^maybe\s/i },
-  { name: "exact_be_more_patient", test: /^be more patient\.?$/i },
-  { name: "exact_listen_more", test: /^listen more\.?$/i },
-  { name: "exact_communicate_better", test: /^communicate better\.?$/i },
 ];
 
-// Module-level cooldown latch — mirrors src/lib/rate-limit.ts upstash
-// capture latch. Caps captures at one per 5 min per instance during a
-// bad-prompt or model-drift incident.
+// Per-(field, pattern) cooldown Map — mirrors src/lib/read-capture.ts
+// helper shape. One-counter-across-all-rules would collapse distinct
+// model-drift events (e.g., best_next_move drifting to "try to" AND
+// thing_to_cut drifting to "be more") into one Sentry event. Per-key
+// latching keeps triage precise while still preventing outage-flood.
 const GENERIC_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
-let lastGenericCaptureAt = 0;
+const lastGenericCaptures = new Map<string, number>();
 
 function captureGenericNullification(field: string, pattern: string): void {
+  const key = `${field}:${pattern}`;
   const now = Date.now();
-  if (now - lastGenericCaptureAt < GENERIC_CAPTURE_COOLDOWN_MS) return;
-  lastGenericCaptureAt = now;
+  const last = lastGenericCaptures.get(key) ?? 0;
+  if (now - last < GENERIC_CAPTURE_COOLDOWN_MS) return;
+  lastGenericCaptures.set(key, now);
   // sentry-scrub.ts redacts exception.values[*].value, so tags carry
   // the triage signal. NEVER put the original string in the event —
   // the scrubber drops it anyway.
@@ -224,19 +233,22 @@ function captureGenericNullification(field: string, pattern: string): void {
 }
 
 /**
- * Validate all string fields in an AI output object for banned phrases,
- * then nullify action-copy fields that match a generic-filler rule.
+ * Walk AI output for banned phrases (throws), then nullify action-copy
+ * fields that match a generic-filler rule (mutates in place AND returns
+ * the same reference).
  *
- * Returns true on success, throws on banned phrase. Mutates the input
- * object in place for stripGeneric — callers using the same reference
- * downstream pick up the nullification automatically.
+ * Returning `T` is not just syntactic — it signals to the caller that
+ * this function may change the object it was given. Bind the return if
+ * you want the stripped view downstream; callers that hold the same
+ * reference pick up the mutation either way.
  *
- * Walks top-level keys only. The discriminated-union outputs in this
- * file are flat (no nested objects), so this catches every user-visible
- * string. The Reflection generator has its own per-observation walker
+ * Walks top-level keys only. The discriminated-union coach outputs are
+ * flat; the Reflection generator has its own per-observation walker
  * because evidence[*].quote is nested.
  */
-export function validateAIOutput(output: Record<string, unknown>): boolean {
+export function validateAIOutput<T extends Record<string, unknown>>(
+  output: T,
+): T {
   for (const [key, value] of Object.entries(output)) {
     if (typeof value === "string") {
       const banned = checkBannedPhrases(value);
@@ -252,11 +264,11 @@ export function validateAIOutput(output: Record<string, unknown>): boolean {
     if (typeof value !== "string" || value.trim().length === 0) continue;
     for (const rule of GENERIC_RULES) {
       if (rule.test.test(value)) {
-        output[key] = null;
+        (output as Record<string, unknown>)[key] = null;
         captureGenericNullification(key, rule.name);
         break;
       }
     }
   }
-  return true;
+  return output;
 }

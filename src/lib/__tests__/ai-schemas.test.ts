@@ -34,13 +34,13 @@ describe("validateAIOutput", () => {
     expect(() => validateAIOutput(output)).toThrow("field2");
     expect(() => validateAIOutput(output)).toThrow("You are someone who");
 
-    // Clean output returns true
-    expect(
-      validateAIOutput({
-        field1: "You tend to withdraw under pressure",
-        field2: "A repeated pattern is defensiveness",
-      })
-    ).toBe(true);
+    // Clean output returns the (possibly-mutated) object — in-place
+    // mutation is signalled by the T → T signature.
+    const clean = {
+      field1: "You tend to withdraw under pressure",
+      field2: "A repeated pattern is defensiveness",
+    };
+    expect(validateAIOutput(clean)).toBe(clean);
   });
 });
 

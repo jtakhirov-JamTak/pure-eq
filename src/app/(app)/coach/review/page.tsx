@@ -6,6 +6,7 @@ import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import ThreadPicker from "@/components/thread-picker";
 import { isRefusal } from "@/lib/coach/output-shape";
+import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
@@ -515,8 +516,7 @@ export default function ReviewPage() {
             </p>
             <div className="mt-2 space-y-3">
               {repairVisible.map(({ label, key }) => {
-                const isAction =
-                  key === "what_to_own" || key === "thing_not_to_say";
+                const isAction = ACTION_FIELDS.has(key);
                 return (
                   <div
                     key={key}

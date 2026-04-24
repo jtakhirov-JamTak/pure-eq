@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { isRefusal } from "@/lib/coach/output-shape";
+import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { safeUUID } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -311,7 +312,7 @@ export default function BeforeYouSendPage() {
               const v = aiOutput[key];
               return typeof v === "string" && v.trim().length > 0;
             }).map(({ label, key }) => {
-              const isAction = key === "thing_to_cut";
+              const isAction = ACTION_FIELDS.has(key);
               return (
                 <div
                   key={key}

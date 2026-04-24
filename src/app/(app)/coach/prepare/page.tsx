@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { isRefusal } from "@/lib/coach/output-shape";
+import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
@@ -108,7 +109,7 @@ function NormalResultCard({
       </h2>
       <div className="mt-5 space-y-3">
         {visible.map(({ label, key }) => {
-          const isAction = key === "best_next_move";
+          const isAction = ACTION_FIELDS.has(key);
           return (
             <div
               key={key}

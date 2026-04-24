@@ -404,12 +404,11 @@ export async function runCoachModule<
         throw new Error("schema mismatch");
       }
       try {
-        validateAIOutput(validated.data);
+        aiOutput = validateAIOutput(validated.data);
       } catch {
         lastFailureKind = "banned_phrase";
         throw new Error("banned phrase");
       }
-      aiOutput = validated.data;
       lastFailureKind = "none";
       break;
     } catch (err) {
