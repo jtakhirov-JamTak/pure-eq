@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import { GoogleGlyph } from "@/components/brand/GoogleGlyph";
 
 export default function SignupPage() {
   const [firstName, setFirstName] = useState("");
@@ -13,6 +14,24 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  async function handleGoogle() {
+    setError(null);
+    setAlreadyRegistered(false);
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback?next=/onboarding`,
+      },
+    });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
+    // Success: Supabase redirects the browser to Google's consent screen.
+  }
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault();
@@ -72,7 +91,26 @@ export default function SignupPage() {
           Start with your communication profile.
         </p>
 
-        <form onSubmit={handleSignup} className="mt-8 space-y-4">
+        <button
+          type="button"
+          onClick={handleGoogle}
+          disabled={loading}
+          aria-label="Continue with Google"
+          className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft transition active:scale-[0.98] disabled:opacity-50"
+        >
+          <GoogleGlyph />
+          Continue with Google
+        </button>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-hair" />
+          <span className="text-[12px] font-medium text-ink-muted">
+            or continue with email
+          </span>
+          <div className="h-px flex-1 bg-hair" />
+        </div>
+
+        <form onSubmit={handleSignup} className="space-y-4">
           <div>
             <label
               htmlFor="firstName"
@@ -156,7 +194,7 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-50"
+            className="flex h-14 w-full items-center justify-center rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft ring-1 ring-hair transition active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "Creating account..." : "Get started"}
           </button>

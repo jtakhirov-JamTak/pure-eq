@@ -5,12 +5,30 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import { GoogleGlyph } from "@/components/brand/GoogleGlyph";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  async function handleGoogle() {
+    setError(null);
+    setLoading(true);
+    const supabase = createClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/api/auth/callback?next=/onboarding`,
+      },
+    });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    }
+    // Success: Supabase redirects the browser to Google's consent screen.
+  }
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
@@ -54,7 +72,26 @@ export default function LoginPage() {
           Welcome back to SpeakEasy.
         </p>
 
-        <form onSubmit={handleLogin} className="mt-8 space-y-4">
+        <button
+          type="button"
+          onClick={handleGoogle}
+          disabled={loading}
+          aria-label="Continue with Google"
+          className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft transition active:scale-[0.98] disabled:opacity-50"
+        >
+          <GoogleGlyph />
+          Continue with Google
+        </button>
+
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-hair" />
+          <span className="text-[12px] font-medium text-ink-muted">
+            or continue with email
+          </span>
+          <div className="h-px flex-1 bg-hair" />
+        </div>
+
+        <form onSubmit={handleLogin} className="space-y-4">
           <div>
             <label
               htmlFor="email"
@@ -101,7 +138,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-50"
+            className="flex h-14 w-full items-center justify-center rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft ring-1 ring-hair transition active:scale-[0.98] disabled:opacity-50"
           >
             {loading ? "Logging in..." : "Log in"}
           </button>
