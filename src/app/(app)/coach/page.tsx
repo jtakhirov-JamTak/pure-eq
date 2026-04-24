@@ -1,8 +1,7 @@
-import { createClient, getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { SkyBackground } from "@/components/brand/SkyBackground";
-import { captureServerRead } from "@/lib/read-capture";
 import { readFirstName } from "@/lib/user-metadata";
 
 function firstNameFromEmail(email: string | null | undefined): string {
@@ -14,54 +13,14 @@ function firstNameFromEmail(email: string | null | undefined): string {
 }
 
 export default async function CoachPage() {
-  const t0 = Date.now();
   const {
     data: { user },
   } = await getAuthUser();
   if (!user) redirect("/login");
 
-  const supabase = await createClient();
-
-  const [threadsRes, personsRes] = await Promise.all([
-    supabase
-      .from("conversation_threads")
-      .select("thread_id, title, status, person_id, last_activity_at")
-      .eq("user_id", user.id)
-      .in("status", ["open", "stabilizing"])
-      .order("last_activity_at", { ascending: false })
-      .limit(3),
-    supabase
-      .from("persons")
-      .select("person_id, display_name")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .limit(100),
-  ]);
-
-  if (threadsRes.error) {
-    captureServerRead(
-      "coach_hub",
-      "conversation_threads",
-      new Error("conversation_threads_read_failed"),
-    );
-  }
-  if (personsRes.error) {
-    captureServerRead(
-      "coach_hub",
-      "persons",
-      new Error("persons_read_failed"),
-    );
-  }
-
-  const threads = threadsRes.data ?? [];
-  const personMap = new Map(
-    (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
-  );
   const firstName =
     readFirstName(user.user_metadata) || firstNameFromEmail(user.email);
   const greeting = firstName ? `Hi, ${firstName}.` : "Hi there.";
-
-  console.log(`[perf] coach hub ${Date.now() - t0}ms threads=${threads.length}`);
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
@@ -82,108 +41,72 @@ export default async function CoachPage() {
         </p>
       </div>
 
-      {/* Prepare card — primary */}
+      {/* Before You Send — hero */}
       <Link
-        href="/coach/prepare"
-        className="relative block rounded-card bg-surface p-5 shadow-card transition active:scale-[0.99]"
+        href="/coach/before-send"
+        className="relative block min-h-[184px] overflow-hidden rounded-card p-6 shadow-dark transition active:scale-[0.99]"
+        style={{
+          background: "linear-gradient(160deg, #FFD166 0%, #F39423 100%)",
+        }}
       >
-        <div className="mb-3 flex items-center gap-2">
-          <span className="rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
-            Prepare
-          </span>
-        </div>
-        <div
-          className="mb-1.5 font-display text-[26px] leading-[1.1] text-ink"
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink/70">
+          ~90 sec · quick check
+        </p>
+        <h2
+          className="mt-3 font-display text-[28px] leading-[1.1] text-ink"
           style={{ letterSpacing: "-0.6px" }}
         >
-          A conversation is <span className="italic">coming up</span>.
-        </div>
-        <p className="text-[14px] font-medium leading-[1.45] text-ink-soft">
-          Or something feels off. Get clear before you act.
+          You&rsquo;re about to <span className="italic">hit send</span>.
+        </h2>
+        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-ink/80">
+          Paste a draft. See how it will land before you regret it.
         </p>
       </Link>
 
-      {/* Before-You-Send + Review grid */}
+      {/* Prepare + Review grid */}
       <div className="mt-3.5 grid grid-cols-2 gap-2.5">
         <Link
-          href="/coach/before-send"
-          className="relative block overflow-hidden rounded-card-sm bg-surface p-4 shadow-soft transition active:scale-[0.98] min-h-[108px]"
+          href="/coach/prepare"
+          className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
+          style={{
+            background: "linear-gradient(160deg, #4FB0FF 0%, #2A86E3 100%)",
+          }}
         >
-          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.5px] text-ink">
-            Before you send
-          </span>
-          <div
-            className="mt-2 font-display text-[20px] italic leading-[1.2] text-ink"
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white opacity-85">
+            ~3 min · guided
+          </p>
+          <h2
+            className="mt-3 font-display text-[20px] leading-[1.1] text-white"
             style={{ letterSpacing: "-0.4px" }}
           >
-            Check
-          </div>
-          <p className="mt-1 text-[12px] font-medium leading-[1.4] text-ink-soft">
-            Paste a draft. See how it will land.
+            Coming <span className="italic">up</span>.
+          </h2>
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
+            A conversation you need to plan.
           </p>
         </Link>
 
         <Link
           href="/coach/review"
-          className="relative block overflow-hidden rounded-card-sm bg-surface p-4 shadow-soft transition active:scale-[0.98] min-h-[108px]"
+          className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
+          style={{
+            background: "linear-gradient(160deg, #3A4A66 0%, #1F2A42 100%)",
+          }}
         >
-          <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.5px] text-ink">
-            Review
-          </span>
-          <div
-            className="mt-2 font-display text-[20px] italic leading-[1.2] text-ink"
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-warm">
+            ~4 min · reflect
+          </p>
+          <h2
+            className="mt-3 font-display text-[20px] leading-[1.1] text-white"
             style={{ letterSpacing: "-0.4px" }}
           >
-            Reflect
-          </div>
-          <p className="mt-1 text-[12px] font-medium leading-[1.4] text-ink-soft">
-            A conversation just happened.
+            Just <span className="italic">happened</span>.
+          </h2>
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
+            Look at how it landed.
           </p>
         </Link>
       </div>
-
-      {/* Active conversations — only if threads exist */}
-      {threads.length > 0 && (
-        <div className="mt-4 rounded-card-xs bg-surface p-4 shadow-soft">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-              Active conversations
-            </p>
-            <Link
-              href="/coach/threads"
-              className="text-[13px] font-semibold text-brand active:opacity-70"
-            >
-              See all
-            </Link>
-          </div>
-          <ul className="divide-y divide-hair">
-            {threads.slice(0, 2).map((thread) => {
-              const personName = thread.person_id
-                ? (personMap.get(thread.person_id) ?? "Someone")
-                : "General";
-              return (
-                <li key={thread.thread_id}>
-                  <Link
-                    href={`/coach/threads/${thread.thread_id}`}
-                    className="flex items-center gap-3 py-2.5 active:opacity-70"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
-                      {personName}
-                    </span>
-                    <span className="shrink-0 text-[11px] font-medium text-ink-muted capitalize">
-                      {thread.status === "stabilizing" ? "stabilizing" : "open"}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
     </div>
   );
 }
