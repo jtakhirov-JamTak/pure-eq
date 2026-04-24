@@ -235,7 +235,17 @@ export default function PreparePage() {
     if (!currentStep) return;
     if (!value.trim()) return;
     if (step < STEPS.length - 1) {
-      setStep(step + 1);
+      let next = step + 1;
+      // Skip the relationship step when it was auto-filled from an
+      // existing person — the user already confirmed it on personName.
+      if (
+        STEPS[next]?.key === "relationship" &&
+        personId &&
+        data.relationship
+      ) {
+        next = Math.min(next + 1, STEPS.length - 1);
+      }
+      setStep(next);
     } else {
       handleSubmit();
     }
@@ -477,7 +487,17 @@ export default function PreparePage() {
       <div className="mt-6 flex gap-3">
         {step > 0 && (
           <button
-            onClick={() => setStep(step - 1)}
+            onClick={() => {
+              let prev = step - 1;
+              if (
+                STEPS[prev]?.key === "relationship" &&
+                personId &&
+                data.relationship
+              ) {
+                prev = Math.max(prev - 1, 0);
+              }
+              setStep(prev);
+            }}
             className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
           >
             Back
