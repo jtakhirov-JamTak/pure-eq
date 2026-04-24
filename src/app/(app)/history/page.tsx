@@ -8,9 +8,13 @@ import { captureServerRead } from "@/lib/read-capture";
 
 const PAGE_SIZE = 10;
 
+// Includes legacy `repair` so archived repair rows still surface in
+// /history. The `repair` surface itself was removed in the Coach redesign
+// (2026-04-23); new repair content ships inside review_entries.
 const DELETABLE_TYPES = [
   "prepare",
   "review",
+  "before_you_send",
   "repair",
   "trigger_log",
   "overwhelmed",
@@ -19,6 +23,7 @@ const DELETABLE_TYPES = [
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   prepare: "Prepare",
   review: "Review",
+  before_you_send: "Before-Send",
   repair: "Repair",
   trigger_log: "Triggered",
   overwhelmed: "Overwhelmed",
@@ -84,6 +89,7 @@ export default async function HistoryPage() {
   const counts: Record<(typeof DELETABLE_TYPES)[number], number> = {
     prepare: 0,
     review: 0,
+    before_you_send: 0,
     repair: 0,
     trigger_log: 0,
     overwhelmed: 0,
@@ -118,7 +124,7 @@ export default async function HistoryPage() {
         Everything you&apos;ve completed, newest first.
       </p>
 
-      <div className="mt-5 grid grid-cols-5 gap-2">
+      <div className="mt-5 grid grid-cols-3 gap-2">
         {DELETABLE_TYPES.map((t) => (
           <div
             key={t}

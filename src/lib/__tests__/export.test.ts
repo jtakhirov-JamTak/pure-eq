@@ -109,17 +109,31 @@ describe("formatPrepareSection", () => {
       [
         {
           created_at: "2026-03-20T14:22:00.000Z",
+          path: "path_a",
           situation_text: "I want to ask for time off.",
           desired_outcome: "They understand why this matters.",
           primary_value: "", // empty → omitted
+          their_need: null,
+          how_to_make_them_feel: null,
+          what_feels_off: null,
+          what_changed: null,
+          story_telling_yourself: null,
+          afraid_it_means: null,
           person_id: "person-1",
           thread_id: "thread-1",
         },
         {
           created_at: "2026-03-10T09:00:00.000Z",
+          path: null, // legacy row
           situation_text: null, // null → omitted
           desired_outcome: "Clarity on the scope.",
           primary_value: "honesty",
+          their_need: null,
+          how_to_make_them_feel: null,
+          what_feels_off: null,
+          what_changed: null,
+          story_telling_yourself: null,
+          afraid_it_means: null,
           person_id: null,
           thread_id: null,
         },
@@ -141,17 +155,31 @@ describe("formatPrepareSection", () => {
       [
         {
           created_at: "2026-03-20T14:22:00.000Z",
+          path: null,
           situation_text: "a",
           desired_outcome: null,
           primary_value: null,
+          their_need: null,
+          how_to_make_them_feel: null,
+          what_feels_off: null,
+          what_changed: null,
+          story_telling_yourself: null,
+          afraid_it_means: null,
           person_id: null,
           thread_id: null,
         },
         {
           created_at: "2026-03-10T09:00:00.000Z",
+          path: null,
           situation_text: "b",
           desired_outcome: null,
           primary_value: null,
+          their_need: null,
+          how_to_make_them_feel: null,
+          what_feels_off: null,
+          what_changed: null,
+          story_telling_yourself: null,
+          afraid_it_means: null,
           person_id: null,
           thread_id: null,
         },
@@ -166,7 +194,7 @@ describe("formatPrepareSection", () => {
 });
 
 describe("formatReviewSection", () => {
-  it("renders all content-bearing fields that are present", () => {
+  it("renders all content-bearing legacy fields that are present", () => {
     const out = formatReviewSection(
       [
         {
@@ -179,6 +207,14 @@ describe("formatReviewSection", () => {
           what_hurt: "interrupting",
           validated_assumptions: "yes on one, no on the other",
           unresolved_and_next: "circle back Monday",
+          what_you_did: null,
+          what_you_avoided: null,
+          ask_before_understanding: null,
+          needs_to_happen_next: null,
+          repair_branch_active: false,
+          your_part: null,
+          secret_want: null,
+          could_make_them_feel: null,
           person_id: "person-2",
           thread_id: null,
         },
@@ -196,6 +232,39 @@ describe("formatReviewSection", () => {
     expect(out).toContain("Assumptions I validated:");
     expect(out).toContain("Unresolved — and what's next:");
     expect(out).toContain("circle back Monday");
+  });
+
+  it("renders repair-branch fields only when repair_branch_active is true", () => {
+    const out = formatReviewSection(
+      [
+        {
+          created_at: "2026-03-20T14:22:00.000Z",
+          what_happened: "We talked.",
+          hardest_moment_feeling: "defensive",
+          observed_in_them: null,
+          their_experience: null,
+          what_helped: null,
+          what_hurt: null,
+          validated_assumptions: null,
+          unresolved_and_next: null,
+          what_you_did: "interrupted twice",
+          what_you_avoided: "the real ask",
+          ask_before_understanding: "no",
+          needs_to_happen_next: "apologize",
+          repair_branch_active: true,
+          your_part: "starting defensive",
+          secret_want: "to be right",
+          could_make_them_feel: "safe enough to disagree",
+          person_id: "person-2",
+          thread_id: null,
+        },
+      ],
+      personMap,
+      threadMap,
+    );
+    expect(out).toContain("What I did:");
+    expect(out).toContain("My part in this:");
+    expect(out).toContain("safe enough to disagree");
   });
 });
 

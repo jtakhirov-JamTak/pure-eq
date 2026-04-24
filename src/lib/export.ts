@@ -146,9 +146,29 @@ function entryHeader(
   return parts.join(" — ");
 }
 
+// Prepare rows span two shapes after the 2026-04-23 redesign:
+// - Path A (pre-conversation): situation_text, primary_value (legacy),
+//   plus new their_need + how_to_make_them_feel.
+// - Path B ("something feels off"): what_feels_off, what_changed,
+//   story_telling_yourself, afraid_it_means.
+// The `path` column is NULL on rows written before migration 0026 and
+// 'path_a'/'path_b' on everything after. The formatter handles all
+// three cases by field-presence: if a field is non-empty it renders.
 type PrepareRow = Pick<
   Tables["prepare_entries"]["Row"],
-  "created_at" | "situation_text" | "desired_outcome" | "primary_value" | "person_id" | "thread_id"
+  | "created_at"
+  | "path"
+  | "situation_text"
+  | "desired_outcome"
+  | "primary_value"
+  | "their_need"
+  | "how_to_make_them_feel"
+  | "what_feels_off"
+  | "what_changed"
+  | "story_telling_yourself"
+  | "afraid_it_means"
+  | "person_id"
+  | "thread_id"
 >;
 
 export function formatPrepareSection(
@@ -162,13 +182,28 @@ export function formatPrepareSection(
   const blocks: string[] = [];
   for (const r of rows) {
     const lines: string[] = [];
+    const pathLabel =
+      r.path === "path_a"
+        ? " — Conversation coming up"
+        : r.path === "path_b"
+          ? " — Something feels off"
+          : "";
     lines.push(
-      entryHeader(r.created_at, r.person_id, personMap, r.thread_id, threadMap),
+      entryHeader(r.created_at, r.person_id, personMap, r.thread_id, threadMap) +
+        pathLabel,
     );
     lines.push("");
+    // Path A / legacy
     appendField(lines, "Situation", r.situation_text);
     appendField(lines, "Desired outcome", r.desired_outcome);
     appendField(lines, "What matters to me", r.primary_value);
+    appendField(lines, "What they might need", r.their_need);
+    appendField(lines, "How I want them to feel", r.how_to_make_them_feel);
+    // Path B
+    appendField(lines, "What feels off", r.what_feels_off);
+    appendField(lines, "What changed", r.what_changed);
+    appendField(lines, "Story I'm telling myself", r.story_telling_yourself);
+    appendField(lines, "What I'm afraid it means", r.afraid_it_means);
     blocks.push(lines.join("\n"));
   }
   return section(
@@ -177,6 +212,11 @@ export function formatPrepareSection(
   );
 }
 
+// Review rows span two shapes after the 2026-04-23 redesign. Legacy
+// rows carry what_helped / what_hurt / validated_assumptions /
+// unresolved_and_next. New rows carry what_you_did / what_you_avoided /
+// ask_before_understanding / needs_to_happen_next and (when the repair
+// branch fired) your_part / secret_want / could_make_them_feel.
 type ReviewRow = Pick<
   Tables["review_entries"]["Row"],
   | "created_at"
@@ -188,6 +228,14 @@ type ReviewRow = Pick<
   | "what_hurt"
   | "validated_assumptions"
   | "unresolved_and_next"
+  | "what_you_did"
+  | "what_you_avoided"
+  | "ask_before_understanding"
+  | "needs_to_happen_next"
+  | "repair_branch_active"
+  | "your_part"
+  | "secret_want"
+  | "could_make_them_feel"
   | "person_id"
   | "thread_id"
 >;
@@ -211,10 +259,48 @@ export function formatReviewSection(
     appendField(lines, "Hardest moment — what I was feeling", r.hardest_moment_feeling);
     appendField(lines, "What I observed in them", r.observed_in_them);
     appendField(lines, "Their experience", r.their_experience);
+    // New shape
+    appendField(lines, "What I did", r.what_you_did);
+    appendField(lines, "What I avoided", r.what_you_avoided);
+    appendField(lines, "Did I ask before assuming", r.ask_before_understanding);
+    appendField(lines, "What needs to happen next", r.needs_to_happen_next);
+    if (r.repair_branch_active) {
+      appendField(lines, "My part in this", r.your_part);
+      appendField(lines, "What I secretly want from them", r.secret_want);
+      appendField(lines, "What I want them to feel after the repair", r.could_make_them_feel);
+    }
+    // Legacy shape
     appendField(lines, "What helped", r.what_helped);
     appendField(lines, "What hurt", r.what_hurt);
     appendField(lines, "Assumptions I validated", r.validated_assumptions);
     appendField(lines, "Unresolved — and what's next", r.unresolved_and_next);
+    blocks.push(lines.join("\n"));
+  }
+  return section(
+    title,
+    truncationPrefix(truncated) + blocks.join(`\n\n${ENTRY_SEP}\n\n`) + "\n",
+  );
+}
+
+// Before-You-Send: new in the 2026-04-23 redesign. No person or thread.
+type BeforeYouSendRow = Pick<
+  Tables["before_you_send_entries"]["Row"],
+  "created_at" | "draft_text" | "message_type" | "intent_optional"
+>;
+
+export function formatBeforeYouSendSection(
+  rows: BeforeYouSendRow[],
+  truncated = false,
+): string {
+  const title = `Before-You-Send drafts (${rows.length})`;
+  if (rows.length === 0) return emptySection(title);
+  const blocks: string[] = [];
+  for (const r of rows) {
+    const lines: string[] = [];
+    lines.push(`[${formatDate(r.created_at)}] — ${r.message_type}`);
+    lines.push("");
+    appendField(lines, "Draft", r.draft_text);
+    appendField(lines, "Intent I wanted to land", r.intent_optional);
     blocks.push(lines.join("\n"));
   }
   return section(
@@ -450,6 +536,7 @@ export async function buildExportText(
     prepareRes,
     reviewRes,
     repairRes,
+    beforeYouSendRes,
     triggerRes,
     overwhelmedRes,
     personsRes,
@@ -477,7 +564,7 @@ export async function buildExportText(
     supabase
       .from("prepare_entries")
       .select(
-        "created_at, situation_text, desired_outcome, primary_value, person_id, thread_id",
+        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)
@@ -487,7 +574,7 @@ export async function buildExportText(
     supabase
       .from("review_entries")
       .select(
-        "created_at, what_happened, hardest_moment_feeling, observed_in_them, their_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, person_id, thread_id",
+        "created_at, what_happened, hardest_moment_feeling, observed_in_them, their_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, repair_branch_active, your_part, secret_want, could_make_them_feel, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)
@@ -498,6 +585,16 @@ export async function buildExportText(
       .from("repair_entries")
       .select(
         "created_at, what_needs_repair, your_responsibility, their_need, desired_outcome, channel, timing, person_id, thread_id",
+      )
+      .eq("user_id", userId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .limit(ROW_CAP),
+
+    supabase
+      .from("before_you_send_entries")
+      .select(
+        "created_at, draft_text, message_type, intent_optional",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)
@@ -556,6 +653,7 @@ export async function buildExportText(
   if (prepareRes.error) errors.push(`prepare(${prepareRes.error.code ?? "?"})`);
   if (reviewRes.error) errors.push(`review(${reviewRes.error.code ?? "?"})`);
   if (repairRes.error) errors.push(`repair(${repairRes.error.code ?? "?"})`);
+  if (beforeYouSendRes.error) errors.push(`before_you_send(${beforeYouSendRes.error.code ?? "?"})`);
   if (triggerRes.error) errors.push(`trigger(${triggerRes.error.code ?? "?"})`);
   if (overwhelmedRes.error) errors.push(`overwhelmed(${overwhelmedRes.error.code ?? "?"})`);
   if (personsRes.error) errors.push(`persons(${personsRes.error.code ?? "?"})`);
@@ -579,6 +677,7 @@ export async function buildExportText(
   const prepareRows = prepareRes.data ?? [];
   const reviewRows = reviewRes.data ?? [];
   const repairRows = repairRes.data ?? [];
+  const beforeYouSendRows = beforeYouSendRes.data ?? [];
   const triggerRows = triggerRes.data ?? [];
   const overwhelmedRows = overwhelmedRes.data ?? [];
 
@@ -587,6 +686,7 @@ export async function buildExportText(
     formatProfileSection(profileRes.data, onboardingRawRes.data),
     formatPrepareSection(prepareRows, personMap, threadMap, prepareRows.length >= ROW_CAP),
     formatReviewSection(reviewRows, personMap, threadMap, reviewRows.length >= ROW_CAP),
+    formatBeforeYouSendSection(beforeYouSendRows, beforeYouSendRows.length >= ROW_CAP),
     formatRepairSection(repairRows, personMap, threadMap, repairRows.length >= ROW_CAP),
     formatTriggerSection(triggerRows, personMap, triggerRows.length >= ROW_CAP),
     formatOverwhelmedSection(overwhelmedRows, overwhelmedRows.length >= ROW_CAP),

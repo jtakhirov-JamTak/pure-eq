@@ -19,6 +19,7 @@ const MAX_BATCH_SIZE = 10;
 const DERIVED_TABLE = {
   prepare: "prepare_entries",
   review: "review_entries",
+  before_you_send: "before_you_send_entries",
   repair: "repair_entries",
   trigger_log: "trigger_entries",
   overwhelmed: "overwhelmed_entries",
@@ -135,6 +136,12 @@ export async function softDeleteEntries(
         case "review":
           return supabase
             .from("review_entries")
+            .update({ deleted_at: now })
+            .eq("user_id", user.id)
+            .in("raw_record_id", ids);
+        case "before_you_send":
+          return supabase
+            .from("before_you_send_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);

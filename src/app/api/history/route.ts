@@ -7,9 +7,12 @@ import { requirePaidAccessApi } from "@/lib/require-access";
 
 export const runtime = "nodejs";
 
+// Includes legacy `repair` so archived repair rows still surface in the
+// list. See /history/page.tsx for the full rationale.
 const DELETABLE_TYPES = [
   "prepare",
   "review",
+  "before_you_send",
   "repair",
   "trigger_log",
   "overwhelmed",
@@ -18,6 +21,7 @@ const DELETABLE_TYPES = [
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   prepare: "Prepare",
   review: "Review",
+  before_you_send: "Before-Send",
   repair: "Repair",
   trigger_log: "Triggered",
   overwhelmed: "Overwhelmed",
