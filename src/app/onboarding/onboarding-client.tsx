@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import * as Sentry from "@sentry/nextjs";
 import type { ProfileResult } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { SkyBackground } from "@/components/brand/SkyBackground";
@@ -98,9 +99,21 @@ export default function OnboardingClient() {
     (async () => {
       try {
         const supabase = createClient();
-        const {
-          data: { user },
-        } = await supabase.auth.getUser();
+        let user: Awaited<
+          ReturnType<typeof supabase.auth.getUser>
+        >["data"]["user"] = null;
+        try {
+          const { data } = await supabase.auth.getUser();
+          user = data.user;
+        } catch (err) {
+          // Supabase outage / network failure: capture to Sentry so we don't
+          // silently degrade to the "friend" greeting + a fall-through to the
+          // question UI with no operator signal. The effect's outer try/finally
+          // still flips flushing=false so the user can complete the quiz.
+          Sentry.captureException(err, {
+            tags: { area: "onboarding_client", kind: "auth_get_user_failed" },
+          });
+        }
 
         if (user && !cancelled) {
           setFirstName(readFirstName(user.user_metadata));

@@ -174,7 +174,6 @@ export async function POST(req: Request) {
     profile: {
       primary: result.primary,
       secondary: result.secondary,
-      improvementGoal: result.improvementGoal,
       recommendedModule: result.recommendedModule,
     },
   });

@@ -1,7 +1,7 @@
 // Pure EQ domain — replace in fork.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import type { ProfileType, ProfileResult, ImprovementGoal } from "@/types";
+import type { ProfileType, ProfileResult } from "@/types";
 
 export type QuizOption = "A" | "B" | "C" | "D" | "E";
 
@@ -229,12 +229,12 @@ export function scoreProfile(answers: (QuizOption | null)[]): ProfileResult {
       : "prepare";
   const recommendedModule = clampToEnabledModule(naturalModule);
 
-  // improvementGoal is deprecated post-forecast-rewrite. Kept on ProfileResult
-  // for back-compat with stored payload_json rows; new submissions write the
-  // sentinel "staying_calm". Delete when payload_json is migrated.
-  const improvementGoal: ImprovementGoal = "staying_calm";
-
-  return { primary, secondary, scores, improvementGoal, recommendedModule };
+  // improvementGoal is deprecated post-forecast-rewrite. New submissions
+  // write null; readers disambiguate post-rewrite cohorts via created_at.
+  // Writing a sentinel "staying_calm" would lie to future analytics queries
+  // that filter WHERE improvement_goal='staying_calm' — they'd conflate
+  // post-rewrite users with pre-rewrite users who legitimately picked Q9-A.
+  return { primary, secondary, scores, improvementGoal: null, recommendedModule };
 }
 
 // ---------- Result screen content ----------

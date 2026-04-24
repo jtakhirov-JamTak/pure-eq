@@ -22,9 +22,11 @@ describe("scoreProfile", () => {
     expect(result.scores.direct).toBe(13);
     expect(result.scores.intense).toBe(4); // Q4-A=intense(2) + Q5-A=intense(2)
     expect(result.secondary).toBe("intense");
-    // Forecast-era: improvementGoal is a deprecated sentinel; routing comes
-    // from FORECAST_MAPPING, not the old aspiration enum.
-    expect(result.improvementGoal).toBe("staying_calm");
+    // Forecast-era: improvementGoal is null on every new submission; routing
+    // comes from FORECAST_MAPPING. Writing the old "staying_calm" sentinel
+    // would conflate post-rewrite users with pre-rewrite Q9-A users in any
+    // future analytics query.
+    expect(result.improvementGoal).toBeNull();
     expect(result.recommendedModule).toBe("prepare"); // Q9-A → "Hard convo incoming"
   });
 

@@ -45,7 +45,10 @@ export interface ProfileResult {
   primary: ProfileType;
   secondary: ProfileType | null;
   scores: Record<ProfileType, number>;
-  improvementGoal: ImprovementGoal;
+  // Deprecated post-forecast Q9 rewrite. New submissions write null; reads
+  // disambiguate cohorts via user_profiles.created_at. Field stays on the
+  // type so existing payload_json rows remain typeable on legacy reads.
+  improvementGoal: ImprovementGoal | null;
   recommendedModule: "prepare" | "review" | "repair" | "before_send";
 }
 

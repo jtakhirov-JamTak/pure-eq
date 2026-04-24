@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/brand/Wordmark";
@@ -14,7 +14,22 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [alreadyRegistered, setAlreadyRegistered] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(false);
   const oauthInFlight = useRef(false);
+
+  // iOS PWA standalone mode opens OAuth in Safari, not the PWA itself —
+  // session cookie lands in the wrong storage and the app never sees it.
+  // Detected client-side after mount; flash from "Continue with Google" to
+  // the warning is acceptable for this edge case.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const standalone =
+      window.matchMedia?.("(display-mode: standalone)").matches ||
+      ("standalone" in window.navigator &&
+        (window.navigator as Navigator & { standalone?: boolean })
+          .standalone === true);
+    setIsStandalone(Boolean(standalone));
+  }, []);
 
   async function handleGoogle() {
     if (oauthInFlight.current) return;
@@ -98,13 +113,20 @@ export default function SignupPage() {
         <button
           type="button"
           onClick={handleGoogle}
-          disabled={loading}
+          disabled={loading || isStandalone}
           aria-label="Continue with Google"
           className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft transition active:scale-[0.98] disabled:opacity-50"
         >
           <GoogleGlyph />
           Continue with Google
         </button>
+
+        {isStandalone && (
+          <p className="mt-2 text-center text-[12px] font-medium leading-[1.4] text-ink-soft">
+            Google sign-in works in Safari, not the Home Screen app. Use email
+            below, or open SpeakEasy from Safari to use Google.
+          </p>
+        )}
 
         <div className="my-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-hair" />
