@@ -133,8 +133,13 @@ export async function runCoachModule<
   const userProfile = rawProfile as ProfileType;
 
   // 7. Resolve person_id.
+  // Skip the entire block when personBehavior === "skip" (used by
+  // Before-You-Send, which has no person concept). effectivePersonId
+  // stays null and downstream insert paths write null person_id.
   let effectivePersonId: string | null = input.personId ?? null;
-  if (effectivePersonId) {
+  if (config.personBehavior === "skip") {
+    effectivePersonId = null;
+  } else if (effectivePersonId) {
     const owns = await verifyPersonOwnership(supabase, user.id, effectivePersonId);
     if (!owns) {
       return NextResponse.json({ error: "Invalid person" }, { status: 400 });
@@ -191,8 +196,12 @@ export async function runCoachModule<
   // Auto-link (read-only: find existing thread) runs before idempotency so
   // retries still get a thread_id. Auto-create (write: make a new thread)
   // stays inside the idempotency guard per the side-effects lesson.
+  // threadBehavior === "none" (BYS) skips entirely; effectiveThreadId
+  // stays null and the auto_create branch at step 9b is also no-op.
   let effectiveThreadId: string | null = input.threadId ?? null;
-  if (config.threadBehavior === "auto_link") {
+  if (config.threadBehavior === "none") {
+    effectiveThreadId = null;
+  } else if (config.threadBehavior === "auto_link") {
     // Review/Repair: auto-link to most recent open thread < 7 days.
     if (!effectiveThreadId && effectivePersonId) {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -228,6 +237,12 @@ export async function runCoachModule<
     console.error(`${name}: idempotency check failed`, existingErr.code);
     return NextResponse.json({ error: "Could not save entry" }, { status: 500 });
   }
+
+  // Build the prompt once. Needed for step 10 (persist prompt_version
+  // into payload_json) AND step 12 (the actual AI call). buildPrompt is
+  // pure / cheap; building it before the idempotency branch keeps both
+  // the new-row write path and the retry path on the same prompt object.
+  const prompt = config.buildPrompt(input as TInput, userProfile);
 
   let rawRecordId: string;
   if (existingRaw) {
@@ -273,6 +288,9 @@ export async function runCoachModule<
     }
 
     // 10. Insert raw_records.
+    // Persist prompt_version into payload_json (closes Pure_EQ_Final.txt
+    // §1596 — every Coach output should be traceable to the prompt
+    // revision that produced it).
     const { data: rawInserted, error: rawErr } = await supabase
       .from("raw_records")
       .insert({
@@ -283,6 +301,7 @@ export async function runCoachModule<
         payload_json: {
           fields: config.buildPayloadFields(input as TInput),
           profile_used: userProfile,
+          prompt_version: prompt.prompt_version ?? null,
         } as unknown as Json,
         schema_version: 1,
         is_complete: true,
@@ -347,8 +366,7 @@ export async function runCoachModule<
     derivedEntryId = (derivedInsert.data as Record<string, string>)[config.derivedIdColumn];
   }
 
-  // 12. Call Claude.
-  const prompt = config.buildPrompt(input as TInput, userProfile);
+  // 12. Call Claude. Reuses the prompt built before the idempotency branch.
   const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
   let aiOutput: TAiOutput | null = null;
   let lastFailureKind = "none";

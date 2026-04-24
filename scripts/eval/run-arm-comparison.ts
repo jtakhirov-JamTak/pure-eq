@@ -1,3 +1,12 @@
+// NEEDS UPDATE — Coach redesign 2026-04-23 (commit 2+3) replaced
+// buildPreparePrompt → Path A/B split, dropped repairOutputSchema +
+// buildRepairPrompt entirely, and changed the Review schema fields. This
+// script is excluded from tsc (see tsconfig.json "scripts/eval") until
+// rewritten against the new prompt set. Last successful run: 2026-04-20
+// (memory project_coach_ai_config_pinned.md). Re-eval against the new
+// prompts is a separate engineering task; until then `npm run eval:arms`
+// will not type-check.
+//
 // Offline eval harness: compare 6 Claude Sonnet 4.6 config arms on historical
 // Prepare / Review / Repair entries. Admin-scoped (reads only the admin user's
 // own rows via service-role). Writes 3 CSV artifacts.

@@ -1,40 +1,15 @@
 import { z } from "zod";
-import { BANNED_PHRASES } from "@/types";
+import { BANNED_PHRASES, OBSERVATION_TAGS } from "@/types";
 
-// All string fields chain `.trim().min(1)` so a model returning "" or "   "
-// fails Zod parse server-side and the route retries or surfaces the
-// saved-but-no-ai fallback, rather than rendering an empty card in the UI.
-// 300-char cap unified across modules. Observed 268 chars on a concrete
-// behavior-level Review output (04-20 incident) — 200 was too tight;
-// 300 gives headroom while the BREVITY block in prompts.ts keeps typical
-// outputs well under the cap.
-export const prepareOutputSchema = z.object({
-  reality_check_question: z.string().trim().min(1).max(300),
-  thing_not_to_do: z.string().trim().min(1).max(300),
-  best_next_move: z.string().trim().min(1).max(300),
-});
+// ============================================================
+// Refusal output (shared across every Coach module + Reflection)
+// ============================================================
+// Coach v2 (2026-04-21) introduces refusal as a 1st-class output mode.
+// SAFETY_FLOOR in prompts.ts instructs the model to return this shape
+// instead of the normal coaching output when abuse, crisis, or
+// out-of-scope content is detected. The discriminated union on `mode`
+// makes the renderer dispatch trivial.
 
-export const repairOutputSchema = z.object({
-  repair_strategy: z.string().trim().min(1).max(300),
-  thing_not_to_say: z.string().trim().min(1).max(300),
-  recommended_timing: z.string().trim().min(1).max(300),
-});
-
-export const reviewOutputSchema = z.object({
-  how_user_likely_came_across: z.string().trim().min(1).max(300),
-  alternative_explanation: z.string().trim().min(1).max(300),
-});
-
-// Coach v2 refusal output. When the safety floor triggers (abuse, crisis,
-// or out-of-scope input), the model returns this shape instead of the
-// normal per-module coaching object. Defined standalone in this commit;
-// wired into per-module discriminated unions in a later commit.
-//
-// The REFUSAL_REASONS / REFUSAL_RESOURCES tuples are exported so that
-// `prompts.ts` can import and template-interpolate them into SAFETY_FLOOR.
-// Renaming a token breaks the `satisfies` check in prompts.ts at compile
-// time — preventing silent drift between the prompt text (what we ask
-// the model to emit) and the enum (what we accept back).
 export const REFUSAL_REASONS = ["safety_concern", "out_of_scope"] as const;
 export const REFUSAL_RESOURCES = [
   "988",
@@ -57,7 +32,94 @@ export const refusalShape = z.object({
 });
 
 // ============================================================
-// Weekly Insights reflection output (new, replaces tag-counter)
+// Prepare — discriminated union (Coach v2, 2026-04-23)
+// ============================================================
+// Both Path A ("I need to have a conversation") and Path B ("Something
+// feels off") produce the same AI output shape. The 5 user-visible
+// cards: real_issue, reality_check_question, thing_not_to_do,
+// they_might_need, best_next_move. Plus pattern_tag (display-only for v1).
+//
+// All string fields chain `.trim().min(1)` so a model returning "" or "   "
+// fails Zod parse server-side. 300-char cap unified across modules per
+// the 04-20 incident.
+
+const prepareNormalShape = z.object({
+  mode: z.literal("normal"),
+  real_issue: z.string().trim().min(1).max(300),
+  reality_check_question: z.string().trim().min(1).max(300),
+  thing_not_to_do: z.string().trim().min(1).max(300),
+  they_might_need: z.string().trim().min(1).max(300),
+  best_next_move: z.string().trim().min(1).max(300),
+  pattern_tag: z.enum(OBSERVATION_TAGS),
+});
+
+export const prepareOutputSchema = z.discriminatedUnion("mode", [
+  prepareNormalShape,
+  refusalShape,
+]);
+
+// ============================================================
+// Review — discriminated union with optional repair-branch fields
+// ============================================================
+// Review's output shape is conditional. Always shows 4 base cards
+// (how_you_came_across, impact_vs_intent, alternative_explanation,
+// question_you_missed). When the user's needs_to_happen_next select
+// triggers the repair branch AND they pass the readiness gate, the
+// model also fills 4 repair-branch fields (what_to_own, impact_on_them,
+// thing_not_to_say, recommended_timing).
+//
+// All 4 repair fields are .optional() — the prompt instructs the model
+// to populate them only when given the repair-branch context. The
+// renderer uses the same field-presence-filter pattern as before to
+// decide which cards to show.
+
+const reviewNormalShape = z.object({
+  mode: z.literal("normal"),
+  // Always required.
+  how_you_came_across: z.string().trim().min(1).max(300),
+  impact_vs_intent: z.string().trim().min(1).max(300),
+  alternative_explanation: z.string().trim().min(1).max(300),
+  question_you_missed: z.string().trim().min(1).max(300),
+  // Repair branch — populated only when repairBranchActive is true.
+  what_to_own: z.string().trim().min(1).max(300).optional(),
+  impact_on_them: z.string().trim().min(1).max(300).optional(),
+  thing_not_to_say: z.string().trim().min(1).max(300).optional(),
+  recommended_timing: z.string().trim().min(1).max(300).optional(),
+  pattern_tag: z.enum(OBSERVATION_TAGS),
+});
+
+export const reviewOutputSchema = z.discriminatedUnion("mode", [
+  reviewNormalShape,
+  refusalShape,
+]);
+
+// ============================================================
+// Before You Send — NEW (Coach redesign 2026-04-23)
+// ============================================================
+// Stateless verdict-only flow. User pastes a draft message + selects
+// message_type; model returns a verdict (safe | risky | do_not_send)
+// and 4 short fields. `thing_to_cut` should QUOTE the user's actual
+// words verbatim — the prompt enforces this.
+//
+// `do_not_send` triggers a red banner in the UI: "Do not send. This
+// message protects your ego more than the relationship."
+
+const beforeYouSendNormalShape = z.object({
+  mode: z.literal("normal"),
+  verdict: z.enum(["safe", "risky", "do_not_send"]),
+  how_this_will_land: z.string().trim().min(1).max(300),
+  what_its_missing: z.string().trim().min(1).max(300),
+  thing_to_cut: z.string().trim().min(1).max(300),
+  check_in_question: z.string().trim().min(1).max(300),
+});
+
+export const beforeYouSendOutputSchema = z.discriminatedUnion("mode", [
+  beforeYouSendNormalShape,
+  refusalShape,
+]);
+
+// ============================================================
+// Weekly Insights reflection output (unchanged from Insights rebuild)
 // ============================================================
 // Each observation MUST be grounded in at least one verbatim quote from
 // the user's own entries. The API route post-processes the response and
@@ -113,6 +175,11 @@ export function checkBannedPhrases(text: string): string | null {
 /**
  * Validate all string fields in an AI output object for banned phrases.
  * Returns true if clean, throws if a banned phrase is found.
+ *
+ * Walks top-level keys only. The discriminated-union outputs in this
+ * file are flat (no nested objects), so this catches every user-visible
+ * string. The Reflection generator has its own per-observation walker
+ * because evidence[*].quote is nested.
  */
 export function validateAIOutput(output: Record<string, unknown>): boolean {
   for (const [key, value] of Object.entries(output)) {

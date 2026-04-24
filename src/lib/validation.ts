@@ -22,36 +22,97 @@ export const submitQuizSchema = z
     { message: "answers must cover each questionIndex 0-8 exactly once" }
   );
 
-// Coach — Prepare
-export const createPrepareSchema = z.object({
+// ============================================================
+// Coach — Prepare (Coach redesign 2026-04-23: 2 entry paths)
+// ============================================================
+// Path A — "I need to have a conversation" (9 user-fillable fields).
+// Path B — "Something feels off" (7 user-fillable fields).
+// Both paths share person picker + relationship + idempotencyKey + thread.
+// Discriminated by `path` field; routes pick a config per path.
+
+const RELATIONSHIP_ENUM = z.enum([
+  "partner", "friend", "family", "manager",
+  "direct_report", "coworker", "client", "other",
+]);
+
+export const prepareSchemaPathA = z.object({
+  path: z.literal("path_a"),
   personName: z.string().trim().min(1).max(200),
-  relationship: z.enum([
-    "partner", "friend", "family", "manager",
-    "direct_report", "coworker", "client", "other",
-  ]),
+  relationship: RELATIONSHIP_ENUM,
   situation: z.string().min(1).max(5000),
-  desiredOutcome: z.string().min(1).max(5000),
   primaryEmotion: z.string().min(1).max(1000),
   defaultPattern: z.string().min(1).max(5000),
   otherPersonHypothesis: z.string().min(1).max(5000),
+  theirNeed: z.string().min(1).max(5000),
+  realityCheckQuestion: z.string().min(1).max(5000),
+  howToMakeThemFeel: z.string().min(1).max(5000),
+  triggerPlan: z.string().min(1).max(5000),
+  personId: z.string().uuid().nullable().optional(),
+  threadId: z.string().uuid().nullable().optional(),
+});
+
+export const prepareSchemaPathB = z.object({
+  path: z.literal("path_b"),
+  personName: z.string().trim().min(1).max(200),
+  relationship: RELATIONSHIP_ENUM,
+  whatFeelsOff: z.string().min(1).max(5000),
+  whatChanged: z.string().min(1).max(5000),
+  storyTellingYourself: z.string().min(1).max(5000),
+  afraidItMeans: z.string().min(1).max(5000),
   realityCheckQuestion: z.string().min(1).max(5000),
   triggerPlan: z.string().min(1).max(5000),
   personId: z.string().uuid().nullable().optional(),
   threadId: z.string().uuid().nullable().optional(),
 });
 
-// Coach — Review
+export const createPrepareSchema = z.discriminatedUnion("path", [
+  prepareSchemaPathA,
+  prepareSchemaPathB,
+]);
+
+// ============================================================
+// Coach — Review (Coach redesign 2026-04-23: new fields + repair branch)
+// ============================================================
+// New base fields replace the old (whatHelped/whatHurt/validatedAssumptions/
+// unresolvedAndNext are dropped; the redesigned form does not collect them).
+// Repair branch fields are optional — populated only when readiness gate
+// yields yes/somewhat AND needs_to_happen_next ∈ {apologize, reassure,
+// clarify, ask_for_repair}.
+
 export const createReviewSchema = z.object({
+  // Base fields (always required by the new form).
   whatHappened: z.string().min(1).max(5000),
   hardestMomentFeeling: z.string().min(1).max(5000),
+  whatYouDid: z.string().min(1).max(5000),
   observedInThem: z.string().min(1).max(5000),
   theirExperience: z.string().min(1).max(5000),
-  whatHelped: z.string().min(1).max(5000),
-  whatHurt: z.string().min(1).max(5000),
-  validatedAssumptions: z.string().max(5000).optional(),
-  unresolvedAndNext: z.string().min(1).max(500),
+  whatYouAvoided: z.string().min(1).max(5000),
+  askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]),
+  needsToHappenNext: z.enum([
+    "nothing", "clarify", "align", "apologize",
+    "reassure", "give_space", "set_boundary", "ask_for_repair",
+  ]),
+  // Repair-branch fields (optional — populated only on repair flow).
+  repairBranchActive: z.boolean().default(false),
+  yourPart: z.string().min(1).max(5000).nullable().optional(),
+  secretWant: z.string().min(1).max(5000).nullable().optional(),
+  couldMakeThemFeel: z.string().min(1).max(5000).nullable().optional(),
+  // Person/thread.
   personId: z.string().uuid().nullable().optional(),
   threadId: z.string().uuid().nullable().optional(),
+});
+
+// ============================================================
+// Coach — Before You Send (NEW Coach redesign 2026-04-23)
+// ============================================================
+export const createBeforeYouSendSchema = z.object({
+  draftText: z.string().trim().min(1).max(10000),
+  messageType: z.enum([
+    "conflict", "check_in", "apology", "repair", "ask", "boundary", "other",
+  ]),
+  intentOptional: z.string().max(5000).nullable().optional(),
+  // BYS has no person/thread concept; runCoachModule's personBehavior:"skip"
+  // + threadBehavior:"none" config skips those resolution steps.
 });
 
 // Tools — Overwhelmed
@@ -77,20 +138,6 @@ export const createTriggerSchema = z.object({
   afterFeeling: z.string().min(1).max(200),
 });
 
-// Coach — Repair
-export const createRepairSchema = z.object({
-  whatNeedsRepair: z.string().trim().min(1).max(5000),
-  yourResponsibility: z.string().trim().min(1).max(5000),
-  theirNeed: z.string().trim().min(1).max(5000),
-  desiredOutcome: z.enum([
-    "acknowledge_impact", "apologize", "reset_expectations", "set_boundary",
-  ]),
-  channel: z.enum(["text", "call", "in_person", "no_action"]),
-  timing: z.enum(["now", "later_today", "tomorrow", "after_they_respond"]),
-  personId: z.string().uuid().nullable().optional(),
-  threadId: z.string().uuid().nullable().optional(),
-});
-
 // Persons
 export const createPersonSchema = z.object({
   displayName: z.string().trim().min(1).max(200),
@@ -114,11 +161,13 @@ export const immediateOutcomeSchema = z.object({
   reviewEntryId: z.string().uuid(),
 });
 
-// Outcome tracking — Repair
+// Outcome tracking — Repair (legacy archive only).
+// /coach/repair top-level page is deleted, but the outcome PATCH endpoint
+// stays so users can still mark outcomes on archived repair_entries rows
+// surfaced in /history. New repair flow lives inside Review.
 export const repairOutcomeSchema = z.object({
   attemptedRepair: z.enum(["yes", "planned", "no"]),
   howReceived: z.enum(["positive", "mixed", "negative", "no_response", "too_early"]),
   understandingImproved: z.enum(["yes", "partly", "no", "unclear"]),
   repairEntryId: z.string().uuid(),
 });
-

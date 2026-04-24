@@ -18,17 +18,25 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const COACH_FREE_PERIOD_DAYS = 3;
 const TOOLS_FREE_PERIOD_DAYS = 7;
 
-export type FreeUsageField = "freePrepareUsed" | "freeReviewUsed";
+export type FreeUsageField =
+  | "freePrepareUsed"
+  | "freeReviewUsed"
+  | "freeBeforeYouSendUsed";
 
-const FREE_USAGE_COLUMN: Record<FreeUsageField, "free_prepare_used_at" | "free_review_used_at"> = {
+const FREE_USAGE_COLUMN: Record<
+  FreeUsageField,
+  "free_prepare_used_at" | "free_review_used_at" | "free_before_you_send_used_at"
+> = {
   freePrepareUsed: "free_prepare_used_at",
   freeReviewUsed: "free_review_used_at",
+  freeBeforeYouSendUsed: "free_before_you_send_used_at",
 };
 
 export interface SubscriptionAccess {
   hasAccess: boolean;
   freePrepareUsed: boolean;
   freeReviewUsed: boolean;
+  freeBeforeYouSendUsed: boolean;
   freePeriodActive: boolean;
   toolsWindowActive: boolean;
   status: SubscriptionStatus;
@@ -71,7 +79,7 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
       .maybeSingle(),
     supabase
       .from("user_subscriptions")
-      .select("status, free_prepare_used_at, free_review_used_at, trial_ends_at")
+      .select("status, free_prepare_used_at, free_review_used_at, free_before_you_send_used_at, trial_ends_at")
       .eq("user_id", userId)
       .maybeSingle(),
   ]);
@@ -93,15 +101,16 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
   if (error) {
     console.error("subscription: lookup failed", error.code);
     // Fail closed — a DB hiccup must not grant free access.
-    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freePeriodActive: false, toolsWindowActive: false, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freeBeforeYouSendUsed: true, freePeriodActive: false, toolsWindowActive: false, status: "none", trialEndsAt: null };
   }
 
   if (!row) {
-    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freePeriodActive, toolsWindowActive, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freeBeforeYouSendUsed: false, freePeriodActive, toolsWindowActive, status: "none", trialEndsAt: null };
   }
 
   const freePrepareUsed = row.free_prepare_used_at !== null;
   const freeReviewUsed = row.free_review_used_at !== null;
+  const freeBeforeYouSendUsed = row.free_before_you_send_used_at !== null;
   let status = row.status as SubscriptionStatus;
 
   // Lazy trial expiry: legacy trial_active rows are expired past trial_ends_at.
@@ -128,6 +137,7 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
     hasAccess,
     freePrepareUsed,
     freeReviewUsed,
+    freeBeforeYouSendUsed,
     freePeriodActive,
     toolsWindowActive,
     status,
@@ -161,14 +171,18 @@ export async function reserveFreeUse(
   const service = createServiceClient();
 
   type SubRow = Database["public"]["Tables"]["user_subscriptions"];
-  const updatePayload: SubRow["Update"] =
-    column === "free_prepare_used_at"
-      ? { free_prepare_used_at: now, updated_at: now }
-      : { free_review_used_at: now, updated_at: now };
-  const insertPayload: SubRow["Insert"] =
-    column === "free_prepare_used_at"
-      ? { user_id: userId, status: "none", free_prepare_used_at: now }
-      : { user_id: userId, status: "none", free_review_used_at: now };
+  let updatePayload: SubRow["Update"];
+  let insertPayload: SubRow["Insert"];
+  if (column === "free_prepare_used_at") {
+    updatePayload = { free_prepare_used_at: now, updated_at: now };
+    insertPayload = { user_id: userId, status: "none", free_prepare_used_at: now };
+  } else if (column === "free_review_used_at") {
+    updatePayload = { free_review_used_at: now, updated_at: now };
+    insertPayload = { user_id: userId, status: "none", free_review_used_at: now };
+  } else {
+    updatePayload = { free_before_you_send_used_at: now, updated_at: now };
+    insertPayload = { user_id: userId, status: "none", free_before_you_send_used_at: now };
+  }
 
   // Attempt 1: UPDATE if column is null. Atomic — only one concurrent
   // request can match `.is(column, null)` and receive a row back.

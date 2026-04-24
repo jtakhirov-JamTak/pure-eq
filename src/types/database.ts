@@ -14,6 +14,82 @@ export type Database = {
   }
   public: {
     Tables: {
+      before_you_send_entries: {
+        Row: {
+          ai_verdict_json: Json | null
+          ai_verdict_version: number | null
+          before_you_send_entry_id: string
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          draft_text: string | null
+          intent_optional: string | null
+          is_complete: boolean
+          message_type: string | null
+          outcome_json: Json | null
+          person_id: string | null
+          raw_record_id: string | null
+          thread_id: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_verdict_json?: Json | null
+          ai_verdict_version?: number | null
+          before_you_send_entry_id?: string
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          draft_text?: string | null
+          intent_optional?: string | null
+          is_complete?: boolean
+          message_type?: string | null
+          outcome_json?: Json | null
+          person_id?: string | null
+          raw_record_id?: string | null
+          thread_id?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_verdict_json?: Json | null
+          ai_verdict_version?: number | null
+          before_you_send_entry_id?: string
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          draft_text?: string | null
+          intent_optional?: string | null
+          is_complete?: boolean
+          message_type?: string | null
+          outcome_json?: Json | null
+          person_id?: string | null
+          raw_record_id?: string | null
+          thread_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "before_you_send_entries_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "before_you_send_entries_raw_record_id_fkey"
+            columns: ["raw_record_id"]
+            isOneToOne: false
+            referencedRelation: "raw_records"
+            referencedColumns: ["raw_record_id"]
+          },
+          {
+            foreignKeyName: "before_you_send_entries_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_threads"
+            referencedColumns: ["thread_id"]
+          },
+        ]
+      }
       conversation_threads: {
         Row: {
           last_activity_at: string
@@ -293,6 +369,7 @@ export type Database = {
       }
       prepare_entries: {
         Row: {
+          afraid_it_means: string | null
           ai_plan_json: Json | null
           ai_plan_version: number | null
           ambiguity_flag: boolean
@@ -300,20 +377,28 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           desired_outcome: string | null
+          how_to_make_them_feel: string | null
           is_complete: boolean
           needs_user_confirmation: boolean
           parse_confidence: number | null
           parsed_candidates: Json | null
           parser_version: number
+          path: string | null
+          pattern_tag: string | null
           person_id: string | null
           prepare_entry_id: string
           primary_value: string | null
           raw_record_id: string | null
           situation_text: string | null
+          story_telling_yourself: string | null
+          their_need: string | null
           thread_id: string | null
           user_id: string
+          what_changed: string | null
+          what_feels_off: string | null
         }
         Insert: {
+          afraid_it_means?: string | null
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
           ambiguity_flag?: boolean
@@ -321,20 +406,28 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           desired_outcome?: string | null
+          how_to_make_them_feel?: string | null
           is_complete?: boolean
           needs_user_confirmation?: boolean
           parse_confidence?: number | null
           parsed_candidates?: Json | null
           parser_version?: number
+          path?: string | null
+          pattern_tag?: string | null
           person_id?: string | null
           prepare_entry_id?: string
           primary_value?: string | null
           raw_record_id?: string | null
           situation_text?: string | null
+          story_telling_yourself?: string | null
+          their_need?: string | null
           thread_id?: string | null
           user_id: string
+          what_changed?: string | null
+          what_feels_off?: string | null
         }
         Update: {
+          afraid_it_means?: string | null
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
           ambiguity_flag?: boolean
@@ -342,18 +435,25 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           desired_outcome?: string | null
+          how_to_make_them_feel?: string | null
           is_complete?: boolean
           needs_user_confirmation?: boolean
           parse_confidence?: number | null
           parsed_candidates?: Json | null
           parser_version?: number
+          path?: string | null
+          pattern_tag?: string | null
           person_id?: string | null
           prepare_entry_id?: string
           primary_value?: string | null
           raw_record_id?: string | null
           situation_text?: string | null
+          story_telling_yourself?: string | null
+          their_need?: string | null
           thread_id?: string | null
           user_id?: string
+          what_changed?: string | null
+          what_feels_off?: string | null
         }
         Relationships: [
           {
@@ -569,16 +669,22 @@ export type Database = {
         Row: {
           ai_reflection_json: Json | null
           ai_reflection_version: number | null
+          ask_before_understanding: string | null
           completed_at: string | null
+          could_make_them_feel: string | null
           created_at: string
           deleted_at: string | null
           hardest_moment_feeling: string | null
           is_complete: boolean
+          needs_to_happen_next: string | null
           observed_in_them: string | null
           outcome_json: Json | null
+          pattern_tag: string | null
           person_id: string | null
           raw_record_id: string | null
+          repair_branch_active: boolean
           review_entry_id: string
+          secret_want: string | null
           their_experience: string | null
           thread_id: string | null
           unresolved_and_next: string | null
@@ -587,20 +693,29 @@ export type Database = {
           what_happened: string | null
           what_helped: string | null
           what_hurt: string | null
+          what_you_avoided: string | null
+          what_you_did: string | null
+          your_part: string | null
         }
         Insert: {
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
+          ask_before_understanding?: string | null
           completed_at?: string | null
+          could_make_them_feel?: string | null
           created_at?: string
           deleted_at?: string | null
           hardest_moment_feeling?: string | null
           is_complete?: boolean
+          needs_to_happen_next?: string | null
           observed_in_them?: string | null
           outcome_json?: Json | null
+          pattern_tag?: string | null
           person_id?: string | null
           raw_record_id?: string | null
+          repair_branch_active?: boolean
           review_entry_id?: string
+          secret_want?: string | null
           their_experience?: string | null
           thread_id?: string | null
           unresolved_and_next?: string | null
@@ -609,20 +724,29 @@ export type Database = {
           what_happened?: string | null
           what_helped?: string | null
           what_hurt?: string | null
+          what_you_avoided?: string | null
+          what_you_did?: string | null
+          your_part?: string | null
         }
         Update: {
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
+          ask_before_understanding?: string | null
           completed_at?: string | null
+          could_make_them_feel?: string | null
           created_at?: string
           deleted_at?: string | null
           hardest_moment_feeling?: string | null
           is_complete?: boolean
+          needs_to_happen_next?: string | null
           observed_in_them?: string | null
           outcome_json?: Json | null
+          pattern_tag?: string | null
           person_id?: string | null
           raw_record_id?: string | null
+          repair_branch_active?: boolean
           review_entry_id?: string
+          secret_want?: string | null
           their_experience?: string | null
           thread_id?: string | null
           unresolved_and_next?: string | null
@@ -631,6 +755,9 @@ export type Database = {
           what_happened?: string | null
           what_helped?: string | null
           what_hurt?: string | null
+          what_you_avoided?: string | null
+          what_you_did?: string | null
+          your_part?: string | null
         }
         Relationships: [
           {
@@ -800,6 +927,7 @@ export type Database = {
           activated_at: string | null
           cancelled_at: string | null
           created_at: string
+          free_before_you_send_used_at: string | null
           free_prepare_used_at: string | null
           free_review_used_at: string | null
           role: string
@@ -816,6 +944,7 @@ export type Database = {
           activated_at?: string | null
           cancelled_at?: string | null
           created_at?: string
+          free_before_you_send_used_at?: string | null
           free_prepare_used_at?: string | null
           free_review_used_at?: string | null
           role?: string
@@ -832,6 +961,7 @@ export type Database = {
           activated_at?: string | null
           cancelled_at?: string | null
           created_at?: string
+          free_before_you_send_used_at?: string | null
           free_prepare_used_at?: string | null
           free_review_used_at?: string | null
           role?: string

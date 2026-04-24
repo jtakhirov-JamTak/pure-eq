@@ -1,61 +1,78 @@
 import { z } from "zod";
-import { createPrepareSchema } from "@/lib/validation";
+import { NextResponse } from "next/server";
+import {
+  prepareSchemaPathA,
+  prepareSchemaPathB,
+} from "@/lib/validation";
 import { prepareOutputSchema } from "@/lib/ai/schemas";
-import { buildPreparePrompt } from "@/lib/ai/prompts";
+import {
+  buildPreparePromptPathA,
+  buildPreparePromptPathB,
+} from "@/lib/ai/prompts";
 import { runCoachModule } from "@/lib/coach/run-module";
 import type { CoachModuleConfig } from "@/lib/coach/types";
 
 export const runtime = "nodejs";
 
-const requestSchema = createPrepareSchema.extend({
+// ============================================================
+// Path A — "I need to have a conversation"
+// ============================================================
+const requestSchemaA = prepareSchemaPathA.extend({
   idempotencyKey: z.string().uuid(),
 });
 
-type Input = z.infer<typeof createPrepareSchema>;
+type InputA = z.infer<typeof prepareSchemaPathA>;
 type AiOutput = z.infer<typeof prepareOutputSchema>;
 
-const config: CoachModuleConfig<Input, AiOutput> = {
+const configA: CoachModuleConfig<InputA, AiOutput> = {
   moduleName: "prepare",
-  requestSchema,
+  requestSchema: requestSchemaA,
   aiOutputSchema: prepareOutputSchema,
   subscriptionGate: "free_one",
-  threadBehavior: "auto_create",
+  freeUsageField: "freePrepareUsed",
+  personBehavior: "resolve",
   personDedup: "name_and_relationship",
+  threadBehavior: "auto_create",
   derivedTable: "prepare_entries",
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  aiVersionValue: 4,
+  aiVersionValue: 5,
 
   buildPayloadFields: (input) => ({
+    path: "path_a",
     personName: input.personName,
     relationship: input.relationship,
     situation: input.situation,
-    desiredOutcome: input.desiredOutcome,
     primaryEmotion: input.primaryEmotion,
     defaultPattern: input.defaultPattern,
     otherPersonHypothesis: input.otherPersonHypothesis,
+    theirNeed: input.theirNeed,
     realityCheckQuestion: input.realityCheckQuestion,
+    howToMakeThemFeel: input.howToMakeThemFeel,
     triggerPlan: input.triggerPlan,
   }),
 
   buildDerivedInsert: (input) => ({
+    path: "path_a",
     situation_text: input.situation,
-    desired_outcome: input.desiredOutcome,
     primary_value: input.primaryEmotion,
+    their_need: input.theirNeed,
+    how_to_make_them_feel: input.howToMakeThemFeel,
   }),
 
   buildPrompt: (input, profile) =>
-    buildPreparePrompt({
+    buildPreparePromptPathA({
       profile,
       personName: input.personName,
       relationship: input.relationship,
       situation: input.situation,
-      desiredOutcome: input.desiredOutcome,
       primaryEmotion: input.primaryEmotion,
       defaultPattern: input.defaultPattern,
       otherPersonHypothesis: input.otherPersonHypothesis,
+      theirNeed: input.theirNeed,
       realityCheckQuestion: input.realityCheckQuestion,
+      howToMakeThemFeel: input.howToMakeThemFeel,
       triggerPlan: input.triggerPlan,
     }),
 
@@ -65,10 +82,86 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     const truncated = input.situation.slice(0, 80).replace(/\s+\S*$/, "");
     return truncated || input.situation.slice(0, 80);
   },
-
-  freeUsageField: "freePrepareUsed",
 };
 
+// ============================================================
+// Path B — "Something feels off"
+// ============================================================
+const requestSchemaB = prepareSchemaPathB.extend({
+  idempotencyKey: z.string().uuid(),
+});
+
+type InputB = z.infer<typeof prepareSchemaPathB>;
+
+const configB: CoachModuleConfig<InputB, AiOutput> = {
+  moduleName: "prepare",
+  requestSchema: requestSchemaB,
+  aiOutputSchema: prepareOutputSchema,
+  subscriptionGate: "free_one",
+  freeUsageField: "freePrepareUsed",
+  personBehavior: "resolve",
+  personDedup: "name_and_relationship",
+  threadBehavior: "auto_create",
+  derivedTable: "prepare_entries",
+  derivedIdColumn: "prepare_entry_id",
+  aiJsonColumn: "ai_plan_json",
+  aiVersionColumn: "ai_plan_version",
+  aiVersionValue: 5,
+
+  buildPayloadFields: (input) => ({
+    path: "path_b",
+    personName: input.personName,
+    relationship: input.relationship,
+    whatFeelsOff: input.whatFeelsOff,
+    whatChanged: input.whatChanged,
+    storyTellingYourself: input.storyTellingYourself,
+    afraidItMeans: input.afraidItMeans,
+    realityCheckQuestion: input.realityCheckQuestion,
+    triggerPlan: input.triggerPlan,
+  }),
+
+  buildDerivedInsert: (input) => ({
+    path: "path_b",
+    what_feels_off: input.whatFeelsOff,
+    what_changed: input.whatChanged,
+    story_telling_yourself: input.storyTellingYourself,
+    afraid_it_means: input.afraidItMeans,
+  }),
+
+  buildPrompt: (input, profile) =>
+    buildPreparePromptPathB({
+      profile,
+      personName: input.personName,
+      relationship: input.relationship,
+      whatFeelsOff: input.whatFeelsOff,
+      whatChanged: input.whatChanged,
+      storyTellingYourself: input.storyTellingYourself,
+      afraidItMeans: input.afraidItMeans,
+      realityCheckQuestion: input.realityCheckQuestion,
+      triggerPlan: input.triggerPlan,
+    }),
+
+  buildResponseExtras: () => ({}),
+
+  getThreadTitle: (input) => {
+    const truncated = input.whatFeelsOff.slice(0, 80).replace(/\s+\S*$/, "");
+    return truncated || input.whatFeelsOff.slice(0, 80);
+  },
+};
+
+// Dispatch: peek at body.path (clone request so runCoachModule can re-read).
 export async function POST(req: Request) {
-  return runCoachModule(req, config);
+  let body: unknown;
+  try {
+    body = await req.clone().json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const path = (body as { path?: string } | null)?.path;
+  if (path === "path_a") return runCoachModule(req, configA);
+  if (path === "path_b") return runCoachModule(req, configB);
+  return NextResponse.json(
+    { error: "Invalid path — must be 'path_a' or 'path_b'" },
+    { status: 400 },
+  );
 }
