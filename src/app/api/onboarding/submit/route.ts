@@ -5,10 +5,20 @@ import { submitQuizSchema } from "@/lib/validation";
 import {
   QUESTIONS,
   SCORING_VERSION,
-  computeNaturalModule,
   scoreProfile,
   type QuizOption,
+  type RecommendedModule,
 } from "@/lib/onboarding";
+
+// Module → app route. Kept here (not in onboarding.ts) because the path
+// shape is a server concern; client never routes by module name. Hyphenated
+// before-send vs the underscored enum is the reason the map exists at all.
+const MODULE_TO_PATH: Record<RecommendedModule, string> = {
+  prepare: "/coach/prepare",
+  before_send: "/coach/before-send",
+  review: "/coach/review",
+  repair: "/coach/repair",
+};
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 
@@ -82,7 +92,9 @@ export async function POST(req: Request) {
       { status: 400 }
     );
   }
-  const naturalModule = computeNaturalModule(result.improvementGoal);
+  // Forecast-era: natural === recommended for every enabled module. Field
+  // kept on payload_json for back-compat with pre-rewrite rows.
+  const naturalModule = result.recommendedModule;
   const now = new Date().toISOString();
 
   // 5. Build raw_records payload. Snapshot question text so future wording
@@ -168,7 +180,7 @@ export async function POST(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    redirectTo: `/coach/${result.recommendedModule}`,
+    redirectTo: MODULE_TO_PATH[result.recommendedModule],
     profile: {
       primary: result.primary,
       secondary: result.secondary,

@@ -46,7 +46,7 @@ export interface ProfileResult {
   secondary: ProfileType | null;
   scores: Record<ProfileType, number>;
   improvementGoal: ImprovementGoal;
-  recommendedModule: "prepare" | "review" | "repair";
+  recommendedModule: "prepare" | "review" | "repair" | "before_send";
 }
 
 // ============================================================

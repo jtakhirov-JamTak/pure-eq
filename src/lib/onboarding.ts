@@ -107,44 +107,37 @@ export const QUESTIONS: OnboardingQuestion[] = [
   },
   {
     // Routing-only per §3 — "Do not use Question 9 to break profile ties."
-    text: "What do you most want to improve right now?",
+    // Forecast: routes to the module the user needs RIGHT NOW.
+    text: "What's your forecast right now?",
     options: [
-      { label: "A", text: "Staying calm" },
-      { label: "B", text: "Understanding people better" },
-      { label: "C", text: "Repairing conflict" },
-      { label: "D", text: "Setting boundaries" },
-      { label: "E", text: "Speaking up sooner" },
+      { label: "A", text: "Hard convo incoming" },
+      { label: "B", text: "I'm in it right now" },
+      { label: "C", text: "Just looking around" },
     ],
     mapping: null,
   },
 ];
 
-export const GOAL_MAPPING: Record<QuizOption, ImprovementGoal> = {
-  A: "staying_calm",
-  B: "understanding_people",
-  C: "repairing_conflict",
-  D: "setting_boundaries",
-  E: "speaking_up",
+// Forecast → module routing. Replaces the old aspiration GOAL_MAPPING.
+// A and C land on Prepare (default safe path); B lands on Before-You-Send
+// (the user is mid-conversation and needs a verdict on a draft message).
+export const FORECAST_MAPPING: Record<"A" | "B" | "C", RecommendedModule> = {
+  A: "prepare",
+  B: "before_send",
+  C: "prepare",
 };
 
 // ---------- v0 feature flag ----------
-// Per build order §22: v0 ships Prepare only. Review and Repair come later.
-// Until they exist, every Q9-derived module recommendation is clamped to Prepare.
-// When v0.2 ships Review and "Later" ships Repair, flip these to true and
-// the natural routing takes over with no other changes required.
-export const V0_MODULES_ENABLED: Record<"prepare" | "review" | "repair", boolean> = {
+// Modules that exist in production. Both forecast destinations (Prepare and
+// Before-You-Send) are live; Review and Repair stay gated until they ship.
+export const V0_MODULES_ENABLED: Record<RecommendedModule, boolean> = {
   prepare: true,
+  before_send: true,
   review: false,
   repair: false,
 };
 
-export type RecommendedModule = "prepare" | "review" | "repair";
-
-export function computeNaturalModule(goal: ImprovementGoal): RecommendedModule {
-  if (goal === "repairing_conflict") return "repair";
-  if (goal === "understanding_people") return "review";
-  return "prepare";
-}
+export type RecommendedModule = "prepare" | "review" | "repair" | "before_send";
 
 export function clampToEnabledModule(natural: RecommendedModule): RecommendedModule {
   return V0_MODULES_ENABLED[natural] ? natural : "prepare";
@@ -215,13 +208,21 @@ export function scoreProfile(answers: (QuizOption | null)[]): ProfileResult {
   const secondary =
     sorted.find(([p, s]) => p !== primary && s > 0)?.[0] ?? null;
 
+  // Q9 is now a forecast question: answer maps directly to a module.
+  // Defaults to "prepare" when missing or out-of-set (defensive — the
+  // pointsScored guard above already throws on truly empty input, and the
+  // UI only renders A/B/C buttons so D/E are unreachable from the client).
   const q9Answer = answers[8];
-  const improvementGoal: ImprovementGoal = q9Answer
-    ? GOAL_MAPPING[q9Answer]
-    : "staying_calm";
-
-  const naturalModule = computeNaturalModule(improvementGoal);
+  const naturalModule: RecommendedModule =
+    q9Answer === "A" || q9Answer === "B" || q9Answer === "C"
+      ? FORECAST_MAPPING[q9Answer]
+      : "prepare";
   const recommendedModule = clampToEnabledModule(naturalModule);
+
+  // improvementGoal is deprecated post-forecast-rewrite. Kept on ProfileResult
+  // for back-compat with stored payload_json rows; new submissions write the
+  // sentinel "staying_calm". Delete when payload_json is migrated.
+  const improvementGoal: ImprovementGoal = "staying_calm";
 
   return { primary, secondary, scores, improvementGoal, recommendedModule };
 }
@@ -284,6 +285,7 @@ export const MODULE_LABELS: Record<RecommendedModule, string> = {
   prepare: "Prepare",
   review: "Review",
   repair: "Repair",
+  before_send: "Before You Send",
 };
 
 // Fetches the user's latest Profile Snapshot (append-only per §6.2.A).

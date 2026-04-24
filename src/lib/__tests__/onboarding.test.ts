@@ -17,8 +17,31 @@ describe("scoreProfile", () => {
     expect(result.scores.direct).toBe(13);
     expect(result.scores.intense).toBe(4); // Q4-A=intense(2) + Q5-A=intense(2)
     expect(result.secondary).toBe("intense");
-    expect(result.improvementGoal).toBe("staying_calm"); // Q9-A
-    expect(result.recommendedModule).toBe("prepare"); // v0 clamp
+    // Forecast-era: improvementGoal is a deprecated sentinel; routing comes
+    // from FORECAST_MAPPING, not the old aspiration enum.
+    expect(result.improvementGoal).toBe("staying_calm");
+    expect(result.recommendedModule).toBe("prepare"); // Q9-A → "Hard convo incoming"
+  });
+
+  it("Q9=A (hard convo incoming) routes to prepare", () => {
+    const answers: (QuizOption | null)[] = [
+      "A", "A", "A", "A", "A", "A", "A", "A", "A",
+    ];
+    expect(scoreProfile(answers).recommendedModule).toBe("prepare");
+  });
+
+  it("Q9=B (in it right now) routes to before_send", () => {
+    const answers: (QuizOption | null)[] = [
+      "A", "A", "A", "A", "A", "A", "A", "A", "B",
+    ];
+    expect(scoreProfile(answers).recommendedModule).toBe("before_send");
+  });
+
+  it("Q9=C (just looking around) routes to prepare", () => {
+    const answers: (QuizOption | null)[] = [
+      "A", "A", "A", "A", "A", "A", "A", "A", "C",
+    ];
+    expect(scoreProfile(answers).recommendedModule).toBe("prepare");
   });
 
   it("resolves ties using Q8→Q7 cascade", () => {
