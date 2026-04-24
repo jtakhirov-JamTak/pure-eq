@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { aggregateBehavioralContext, INPUT_WINDOW_DAYS } from "../generate";
+import { REVIEW_NEEDS_NEXT_VALUES } from "@/lib/validation";
 
 describe("aggregateBehavioralContext", () => {
   it("returns all zeros for empty inputs", () => {
@@ -66,6 +67,37 @@ describe("aggregateBehavioralContext", () => {
     );
     expect(ctx.review.total).toBe(4);
     expect(ctx.review.needs_next).toEqual({ clarify: 2, apologize: 1 });
+  });
+
+  it("excludes unknown needs_to_happen_next values from needs_next but counts review total", () => {
+    const ctx = aggregateBehavioralContext(
+      [],
+      [
+        { repair_branch_active: false, needs_to_happen_next: "clarify" },
+        { repair_branch_active: false, needs_to_happen_next: "legacy_value_not_in_enum" },
+        { repair_branch_active: false, needs_to_happen_next: "TODO" },
+        { repair_branch_active: true, needs_to_happen_next: "ask_for_repair" },
+      ],
+    );
+    expect(ctx.review.total).toBe(4);
+    expect(ctx.review.needs_next).toEqual({ clarify: 1, ask_for_repair: 1 });
+  });
+
+  it("counts every validation.ts enum value — binding canary", () => {
+    // Drift canary: if someone adds a value to REVIEW_NEEDS_NEXT_VALUES in
+    // validation.ts but forgets a downstream consumer (prompt glossary,
+    // DB CHECK, copy map), this test still passes but signals that the
+    // aggregator will count the new value — the only question is whether
+    // the rest of the pipeline understands it.
+    const rows = REVIEW_NEEDS_NEXT_VALUES.map((v) => ({
+      repair_branch_active: false,
+      needs_to_happen_next: v,
+    }));
+    const ctx = aggregateBehavioralContext([], rows);
+    expect(ctx.review.total).toBe(REVIEW_NEEDS_NEXT_VALUES.length);
+    for (const v of REVIEW_NEEDS_NEXT_VALUES) {
+      expect(ctx.review.needs_next[v]).toBe(1);
+    }
   });
 
   it("produces independent bys + review buckets", () => {

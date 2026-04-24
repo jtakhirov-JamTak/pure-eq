@@ -79,6 +79,30 @@ export const createPrepareSchema = z.discriminatedUnion("path", [
 // yields yes/somewhat AND needs_to_happen_next ∈ {apologize, reassure,
 // clarify, ask_for_repair}.
 
+// Enum tuples exported as const so Insights aggregator, FIELD GLOSSARY prompt
+// block, and Zod schema all derive from a single source. Adding a new value
+// here propagates to all three consumers; drift fails the build.
+export const REVIEW_NEEDS_NEXT_VALUES = [
+  "nothing",
+  "clarify",
+  "align",
+  "apologize",
+  "reassure",
+  "give_space",
+  "set_boundary",
+  "ask_for_repair",
+] as const;
+
+export const BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES = [
+  "conflict",
+  "check_in",
+  "apology",
+  "repair",
+  "ask",
+  "boundary",
+  "other",
+] as const;
+
 export const createReviewSchema = z.object({
   // Base fields (always required by the new form).
   whatHappened: z.string().min(1).max(5000),
@@ -88,10 +112,7 @@ export const createReviewSchema = z.object({
   theirExperience: z.string().min(1).max(5000),
   whatYouAvoided: z.string().min(1).max(5000),
   askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]),
-  needsToHappenNext: z.enum([
-    "nothing", "clarify", "align", "apologize",
-    "reassure", "give_space", "set_boundary", "ask_for_repair",
-  ]),
+  needsToHappenNext: z.enum(REVIEW_NEEDS_NEXT_VALUES),
   // Repair-branch fields (optional — populated only on repair flow).
   repairBranchActive: z.boolean().default(false),
   yourPart: z.string().min(1).max(5000).nullable().optional(),
@@ -107,9 +128,7 @@ export const createReviewSchema = z.object({
 // ============================================================
 export const createBeforeYouSendSchema = z.object({
   draftText: z.string().trim().min(1).max(10000),
-  messageType: z.enum([
-    "conflict", "check_in", "apology", "repair", "ask", "boundary", "other",
-  ]),
+  messageType: z.enum(BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES),
   intentOptional: z.string().max(5000).nullable().optional(),
   // BYS has no person/thread concept; runCoachModule's personBehavior:"skip"
   // + threadBehavior:"none" config skips those resolution steps.

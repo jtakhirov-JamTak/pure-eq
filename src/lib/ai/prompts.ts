@@ -5,6 +5,10 @@ import type {
   ReviewNeedsToHappenNext,
 } from "@/types";
 import { REFUSAL_REASONS, REFUSAL_RESOURCES } from "@/lib/ai/schemas";
+import {
+  REVIEW_NEEDS_NEXT_VALUES,
+  BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES,
+} from "@/lib/validation";
 
 // `satisfies` binds these literal strings to the enum tuples in schemas.ts
 // at compile time. If a token is renamed in schemas.ts, tsc fails here
@@ -296,12 +300,10 @@ FIELD GLOSSARY (what the entry fields mean — use as interpretive context):
     is trying to repair it. Treat these as a DISTINCT emotional state from
     reviews where the user felt wronged — not generic "conflict."
   - needsToHappenNext is the action the user thinks is required next.
-    Values: "nothing", "clarify", "align", "apologize", "reassure",
-    "give_space", "set_boundary", "ask_for_repair".
+    Values: ${REVIEW_NEEDS_NEXT_VALUES.map((v) => `"${v}"`).join(", ")}.
 - Before-You-Send entries (record_type "before_you_send"): the user pasted
   a draft message and had the coach check it before sending. messageType
-  categorizes the draft: "conflict", "check_in", "apology", "repair",
-  "ask", "boundary", "other".
+  categorizes the draft: ${BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES.map((v) => `"${v}"`).join(", ")}.
 - Trigger logs (record_type "trigger_log") and overwhelmed entries
   (record_type "overwhelmed") are in-the-moment self-regulation logs, not
   planned conversations. Treat them as signal about dysregulation patterns.

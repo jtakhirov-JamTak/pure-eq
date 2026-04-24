@@ -17,6 +17,7 @@
 // incident). Fire-and-forget is banned on this path.
 
 import Anthropic from "@anthropic-ai/sdk";
+import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { buildReflectionPrompt, type BehavioralContext } from "@/lib/ai/prompts";
@@ -26,14 +27,39 @@ import {
   type ReflectionOutput,
   type ReflectionNormal,
 } from "@/lib/ai/schemas";
+import { REVIEW_NEEDS_NEXT_VALUES as REVIEW_NEEDS_NEXT_ENUM } from "@/lib/validation";
 import { buildReflectionInput } from "./reflection-input";
 import type { ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 
 // v2 (2026-04-23): reflection prompt now includes FIELD GLOSSARY + optional
 // BEHAVIORAL CONTEXT block (BYS verdicts + Review repair-branch counters).
-// Bump forces old v1 rows to regenerate per symmetric writer/reader guard.
+// Migration 0031 moved generator_version into the weekly_reflections unique
+// index, so a mid-week version bump is handled natively by an INSERT of a
+// new (user_id, date, version) row — no UPDATE fallback needed.
 export const GENERATOR_VERSION = "reflection_v2";
+
+// Allowlist for review.needs_to_happen_next. Gates arbitrary DB strings
+// (legacy rows, schema drift) from leaking into the prompt. Single source
+// is the tuple in validation.ts; adding a new value there propagates to
+// Zod + this Set + the FIELD GLOSSARY prompt interpolation.
+const REVIEW_NEEDS_NEXT_SET: ReadonlySet<string> = new Set(REVIEW_NEEDS_NEXT_ENUM);
+
+// Minimum quote length for reflection evidence. Filters degenerate
+// single-word "quotes" like "apologize" or "boundary" — common in user
+// entries AND in the new FIELD GLOSSARY — that would trivially pass
+// substring verification but convey no meaningful evidence. English-text
+// assumption: requires an ASCII space between tokens. i18n is not in scope.
+// Exported so tests can reference the boundary instead of hardcoding lengths.
+export const MIN_QUOTE_CHARS = 6;
+
+// Cooldown-latched Sentry capture for non-fatal aggregate-query errors.
+// Module-level state so a persistent outage emits at most one event per
+// kind per 5 minutes across the Node instance (matches rate-limit.ts
+// reference pattern per CLAUDE.md parallel-fetch-error rule).
+const AGGREGATE_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastBysAggregateCaptureAt = 0;
+let lastReviewAggregateCaptureAt = 0;
 export const IDEMPOTENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const INPUT_WINDOW_DAYS = 28;
 
@@ -80,12 +106,20 @@ export interface GenerateOptions {
  * Drops observations with any unverifiable quote. Returns the filtered set.
  * If fewer than 2 observations survive, caller downgrades to refusal.
  */
-function verifyQuotes(
+// Exported for unit tests.
+export function verifyQuotes(
   reflection: ReflectionNormal,
   entryLookup: Map<string, string>, // raw_record_id → concatenated fields text
 ): ReflectionNormal {
   const verified = reflection.observations.filter((obs) => {
     return obs.evidence.every((ev) => {
+      const trimmed = ev.quote.trim();
+      // Defense-in-depth: reject degenerate single-word quotes. The FIELD
+      // GLOSSARY in the prompt contains enum tokens (apologize, boundary,
+      // clarify, etc.) that are also common in user text — a single-word
+      // "quote" would verify trivially via substring match but carry no
+      // evidentiary weight. Require at least one internal space.
+      if (!trimmed.includes(" ") || trimmed.length < MIN_QUOTE_CHARS) return false;
       const source = entryLookup.get(ev.source_record_id);
       if (!source) return false;
       return source.includes(ev.quote);
@@ -140,7 +174,10 @@ export function aggregateBehavioralContext(
     } else {
       review.no_repair_branch += 1;
     }
-    if (row.needs_to_happen_next) {
+    // Allowlist-gate: legacy or schema-drifted values don't leak into the
+    // prompt. Unknown strings are counted toward review.total but not
+    // broken out in needs_next.
+    if (row.needs_to_happen_next && REVIEW_NEEDS_NEXT_SET.has(row.needs_to_happen_next)) {
       review.needs_next[row.needs_to_happen_next] =
         (review.needs_next[row.needs_to_happen_next] ?? 0) + 1;
     }
@@ -314,13 +351,30 @@ export async function generateReflection(
     );
   }
   // BYS + Review aggregate errors are non-fatal — counters are supplementary
-  // framing for the prompt. Log to console (captured via Sentry breadcrumbs)
-  // and emit empty counters so the reflection still generates.
+  // framing, not evidence, so a failed read should not block the reflection.
+  // But a persistent outage (RLS drift, schema change) needs telemetry, so
+  // capture with 5-min cooldown per kind per the parallel-fetch-error rule.
+  // Synthetic Error wrapper: never ship PostgrestError.message to Sentry —
+  // it can contain column values on conflict.
   if (bysRes.error) {
-    console.error("insights: before_you_send_entries aggregate failed", bysRes.error.code);
+    const now = Date.now();
+    if (now - lastBysAggregateCaptureAt > AGGREGATE_CAPTURE_COOLDOWN_MS) {
+      lastBysAggregateCaptureAt = now;
+      Sentry.captureException(new Error("bys_aggregate_read_failed"), {
+        tags: { area: "insights_generate", kind: "bys_aggregate_read" },
+      });
+    }
+    console.error("insights: bys_aggregate_read_failed");
   }
   if (reviewRes.error) {
-    console.error("insights: review_entries aggregate failed", reviewRes.error.code);
+    const now = Date.now();
+    if (now - lastReviewAggregateCaptureAt > AGGREGATE_CAPTURE_COOLDOWN_MS) {
+      lastReviewAggregateCaptureAt = now;
+      Sentry.captureException(new Error("review_aggregate_read_failed"), {
+        tags: { area: "insights_generate", kind: "review_aggregate_read" },
+      });
+    }
+    console.error("insights: review_aggregate_read_failed");
   }
 
   const rawRecords = entriesRes.data ?? [];
@@ -487,14 +541,18 @@ export async function generateReflection(
     .single();
 
   if (insertRes.error || !insertRes.data) {
-    // Unique-violation (PG 23505) = a concurrent request won the race.
-    // Migration 0024 adds a unique index on (user_id, generated-date-UTC)
-    // so two parallel POSTs both missing the cache produce one LLM charge
-    // + one INSERT, not two. Return the winner's row as "cached".
+    // Unique-violation (PG 23505) = a concurrent request won the race at the
+    // same (user_id, date, generator_version) triple (migration 0031). Two
+    // parallel POSTs both missing the cache produce one LLM charge + one
+    // INSERT, not two. Return the winner's row as "cached". A same-day row
+    // at a DIFFERENT generator_version cannot 23505 here — the index keys
+    // off version, so a fresh v_new INSERT coexists with a stale v_old row.
     if (insertRes.error?.code === "23505") {
       const winner = await readCachedReflection(supabase, userId);
       if (winner) return { status: "cached", row: winner };
-      // Fell through the cache read too — something odd; fail loudly.
+      // Fell through the cache read — ai_json failed Zod validation on the
+      // winning row (legacy shape, hand edit). Fail loudly rather than
+      // silently serve a blank reflection.
     }
     throw new ReflectionGenerationError(
       `weekly_reflections insert failed: ${insertRes.error?.message ?? "no row returned"}`,
