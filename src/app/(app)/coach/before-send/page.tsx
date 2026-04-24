@@ -1,0 +1,432 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { VoiceInput } from "@/components/voice-input";
+import { isRefusal } from "@/lib/coach/output-shape";
+import { SkyBackground } from "@/components/brand/SkyBackground";
+import { safeUUID } from "@/lib/utils";
+
+type MessageType =
+  | "conflict"
+  | "check_in"
+  | "apology"
+  | "repair"
+  | "ask"
+  | "boundary"
+  | "other";
+
+const MESSAGE_TYPES: { value: MessageType; label: string }[] = [
+  { value: "conflict", label: "Conflict / pushback" },
+  { value: "check_in", label: "Check-in" },
+  { value: "apology", label: "Apology" },
+  { value: "repair", label: "Repair opening" },
+  { value: "ask", label: "Ask / request" },
+  { value: "boundary", label: "Setting a boundary" },
+  { value: "other", label: "Other" },
+];
+
+const PREFILL_KEY = "pure-eq:bys-prefill";
+
+type Prefill = {
+  draftText?: string;
+  messageType?: MessageType;
+  sourceReviewEntryId?: string;
+};
+
+type AiNormal = {
+  mode: "normal";
+  verdict: "safe" | "risky" | "do_not_send";
+  how_this_will_land: string;
+  what_its_missing: string;
+  thing_to_cut: string;
+  check_in_question: string;
+};
+
+type AiRefusal = {
+  mode: "refusal";
+  refusal_reason: string;
+  message_to_user: string;
+  suggested_resource: string;
+};
+
+type AiOutput = AiNormal | AiRefusal;
+
+const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
+  { label: "How this will land", key: "how_this_will_land" },
+  { label: "What it's missing", key: "what_its_missing" },
+  { label: "Thing to cut", key: "thing_to_cut" },
+  { label: "Check-in question", key: "check_in_question" },
+];
+
+const VERDICT_LABEL: Record<AiNormal["verdict"], string> = {
+  safe: "Safe to send",
+  risky: "Risky",
+  do_not_send: "Do not send",
+};
+
+const VERDICT_PILL: Record<AiNormal["verdict"], string> = {
+  safe: "bg-brand text-white",
+  risky: "bg-warm-soft text-ink",
+  do_not_send: "bg-danger text-white",
+};
+
+const BysBackground = () => <SkyBackground variant="calm" />;
+
+function RefusalCard({
+  output,
+  onBack,
+}: {
+  output: AiRefusal;
+  onBack: () => void;
+}) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <BysBackground />
+      <h2
+        className="font-display text-[28px] leading-[1.15] text-ink"
+        style={{ letterSpacing: "-0.6px" }}
+      >
+        A note before you go further.
+      </h2>
+      <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+        <p className="text-[14px] font-medium leading-[1.55] text-ink">
+          {output.message_to_user}
+        </p>
+      </div>
+      <button
+        onClick={onBack}
+        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+      >
+        Back to Coach
+      </button>
+    </div>
+  );
+}
+
+export default function BeforeYouSendPage() {
+  const router = useRouter();
+  const [draftText, setDraftText] = useState("");
+  const [messageType, setMessageType] = useState<MessageType>("conflict");
+  const [intentOptional, setIntentOptional] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  const [rewriteText, setRewriteText] = useState("");
+  const submitRef = useRef(false);
+
+  // Read sessionStorage prefill once on mount (Review → BYS handoff from
+  // Commit 6). Storage key is cleared after read so a stale prefill can't
+  // repopulate on a later /coach/before-send visit.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(PREFILL_KEY);
+      if (!raw) return;
+      sessionStorage.removeItem(PREFILL_KEY);
+      const parsed = JSON.parse(raw) as Prefill;
+      if (parsed.draftText) setDraftText(parsed.draftText);
+      if (parsed.messageType) setMessageType(parsed.messageType);
+    } catch {
+      // malformed prefill — ignore
+    }
+  }, []);
+
+  async function submitCheck(textToCheck: string) {
+    if (submitRef.current) return;
+    if (!textToCheck.trim()) return;
+    submitRef.current = true;
+    setSubmitting(true);
+    setSubmitError(null);
+    setAiOutput(null);
+    setSavedMessage(null);
+    try {
+      // FRESH idempotency key per submit — including "Check it again"
+      // retries. If we reused a key, the run-module idempotency branch
+      // would return the original AI output instead of re-scoring the
+      // rewrite.
+      const idempotencyKey = safeUUID();
+      const res = await fetch("/api/coach/before-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          draftText: textToCheck,
+          messageType,
+          intentOptional: intentOptional.trim() || null,
+          idempotencyKey,
+        }),
+      });
+      if (res.status === 403) {
+        router.push("/paywall");
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`);
+      }
+      const result = await res.json();
+      if (result.aiOutput) {
+        setAiOutput(result.aiOutput as AiOutput);
+        // Seed the rewrite box with the text we just checked so the user
+        // can edit from there for the next pass.
+        setRewriteText(textToCheck);
+      } else {
+        setSavedMessage(
+          result.message ??
+            "Your draft was saved. Coaching feedback wasn't available this time.",
+        );
+      }
+    } catch (err) {
+      console.error("before-send submit failed", (err as Error)?.message);
+      setSubmitError("Could not check. Try again in a moment.");
+    } finally {
+      setSubmitting(false);
+      submitRef.current = false;
+    }
+  }
+
+  function handleInitialSubmit() {
+    submitCheck(draftText);
+  }
+
+  function handleCheckAgain() {
+    setDraftText(rewriteText);
+    submitCheck(rewriteText);
+  }
+
+  if (submitting) {
+    return (
+      <div className="relative flex min-h-[60vh] items-center justify-center px-5">
+        <BysBackground />
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <p className="mt-4 text-[14px] font-medium text-ink-soft">
+            Reading your draft…
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (aiOutput) {
+    if (isRefusal(aiOutput)) {
+      return (
+        <RefusalCard
+          output={aiOutput}
+          onBack={() => router.push("/coach")}
+        />
+      );
+    }
+    if (aiOutput.mode === "normal") {
+      const verdict = aiOutput.verdict;
+      return (
+        <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <BysBackground />
+          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+            Before you send
+          </span>
+
+          <div className="mt-3 flex items-center gap-2">
+            <span
+              className={`rounded-pill px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.8px] ${VERDICT_PILL[verdict]}`}
+            >
+              {VERDICT_LABEL[verdict]}
+            </span>
+          </div>
+
+          {verdict === "do_not_send" && (
+            <div className="mt-4 rounded-card-sm bg-danger p-4 shadow-soft">
+              <p className="text-[14px] font-semibold leading-[1.5] text-white">
+                Do not send. This message protects your ego more than the
+                relationship.
+              </p>
+            </div>
+          )}
+
+          <div className="mt-5 space-y-3">
+            {RESULT_FIELDS.filter(({ key }) => {
+              const v = aiOutput[key];
+              return typeof v === "string" && v.trim().length > 0;
+            }).map(({ label, key }) => (
+              <div key={key} className="rounded-card-sm bg-surface p-4 shadow-soft">
+                <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                  {label}
+                </p>
+                <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                  {aiOutput[key]}
+                </p>
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-7">
+            <p className="text-[13px] font-bold uppercase tracking-[1px] text-ink-muted">
+              Rewrite and check it again
+            </p>
+            <div className="mt-2">
+              <VoiceInput
+                key="bys-rewrite"
+                value={rewriteText}
+                onChange={setRewriteText}
+                rows={6}
+                placeholder="Edit the draft above, then check it again."
+              />
+            </div>
+            {submitError && (
+              <p className="mt-3 text-[13px] font-medium text-danger">
+                {submitError}
+              </p>
+            )}
+            <button
+              onClick={handleCheckAgain}
+              disabled={!rewriteText.trim()}
+              className="mt-4 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+            >
+              Check it again
+            </button>
+          </div>
+
+          <button
+            onClick={() => router.push("/coach")}
+            className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+          >
+            Done
+          </button>
+        </div>
+      );
+    }
+    // Unknown output shape — fall through to saved-message state.
+    return (
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <BysBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Draft saved
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          Your draft was saved, but coaching feedback isn't available for this
+          one.
+        </p>
+        <button
+          onClick={() => router.push("/coach")}
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+        >
+          Back to Coach
+        </button>
+      </div>
+    );
+  }
+
+  if (savedMessage) {
+    return (
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <BysBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Draft saved
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          {savedMessage}
+        </p>
+        <button
+          onClick={handleInitialSubmit}
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+        >
+          Try again for a verdict
+        </button>
+        <button
+          onClick={() => router.push("/coach")}
+          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+        >
+          Back to Coach
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <BysBackground />
+
+      <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+        Before you send
+      </span>
+      <h2
+        className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
+        style={{ letterSpacing: "-0.6px" }}
+      >
+        Paste the draft. See how it <span className="italic">lands</span>.
+      </h2>
+      <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+        This isn't a proofreader. It's a gut-check on how the other person
+        will read it.
+      </p>
+
+      <div className="mt-5">
+        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+          Your draft
+        </p>
+        <div className="mt-2">
+          <VoiceInput
+            key="bys-draft"
+            value={draftText}
+            onChange={setDraftText}
+            rows={7}
+            placeholder="Paste or type what you're about to send…"
+          />
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+          What kind of message is this?
+        </p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {MESSAGE_TYPES.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setMessageType(t.value)}
+              className={`flex min-h-11 items-center justify-center rounded-card-sm px-3 text-[13px] font-semibold transition active:scale-[0.99] ${
+                messageType === t.value
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-5">
+        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+          What do you want them to take away? <span className="text-ink-muted">(optional)</span>
+        </p>
+        <div className="mt-2">
+          <VoiceInput
+            key="bys-intent"
+            value={intentOptional}
+            onChange={setIntentOptional}
+            rows={3}
+            placeholder="If you want, tell the coach what you hope they feel or do."
+          />
+        </div>
+      </div>
+
+      {submitError && (
+        <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
+      )}
+
+      <button
+        onClick={handleInitialSubmit}
+        disabled={!draftText.trim()}
+        className="mt-7 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+      >
+        Check this draft
+      </button>
+    </div>
+  );
+}
