@@ -6,6 +6,14 @@ import { VoiceInput } from "@/components/voice-input";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { safeUUID } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
+
+// Reject stashes older than this. sessionStorage is tab-scoped, not
+// account-scoped; a short window limits the cross-user bleed window to
+// cases where user B logs in within 5 min of user A's tab-abandoned
+// handoff. Chosen over pure userId match so even a same-user stale
+// stash from an abandoned flow doesn't auto-populate days later.
+const PREFILL_MAX_AGE_MS = 5 * 60 * 1000;
 
 type MessageType =
   | "conflict"
@@ -32,6 +40,8 @@ type Prefill = {
   draftText?: string;
   messageType?: MessageType;
   sourceReviewEntryId?: string;
+  userId?: string;
+  stashedAt?: number;
 };
 
 type AiNormal = {
@@ -117,24 +127,59 @@ export default function BeforeYouSendPage() {
   const submitRef = useRef(false);
 
   // Read sessionStorage prefill once on mount (Review → BYS handoff from
-  // Commit 6). Storage key is cleared after read so a stale prefill can't
-  // repopulate on a later /coach/before-send visit.
+  // Commit 6). The stash is cleared on mount regardless of validation so
+  // a stale/foreign prefill never replays.
+  //
+  // sessionStorage is tab-scoped, not account-scoped. A user who logs out
+  // mid-flow and another user who logs in on the same tab would otherwise
+  // inherit the first user's draft. Two-gate defense:
+  //   1. stashedAt must be within PREFILL_MAX_AGE_MS (5 min)
+  //   2. userId must match the current Supabase session
+  // Same class as the "null-sentinel cross-account guard" lesson in
+  // CLAUDE.md — the hint must be bound to a live auth signal.
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem(PREFILL_KEY);
-      if (!raw) return;
-      sessionStorage.removeItem(PREFILL_KEY);
-      const parsed = JSON.parse(raw) as Prefill;
+    let cancelled = false;
+    (async () => {
+      let parsed: Prefill | null = null;
+      try {
+        const raw = sessionStorage.getItem(PREFILL_KEY);
+        if (raw) {
+          sessionStorage.removeItem(PREFILL_KEY);
+          parsed = JSON.parse(raw) as Prefill;
+        }
+      } catch {
+        // malformed stash — already cleared
+      }
+      if (!parsed) return;
+      if (
+        typeof parsed.stashedAt !== "number" ||
+        Date.now() - parsed.stashedAt > PREFILL_MAX_AGE_MS
+      ) {
+        return;
+      }
+      if (!parsed.userId) return;
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      if (cancelled) return;
+      if (!data.user || data.user.id !== parsed.userId) return;
       if (parsed.draftText) setDraftText(parsed.draftText);
       if (parsed.messageType) setMessageType(parsed.messageType);
-    } catch {
-      // malformed prefill — ignore
-    }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function submitCheck(textToCheck: string) {
     if (submitRef.current) return;
     if (!textToCheck.trim()) return;
+    // Snapshot the pre-submit verdict. Used by the 403 handler if this
+    // is a rewrite — the user has composed a new draft based on the
+    // verdict in hand, and losing both the verdict and the rewrite text
+    // to a paywall redirect erases their work. We restore the snapshot
+    // on 403 and surface an inline upgrade CTA.
+    const previousAiOutput = aiOutput;
+    const isRewriteSubmit = previousAiOutput !== null;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
@@ -157,7 +202,21 @@ export default function BeforeYouSendPage() {
         }),
       });
       if (res.status === 403) {
-        router.push("/paywall");
+        // Initial submit: user hasn't seen any coaching output yet —
+        // send them to the paywall.
+        // Rewrite ("Check it again"): user has composed a rewrite and is
+        // asking for another pass. Don't discard their in-progress draft
+        // to a redirect. Restore the verdict they were looking at and
+        // surface an inline upgrade prompt so they can upgrade without
+        // losing context.
+        if (isRewriteSubmit) {
+          setAiOutput(previousAiOutput);
+          setSubmitError(
+            "A subscription is needed to check rewrites. Tap Done or visit the paywall to upgrade.",
+          );
+        } else {
+          router.push("/paywall");
+        }
         return;
       }
       if (!res.ok) {
@@ -177,6 +236,10 @@ export default function BeforeYouSendPage() {
       }
     } catch (err) {
       console.error("before-send submit failed", (err as Error)?.message);
+      // Keep the prior verdict on screen during a rewrite failure —
+      // losing both the verdict and the rewrite text to a transient
+      // network error erases the user's work.
+      if (isRewriteSubmit) setAiOutput(previousAiOutput);
       setSubmitError("Could not check. Try again in a moment.");
     } finally {
       setSubmitting(false);

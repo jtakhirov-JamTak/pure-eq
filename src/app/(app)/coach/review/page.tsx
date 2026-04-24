@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
@@ -9,6 +9,7 @@ import { isRefusal } from "@/lib/coach/output-shape";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
+import { createClient } from "@/lib/supabase/client";
 
 // ============================================================
 // Step taxonomy
@@ -224,11 +225,27 @@ export default function ReviewPage() {
   // Drives the result-screen "show repair cards" + opening-line CTA.
   const [submittedRepairBranchActive, setSubmittedRepairBranchActive] =
     useState(false);
+  // Cached at mount so handoffToBys can stamp the BYS prefill synchronously.
+  // Cross-user sessionStorage bleed requires both a matching userId AND a
+  // fresh stashedAt on the reader side (see /coach/before-send).
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
     idempotencyKeyRef.current = safeUUID();
   }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase.auth.getUser();
+      if (!cancelled) setCurrentUserId(data.user?.id ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Dynamic step list — recomputed each render from form state. Length
   // moves between 9, 10, and 13 depending on whether the readiness gate
@@ -363,10 +380,22 @@ export default function ReviewPage() {
   function handoffToBys() {
     if (!openingLine.trim()) return;
     try {
+      // Stamp userId + stashedAt so BYS can reject a stale prefill left
+      // over from a prior session on the same browser tab (sessionStorage
+      // is tab-scoped, not account-scoped). BYS requires both a fresh
+      // stash (<5 min) AND a userId match against the current Supabase
+      // session. If we didn't resolve a userId at mount, we skip the
+      // stash — drop the handoff rather than leak an unsigned draft.
+      if (!currentUserId) {
+        router.push("/coach/before-send");
+        return;
+      }
       const payload = {
         draftText: openingLine,
         messageType: "repair" as const,
         sourceReviewEntryId: reviewEntryId,
+        userId: currentUserId,
+        stashedAt: Date.now(),
       };
       sessionStorage.setItem(PREFILL_KEY, JSON.stringify(payload));
     } catch {
@@ -722,7 +751,17 @@ export default function ReviewPage() {
                     [currentStep.key]: opt.value,
                     readiness: "",
                   }));
-                  setStep(step + 1);
+                  // Non-repair options terminate the flow here. Without
+                  // this branch the user would setStep(step+1) past the
+                  // end of STEPS (length stays at 9 when needsRepair is
+                  // false), and the currentStep fallback would re-render
+                  // this same screen with no submit path — a dead-end on
+                  // 4 of 8 options.
+                  if (REPAIR_TRIGGER_NEEDS.includes(opt.value)) {
+                    setStep(step + 1);
+                  } else {
+                    handleSubmit({ repairBranchActive: false });
+                  }
                 }}
                 className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
                   value === opt.value
