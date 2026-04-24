@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/brand/Wordmark";
@@ -12,8 +12,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const oauthInFlight = useRef(false);
 
   async function handleGoogle() {
+    if (oauthInFlight.current) return;
+    oauthInFlight.current = true;
     setError(null);
     setLoading(true);
     const supabase = createClient();
@@ -26,6 +29,7 @@ export default function LoginPage() {
     if (error) {
       setError(error.message);
       setLoading(false);
+      oauthInFlight.current = false;
     }
     // Success: Supabase redirects the browser to Google's consent screen.
   }
@@ -85,7 +89,7 @@ export default function LoginPage() {
 
         <div className="my-5 flex items-center gap-3">
           <div className="h-px flex-1 bg-hair" />
-          <span className="text-[12px] font-medium text-ink-muted">
+          <span className="text-[12px] font-semibold text-ink-soft">
             or continue with email
           </span>
           <div className="h-px flex-1 bg-hair" />

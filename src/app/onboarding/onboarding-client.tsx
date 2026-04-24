@@ -251,7 +251,8 @@ export default function OnboardingClient() {
 
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute right-6 top-16"
+          className="pointer-events-none absolute right-6"
+          style={{ top: "max(env(safe-area-inset-top), 4rem)" }}
         >
           <SunBadge />
         </div>
@@ -300,7 +301,8 @@ export default function OnboardingClient() {
             setAnswers(new Array(9).fill(null));
             setSubmitError(null);
           }}
-          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-white/85 underline active:opacity-70"
+          disabled={submitting}
+          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-white underline active:opacity-70 disabled:opacity-50"
         >
           This doesn&apos;t feel right
         </button>
