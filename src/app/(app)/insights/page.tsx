@@ -1,14 +1,15 @@
 // Pure EQ domain — replace in fork.
 //
-// /insights renders two cards:
-//   1. StyleBox — profile from the 9-question quiz (unchanged)
+// /insights renders:
+//   1. StyleBox — profile from the 9-question quiz
 //   2. Weekly reflection — auto-generated once per 7 days; client kicks
 //      POST /api/insights/generate on mount when no fresh row exists.
+//   3. Open conversations — list of active threads, if any exist.
 //
 // Cost-wise, loading this page repeatedly inside a 7-day window is free:
 // the API endpoint's idempotency short-circuit returns the cached row
 // without calling Claude.
-import * as Sentry from "@sentry/nextjs";
+import Link from "next/link";
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { requirePaidAccessPage } from "@/lib/require-access";
@@ -27,6 +28,7 @@ import {
   IDEMPOTENCY_WINDOW_MS,
 } from "@/lib/insights/generate";
 import { reflectionOutputSchema } from "@/lib/ai/schemas";
+import { captureServerRead } from "@/lib/read-capture";
 
 export default async function InsightsPage() {
   const {
@@ -38,8 +40,7 @@ export default async function InsightsPage() {
 
   await requirePaidAccessPage(user);
 
-  // Fetch profile + latest weekly_reflections row in parallel.
-  const [profile, latestReflectionRes] = await Promise.all([
+  const [profile, latestReflectionRes, threadsRes, personsRes] = await Promise.all([
     getLatestProfile(supabase, user.id),
     supabase
       .from("weekly_reflections")
@@ -48,20 +49,50 @@ export default async function InsightsPage() {
       .order("generated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabase
+      .from("conversation_threads")
+      .select("thread_id, status, person_id, last_activity_at")
+      .eq("user_id", user.id)
+      .in("status", ["open", "stabilizing"])
+      .order("last_activity_at", { ascending: false })
+      .limit(3),
+    supabase
+      .from("persons")
+      .select("person_id, display_name")
+      .eq("user_id", user.id)
+      .eq("is_active", true)
+      .limit(100),
   ]);
 
   if (latestReflectionRes.error) {
-    // Capture with cooldown-latched pattern per CLAUDE.md — but a single
-    // call here (not per-request across the instance) is fine because it's
-    // one query. Log + fall through to kickoff.
-    Sentry.captureException(
+    captureServerRead(
+      "insights",
+      "weekly_reflections_read",
       new Error("weekly_reflections_read_failed"),
-      { tags: { area: "insights", kind: "weekly_reflections_read" } },
+    );
+  }
+  if (threadsRes.error) {
+    captureServerRead(
+      "insights",
+      "conversation_threads_read",
+      new Error("conversation_threads_read_failed"),
+    );
+  }
+  if (personsRes.error) {
+    captureServerRead(
+      "insights",
+      "persons_read",
+      new Error("persons_read_failed"),
     );
   }
 
   const primary = profile?.primary_profile as ProfileType | undefined;
   const secondary = profile?.secondary_profile as ProfileType | null;
+
+  const threads = threadsRes.data ?? [];
+  const personMap = new Map(
+    (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
+  );
 
   // Decide whether the server-side row is fresh enough to render directly,
   // or whether we should delegate to ReflectionKickoff (which auto-POSTs).
@@ -129,6 +160,40 @@ export default async function InsightsPage() {
         />
       ) : (
         <ReflectionKickoff hasStaleCached={hasStaleCached} />
+      )}
+
+      {threads.length > 0 && (
+        <div className="mt-4">
+          <span className="inline-block rounded-pill bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
+            Open conversations
+          </span>
+          <ul className="mt-2.5 divide-y divide-hair rounded-card-xs bg-surface px-4 shadow-soft">
+            {threads.map((thread) => {
+              const personName = thread.person_id
+                ? (personMap.get(thread.person_id) ?? "Someone")
+                : "General";
+              return (
+                <li key={thread.thread_id}>
+                  <Link
+                    href={`/coach/threads/${thread.thread_id}`}
+                    className="flex items-center gap-3 py-3 active:opacity-70"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                    />
+                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+                      {personName}
+                    </span>
+                    <span className="shrink-0 text-[11px] font-medium text-ink-muted capitalize">
+                      {thread.status === "stabilizing" ? "stabilizing" : "open"}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       )}
     </div>
   );
