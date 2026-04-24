@@ -34,6 +34,20 @@ export default function LoginPage() {
     oauthInFlight.current = true;
     setError(null);
     setLoading(true);
+
+    // 10s safety net: if signInWithOAuth resolves cleanly but the browser
+    // never navigates (popup blocker, extension, OS intervention), the CTA
+    // would stay disabled forever. Re-arm with a recoverable error.
+    const stuckTimer = window.setTimeout(() => {
+      if (oauthInFlight.current) {
+        oauthInFlight.current = false;
+        setLoading(false);
+        setError(
+          "Google sign-in didn't open. Tap again, or use email below.",
+        );
+      }
+    }, 10_000);
+
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -42,11 +56,15 @@ export default function LoginPage() {
       },
     });
     if (error) {
+      window.clearTimeout(stuckTimer);
       setError(error.message);
       setLoading(false);
       oauthInFlight.current = false;
     }
     // Success: Supabase redirects the browser to Google's consent screen.
+    // The stuckTimer is intentionally NOT cleared on success — the browser
+    // is about to leave this page, so the timer never gets a chance to fire.
+    // If the redirect doesn't happen within 10s, the timer recovers the UI.
   }
 
   async function handleLogin(e: React.FormEvent) {
