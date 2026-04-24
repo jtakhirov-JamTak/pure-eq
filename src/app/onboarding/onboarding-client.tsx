@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import type { ProfileResult } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import { CloudAvatar } from "@/components/brand/CloudAvatar";
+import { SunBadge } from "@/components/brand/SunBadge";
+import { readFirstName } from "@/lib/user-metadata";
 import {
   QUESTIONS,
-  PROFILE_DESCRIPTIONS,
-  PROFILE_AVATAR_CLASSES,
-  MODULE_LABELS,
   scoreProfile,
   type QuizOption,
 } from "@/lib/onboarding";
@@ -84,6 +84,7 @@ export default function OnboardingClient() {
   const [submitting, setSubmitting] = useState(false);
   const [flushing, setFlushing] = useState(true);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [firstName, setFirstName] = useState<string>("");
 
   const submitInFlight = useRef(false);
   const flushStarted = useRef(false);
@@ -100,6 +101,10 @@ export default function OnboardingClient() {
         const {
           data: { user },
         } = await supabase.auth.getUser();
+
+        if (user && !cancelled) {
+          setFirstName(readFirstName(user.user_metadata));
+        }
 
         const pending = readPending();
         if (
@@ -233,80 +238,72 @@ export default function OnboardingClient() {
   }
 
   if (result) {
-    const desc = PROFILE_DESCRIPTIONS[result.primary];
-    const moduleLabel = MODULE_LABELS[result.recommendedModule];
-    const avatarClass = PROFILE_AVATAR_CLASSES[result.primary];
-    const initial = result.primary.charAt(0).toUpperCase();
-
+    const displayName = firstName || "friend";
     return (
-      <div className="relative flex min-h-dvh flex-col items-center justify-center px-6 py-12 pb-[env(safe-area-inset-bottom)]">
-        <OnboardingSky />
-        <div className="w-full max-w-sm text-center">
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-            Your communication profile
-          </p>
+      <div
+        className="relative flex min-h-dvh flex-col items-center px-6"
+        style={{
+          paddingTop: "max(env(safe-area-inset-top), 2rem)",
+          paddingBottom: "max(env(safe-area-inset-bottom), 1.5rem)",
+        }}
+      >
+        <SkyBackground variant="result" />
 
-          <div
-            className={`mx-auto mt-5 flex h-24 w-24 items-center justify-center rounded-full font-display text-[36px] text-white shadow-card ${avatarClass}`}
-            aria-hidden
-          >
-            {initial}
-          </div>
-
-          <h1
-            className="mt-4 font-display text-[38px] capitalize leading-[1.05] text-ink"
-            style={{ letterSpacing: "-1px" }}
-          >
-            <span className="italic">{result.primary}</span>
-          </h1>
-
-          <div className="mt-8 space-y-4 text-left">
-            {[
-              { label: "At your best", body: desc.strength },
-              { label: "Under stress", body: desc.stress },
-              { label: "What will help most", body: desc.willHelpMost },
-              { label: "Best place to start", body: moduleLabel },
-            ].map((row) => (
-              <div
-                key={row.label}
-                className="rounded-card-xs bg-surface p-4 shadow-soft"
-              >
-                <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                  {row.label}
-                </p>
-                <p className="mt-1 text-[14px] font-medium leading-[1.5] text-ink">
-                  {row.body}
-                </p>
-              </div>
-            ))}
-          </div>
-
-          {submitError && (
-            <p className="mt-6 text-[13px] font-medium text-danger">
-              {submitError}
-            </p>
-          )}
-
-          <button
-            onClick={handleCta}
-            disabled={submitting}
-            className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-50"
-          >
-            {submitting ? "Saving…" : `Try a 60-second ${moduleLabel}`}
-          </button>
-
-          <button
-            onClick={() => {
-              setResult(null);
-              setCurrentQuestion(0);
-              setAnswers(new Array(9).fill(null));
-              setSubmitError(null);
-            }}
-            className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
-          >
-            This doesn&apos;t feel right
-          </button>
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute right-6 top-16"
+        >
+          <SunBadge />
         </div>
+
+        <div className="mt-24 flex justify-center">
+          <CloudAvatar size={96} mood="happy" />
+        </div>
+
+        <h1
+          className="mt-6 text-center font-display text-[32px] leading-[1.1] text-white"
+          style={{
+            letterSpacing: "-0.6px",
+            textShadow: "0 2px 8px rgba(20,60,130,0.25)",
+          }}
+        >
+          You&apos;re all set,
+          <br />
+          <span className="italic break-words">{displayName}</span>.
+        </h1>
+
+        <p className="mt-4 max-w-[300px] text-center text-[14px] font-medium leading-[1.5] text-white/90">
+          Your SpeakEasy is tuned for hard conversations and pattern-spotting.
+          Blue skies ahead.
+        </p>
+
+        {submitError && (
+          <p className="mt-6 text-center text-[13px] font-medium text-white">
+            {submitError}
+          </p>
+        )}
+
+        <div className="flex-1" />
+
+        <button
+          onClick={handleCta}
+          disabled={submitting}
+          className="h-14 w-full max-w-sm rounded-pill bg-white text-[15px] font-bold text-ink shadow-card transition active:scale-[0.98] disabled:opacity-60"
+        >
+          {submitting ? "Saving…" : "Step into the forecast →"}
+        </button>
+
+        <button
+          onClick={() => {
+            setResult(null);
+            setCurrentQuestion(0);
+            setAnswers(new Array(9).fill(null));
+            setSubmitError(null);
+          }}
+          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-white/85 underline active:opacity-70"
+        >
+          This doesn&apos;t feel right
+        </button>
       </div>
     );
   }

@@ -10,13 +10,15 @@ import { CloudScatter } from "./CloudScatter";
 //  - `warm`      — sky-hi → warm peach → white; Review flow
 //  - `tools-hub` — sky-hi → sky-mid; Tools hub + locked variant
 //  - `stormy`    — sky-mid → sky-hi → white; Overwhelmed
+//  - `result`    — sky-mid → brand; onboarding completion (celebratory)
 
 export type SkyVariant =
   | "coach-hub"
   | "calm"
   | "warm"
   | "tools-hub"
-  | "stormy";
+  | "stormy"
+  | "result";
 
 const GRADIENTS: Record<SkyVariant, string> = {
   "coach-hub":
@@ -25,6 +27,7 @@ const GRADIENTS: Record<SkyVariant, string> = {
   warm: "linear-gradient(180deg, #d6eeff 0%, #fff1e5 50%, #ffffff 100%)",
   "tools-hub": "linear-gradient(180deg, #d6eeff 0%, #a9d9ff 100%)",
   stormy: "linear-gradient(180deg, #a9d9ff 0%, #d6eeff 50%, #ffffff 100%)",
+  result: "linear-gradient(180deg, #a9d9ff 0%, #4fb0ff 100%)",
 };
 
 type CloudProps = {
@@ -58,6 +61,13 @@ const CLOUDS: Record<SkyVariant, CloudProps[]> = {
     { x: -50, y: 140, size: 160, opacity: 0.8, blur: 0.5 },
     { x: 250, y: 100, size: 100, opacity: 0.7 },
     { x: -40, y: 600, size: 140, opacity: 0.55, blur: 1 },
+  ],
+  // Result screen: subtle clouds clustered toward the bottom so the sun
+  // (top-right) and cloud avatar (center) read as the focal layer.
+  result: [
+    { x: -50, y: 520, size: 150, opacity: 0.7, blur: 1 },
+    { x: 240, y: 580, size: 110, opacity: 0.55, blur: 1 },
+    { x: 90, y: 680, size: 90, opacity: 0.45, blur: 2 },
   ],
 };
 
