@@ -5,77 +5,135 @@ import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import ThreadPicker from "@/components/thread-picker";
-import { isLegacyV1 } from "@/lib/coach/output-shape";
+import { isRefusal } from "@/lib/coach/output-shape";
 import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StepDots } from "@/components/brand/StepDots";
 import { safeUUID } from "@/lib/utils";
 
-const STEPS = [
-  {
-    key: "personName",
-    title: "Who was this conversation with?",
-    prompt: "Start typing to see people you've mentioned before",
-    type: "person" as const,
-    optional: true,
-  },
-  {
-    key: "whatHappened",
-    title: "What actually happened in the conversation?",
-    prompt:
-      "Stick to facts. What was said and done — not interpretations yet.",
-    type: "textarea" as const,
-    optional: false,
-  },
-  {
-    key: "hardestMomentFeeling",
-    title: "What was the hardest moment, and what did you feel in it?",
-    prompt: "Name the moment and the feeling that showed up for you.",
-    type: "textarea" as const,
-    optional: false,
-  },
-  {
-    key: "observedInThem",
-    title: "What did you observe in them — body, tone, words?",
-    prompt:
-      "What did you actually see or hear? Observations, not conclusions.",
-    type: "textarea" as const,
-    optional: false,
-  },
-  {
-    key: "theirExperience",
-    title: "Looking back, what do you think their experience was?",
-    prompt: "Your best guess at what the conversation was like for them.",
-    type: "textarea" as const,
-    optional: false,
-  },
-  {
-    key: "whatHelped",
-    title: "What did you do that helped?",
-    prompt: "Even small things — a pause, a question, an acknowledgment.",
-    type: "textarea" as const,
-    optional: false,
-  },
-  {
-    key: "whatHurt",
-    title: "What did you do that hurt or made it harder?",
-    prompt: "Be honest. You're the only one reading this.",
-    type: "textarea" as const,
-    optional: false,
-  },
-  {
-    key: "validatedAssumptions",
-    title: "Did you test any assumption by asking? (optional)",
-    prompt:
-      "Skip if none. What assumption did you check, and what did you learn?",
-    type: "textarea" as const,
-    optional: true,
-  },
-  {
-    key: "unresolvedAndNext",
-    title: "What's still unresolved, and what's your next small move?",
-    prompt: "One or two sentences is enough.",
-    type: "textarea" as const,
-    optional: false,
-  },
+// ============================================================
+// Step taxonomy
+// ============================================================
+// Base form: 9 steps (1 person picker + 8 fields). Some text, some
+// enum-select. After step 8 (needsToHappenNext), if the user picked a
+// "needs repair" option, we insert a readiness gate. If they pass the
+// gate, 3 repair sub-steps appear before submit. Total step count is
+// 9 / 10 / 13 depending on path.
+
+type Ask = "yes" | "no" | "unclear";
+
+type NeedsNext =
+  | "nothing"
+  | "clarify"
+  | "align"
+  | "apologize"
+  | "reassure"
+  | "give_space"
+  | "set_boundary"
+  | "ask_for_repair";
+
+type Readiness = "yes" | "somewhat" | "no";
+
+const ASK_OPTIONS: { value: Ask; label: string }[] = [
+  { value: "yes", label: "Yes, I asked" },
+  { value: "no", label: "No, I assumed" },
+  { value: "unclear", label: "Not sure" },
+];
+
+const NEEDS_NEXT_OPTIONS: { value: NeedsNext; label: string }[] = [
+  { value: "nothing", label: "Nothing — I'm good with how it landed" },
+  { value: "clarify", label: "Clarify something I said" },
+  { value: "align", label: "Get back on the same page" },
+  { value: "apologize", label: "Apologize" },
+  { value: "reassure", label: "Reassure them" },
+  { value: "give_space", label: "Give it space" },
+  { value: "set_boundary", label: "Set a boundary" },
+  { value: "ask_for_repair", label: "Ask them to repair something" },
+];
+
+const READINESS_OPTIONS: { value: Readiness; label: string }[] = [
+  { value: "yes", label: "Yes — I can name their hurt without defending myself" },
+  { value: "somewhat", label: "Somewhat — I'll need to be careful" },
+  { value: "no", label: "No — I'm still defending my intent" },
+];
+
+// Repair triggers: only these needs-next options gate into the repair branch.
+const REPAIR_TRIGGER_NEEDS: NeedsNext[] = [
+  "clarify",
+  "apologize",
+  "reassure",
+  "ask_for_repair",
+];
+
+type StepKind = "person" | "textarea" | "select_ask" | "select_needs" | "select_readiness";
+type StepDef = {
+  key: string;
+  title: string;
+  prompt: string | null;
+  kind: StepKind;
+};
+
+const BASE_STEPS: StepDef[] = [
+  { key: "personName", title: "Who was this conversation with?", prompt: "Start typing to see people you've mentioned before.", kind: "person" },
+  { key: "whatHappened", title: "What actually happened in the conversation?", prompt: "Stick to facts. What was said and done — not interpretations yet.", kind: "textarea" },
+  { key: "hardestMomentFeeling", title: "What was the hardest moment, and what did you feel in it?", prompt: "Name the moment and the feeling that showed up for you.", kind: "textarea" },
+  { key: "whatYouDid", title: "What did you do during the conversation?", prompt: "What did you say or do — including the small moves you noticed yourself making.", kind: "textarea" },
+  { key: "observedInThem", title: "What did you observe in them — body, tone, words?", prompt: "What did you actually see or hear. Observations, not conclusions.", kind: "textarea" },
+  { key: "theirExperience", title: "Looking back, what do you think their experience was?", prompt: "Your best guess at what the conversation was like for them.", kind: "textarea" },
+  { key: "whatYouAvoided", title: "What did you avoid saying or doing?", prompt: "What did you sidestep — the question you didn't ask, the thing you didn't admit, the topic you steered away from.", kind: "textarea" },
+  { key: "askBeforeUnderstanding", title: "Did you ask before assuming what was going on for them?", prompt: null, kind: "select_ask" },
+  { key: "needsToHappenNext", title: "What needs to happen next?", prompt: "Pick the closest fit.", kind: "select_needs" },
+];
+
+const READINESS_STEP: StepDef = {
+  key: "readiness",
+  title: "Are you ready to repair?",
+  prompt: "Repair only works if you can hold their hurt without defending yourself first.",
+  kind: "select_readiness",
+};
+
+const REPAIR_STEPS: StepDef[] = [
+  { key: "yourPart", title: "What's your part in this?", prompt: "The piece that's actually yours, not the part that's about them.", kind: "textarea" },
+  { key: "secretWant", title: "What do you secretly want from them right now?", prompt: "Honest. Not the polite version.", kind: "textarea" },
+  { key: "couldMakeThemFeel", title: "What would you want them to feel after the repair?", prompt: "Name the emotional state you're hoping for.", kind: "textarea" },
+];
+
+// ============================================================
+// AI output shape
+// ============================================================
+type AiNormal = {
+  mode: "normal";
+  how_you_came_across: string;
+  impact_vs_intent: string;
+  alternative_explanation: string;
+  question_you_missed: string;
+  what_to_own?: string;
+  impact_on_them?: string;
+  thing_not_to_say?: string;
+  recommended_timing?: string;
+  pattern_tag: string;
+};
+
+type AiRefusal = {
+  mode: "refusal";
+  refusal_reason: string;
+  message_to_user: string;
+  suggested_resource: string;
+};
+
+type AiOutput = AiNormal | AiRefusal;
+
+const BASE_RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
+  { label: "How you came across", key: "how_you_came_across" },
+  { label: "Impact vs. intent", key: "impact_vs_intent" },
+  { label: "Alternative explanation", key: "alternative_explanation" },
+  { label: "Question you missed", key: "question_you_missed" },
+];
+
+const REPAIR_RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
+  { label: "What to own", key: "what_to_own" },
+  { label: "Impact on them", key: "impact_on_them" },
+  { label: "Thing not to say", key: "thing_not_to_say" },
+  { label: "Recommended timing", key: "recommended_timing" },
 ];
 
 const OUTCOME_QUESTIONS = [
@@ -111,163 +169,36 @@ const OUTCOME_QUESTIONS = [
   },
 ] as const;
 
-type AiOutput = {
-  how_user_likely_came_across?: string;
-  alternative_explanation?: string;
-};
+const PREFILL_KEY = "pure-eq:bys-prefill";
 
 const ReviewBackground = () => <SkyBackground variant="warm" />;
 
-function LegacyV1ReviewCard({
+function RefusalCard({
   output,
-  reviewEntryId,
-  outcomeData,
-  onOutcomeChange,
-  outcomeSaved,
-  outcomeError,
-  allOutcomeAnswered,
-  onSaveOutcome,
-  onRetryCoaching,
   onBack,
 }: {
-  output: AiOutput;
-  reviewEntryId: string | null;
-  outcomeData: Record<string, string>;
-  onOutcomeChange: (key: string, value: string) => void;
-  outcomeSaved: boolean;
-  outcomeError: boolean;
-  allOutcomeAnswered: boolean;
-  onSaveOutcome: () => void;
-  onRetryCoaching: () => void;
+  output: AiRefusal;
   onBack: () => void;
 }) {
-  const REVIEW_FIELDS: { label: string; key: keyof AiOutput }[] = [
-    { label: "How you likely landed", key: "how_user_likely_came_across" },
-    {
-      label: "What else may have been going on",
-      key: "alternative_explanation",
-    },
-  ];
-  const visible = REVIEW_FIELDS.filter(({ key }) => {
-    const v = output[key];
-    return typeof v === "string" && v.trim().length > 0;
-  });
-  if (visible.length === 0) {
-    return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <ReviewBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
-        >
-          Entry saved
-        </h2>
-        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          Your reflection is saved, but no coaching feedback is available to
-          show for this one.
-        </p>
-        <button
-          onClick={onRetryCoaching}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
-          Try again for coaching feedback
-        </button>
-        <button
-          onClick={onBack}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-        >
-          Back to Coach
-        </button>
-      </div>
-    );
-  }
   return (
     <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <ReviewBackground />
-      <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
-        Review
-      </span>
       <h2
-        className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
+        className="font-display text-[28px] leading-[1.15] text-ink"
         style={{ letterSpacing: "-0.6px" }}
       >
-        Your <span className="italic">reflection</span>.
+        A note before you go further.
       </h2>
-      <div className="mt-5 space-y-3">
-        {visible.map(({ label, key }) => (
-          <div
-            key={key}
-            className="rounded-card-sm bg-surface p-4 shadow-soft"
-          >
-            <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-              {label}
-            </p>
-            <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-              {output[key]}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {reviewEntryId && !outcomeSaved && (
-        <div className="mt-6 rounded-card-sm bg-surface p-4 shadow-soft">
-          <p className="text-[13px] font-bold text-ink">
-            Rate this conversation
-          </p>
-          <p className="mt-1 text-[12px] font-medium text-ink-soft">
-            Optional — helps build your patterns over time.
-          </p>
-          <div className="mt-4 space-y-3">
-            {OUTCOME_QUESTIONS.map((q) => (
-              <div key={q.key}>
-                <p className="text-[13px] font-semibold text-ink-soft">
-                  {q.title}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {q.options.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => onOutcomeChange(q.key, opt.value)}
-                      className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition ${
-                        outcomeData[q.key] === opt.value
-                          ? "bg-brand text-white shadow-cta"
-                          : "bg-surface-tint text-ink"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-          {allOutcomeAnswered && (
-            <button
-              onClick={onSaveOutcome}
-              className="mt-4 flex h-12 w-full items-center justify-center rounded-pill bg-brand-deep text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
-            >
-              Save outcome
-            </button>
-          )}
-          {outcomeError && (
-            <p className="mt-2 text-[13px] font-medium text-danger">
-              Could not save outcome. Try again.
-            </p>
-          )}
-        </div>
-      )}
-
-      {outcomeSaved && (
-        <p className="mt-6 text-[13px] font-medium text-ink-soft">
-          Outcome saved.
+      <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+        <p className="text-[14px] font-medium leading-[1.55] text-ink">
+          {output.message_to_user}
         </p>
-      )}
-
+      </div>
       <button
         onClick={onBack}
-        className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
       >
-        Done
+        Back to Coach
       </button>
     </div>
   );
@@ -287,40 +218,90 @@ export default function ReviewPage() {
   const [outcomeData, setOutcomeData] = useState<Record<string, string>>({});
   const [outcomeSaved, setOutcomeSaved] = useState(false);
   const [outcomeError, setOutcomeError] = useState(false);
+  const [openingLine, setOpeningLine] = useState("");
+  // Tracks whether the user actually went through the repair branch in
+  // this submission (yes/somewhat readiness + repair-trigger needs).
+  // Drives the result-screen "show repair cards" + opening-line CTA.
+  const [submittedRepairBranchActive, setSubmittedRepairBranchActive] =
+    useState(false);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
     idempotencyKeyRef.current = safeUUID();
   }
 
-  const currentStep = STEPS[step];
+  // Dynamic step list — recomputed each render from form state. Length
+  // moves between 9, 10, and 13 depending on whether the readiness gate
+  // and repair sub-steps apply.
+  const needsRepair = REPAIR_TRIGGER_NEEDS.includes(
+    data.needsToHappenNext as NeedsNext,
+  );
+  const includesReadiness = needsRepair;
+  const passedReadiness =
+    data.readiness === "yes" || data.readiness === "somewhat";
+  const includesRepairSteps = includesReadiness && passedReadiness;
+
+  const STEPS: StepDef[] = [
+    ...BASE_STEPS,
+    ...(includesReadiness ? [READINESS_STEP] : []),
+    ...(includesRepairSteps ? REPAIR_STEPS : []),
+  ];
+  const currentStep = STEPS[step] ?? BASE_STEPS[BASE_STEPS.length - 1];
   const value = data[currentStep.key] || "";
-  const canAdvance = currentStep.optional || value.trim().length > 0;
 
   function setFieldValue(key: string, next: string) {
     setData((d) => ({ ...d, [key]: next }));
   }
 
+  function canAdvance(): boolean {
+    if (currentStep.kind === "person") return true;
+    if (
+      currentStep.kind === "select_ask" ||
+      currentStep.kind === "select_needs" ||
+      currentStep.kind === "select_readiness"
+    ) {
+      return !!value;
+    }
+    return value.trim().length > 0;
+  }
+
   function handleNext() {
-    if (!canAdvance) return;
+    if (!canAdvance()) return;
     if (step < STEPS.length - 1) {
       setStep(step + 1);
     } else {
-      handleSubmit();
+      handleSubmit({ repairBranchActive: includesRepairSteps });
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmit({
+    repairBranchActive,
+  }: {
+    repairBranchActive: boolean;
+  }) {
     if (submitRef.current) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
+    setSubmittedRepairBranchActive(repairBranchActive);
     try {
       const res = await fetch("/api/coach/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...data,
+          personName: data.personName,
+          whatHappened: data.whatHappened,
+          hardestMomentFeeling: data.hardestMomentFeeling,
+          whatYouDid: data.whatYouDid,
+          observedInThem: data.observedInThem,
+          theirExperience: data.theirExperience,
+          whatYouAvoided: data.whatYouAvoided,
+          askBeforeUnderstanding: data.askBeforeUnderstanding,
+          needsToHappenNext: data.needsToHappenNext,
+          repairBranchActive,
+          yourPart: repairBranchActive ? data.yourPart : null,
+          secretWant: repairBranchActive ? data.secretWant : null,
+          couldMakeThemFeel: repairBranchActive ? data.couldMakeThemFeel : null,
           personId: personId || null,
           threadId: threadId || null,
           idempotencyKey: idempotencyKeyRef.current,
@@ -338,18 +319,16 @@ export default function ReviewPage() {
         setReviewEntryId(result.reviewEntryId);
       }
       if (result.aiOutput) {
-        setAiOutput(result.aiOutput);
+        setAiOutput(result.aiOutput as AiOutput);
       } else {
         setSavedMessage(
           result.message ??
-            "Your entry is saved. Coaching feedback wasn't available this time.",
+            "Your reflection is saved. Coaching feedback wasn't available this time.",
         );
       }
     } catch (err) {
       console.error("review submit failed", (err as Error)?.message);
-      setSubmitError(
-        "Could not save. Check your connection and try again.",
-      );
+      setSubmitError("Could not save. Check your connection and try again.");
     } finally {
       setSubmitting(false);
       submitRef.current = false;
@@ -359,7 +338,7 @@ export default function ReviewPage() {
   function retryCoaching() {
     setSavedMessage(null);
     setAiOutput(null);
-    handleSubmit();
+    handleSubmit({ repairBranchActive: submittedRepairBranchActive });
   }
 
   async function submitOutcome() {
@@ -381,46 +360,239 @@ export default function ReviewPage() {
     }
   }
 
+  function handoffToBys() {
+    if (!openingLine.trim()) return;
+    try {
+      const payload = {
+        draftText: openingLine,
+        messageType: "repair" as const,
+        sourceReviewEntryId: reviewEntryId,
+      };
+      sessionStorage.setItem(PREFILL_KEY, JSON.stringify(payload));
+    } catch {
+      // sessionStorage write failure is non-fatal — BYS will just start
+      // empty. Don't block the navigation.
+    }
+    router.push("/coach/before-send");
+  }
+
   const allOutcomeAnswered = OUTCOME_QUESTIONS.every(
     (q) => outcomeData[q.key],
   );
 
+  // ============================================================
+  // Result screen
+  // ============================================================
   if (aiOutput) {
-    if (isLegacyV1(aiOutput)) {
+    if (isRefusal(aiOutput)) {
       return (
-        <LegacyV1ReviewCard
+        <RefusalCard
           output={aiOutput}
-          reviewEntryId={reviewEntryId}
-          outcomeData={outcomeData}
-          onOutcomeChange={(key, val) =>
-            setOutcomeData((d) => ({ ...d, [key]: val }))
-          }
-          outcomeSaved={outcomeSaved}
-          outcomeError={outcomeError}
-          allOutcomeAnswered={allOutcomeAnswered}
-          onSaveOutcome={submitOutcome}
-          onRetryCoaching={retryCoaching}
           onBack={() => router.push("/coach")}
         />
       );
     }
-    // Unknown output shape — fall through to the empty-fields card so the
-    // user lands on a page with Back + Retry instead of a blank screen.
+    if (aiOutput.mode !== "normal") {
+      // Unknown shape — show a saved-fallback so the user has a way out.
+      return (
+        <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <ReviewBackground />
+          <h2
+            className="font-display text-[28px] leading-[1.15] text-ink"
+            style={{ letterSpacing: "-0.6px" }}
+          >
+            Reflection saved
+          </h2>
+          <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
+            Your reflection is saved, but coaching feedback isn't available
+            for this one.
+          </p>
+          <button
+            onClick={retryCoaching}
+            className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+          >
+            Try again for coaching feedback
+          </button>
+          <button
+            onClick={() => router.push("/coach")}
+            className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+          >
+            Back to Coach
+          </button>
+        </div>
+      );
+    }
+
+    const baseVisible = BASE_RESULT_FIELDS.filter(({ key }) => {
+      const v = aiOutput[key];
+      return typeof v === "string" && v.trim().length > 0;
+    });
+    const repairVisible = submittedRepairBranchActive
+      ? REPAIR_RESULT_FIELDS.filter(({ key }) => {
+          const v = aiOutput[key];
+          return typeof v === "string" && v.trim().length > 0;
+        })
+      : [];
+    // User picked a repair-needs option but answered "no" to readiness —
+    // surface the gentle redirect copy at the top of the result screen.
+    const showNotReadyNotice =
+      needsRepair && !submittedRepairBranchActive;
+
     return (
-      <LegacyV1ReviewCard
-        output={{}}
-        reviewEntryId={reviewEntryId}
-        outcomeData={outcomeData}
-        onOutcomeChange={(key, val) =>
-          setOutcomeData((d) => ({ ...d, [key]: val }))
-        }
-        outcomeSaved={outcomeSaved}
-        outcomeError={outcomeError}
-        allOutcomeAnswered={allOutcomeAnswered}
-        onSaveOutcome={submitOutcome}
-        onRetryCoaching={retryCoaching}
-        onBack={() => router.push("/coach")}
-      />
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <ReviewBackground />
+        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+          Review
+        </span>
+        <h2
+          className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          Your <span className="italic">reflection</span>.
+        </h2>
+
+        {showNotReadyNotice && (
+          <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+            <p className="text-[13px] font-bold uppercase tracking-[1px] text-ink-muted">
+              Repair takes readiness
+            </p>
+            <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+              You're not ready to repair yet. Name their hurt without
+              defending your intent first. Come back when you can.
+            </p>
+          </div>
+        )}
+
+        <div className="mt-5 space-y-3">
+          {baseVisible.map(({ label, key }) => (
+            <div key={key} className="rounded-card-sm bg-surface p-4 shadow-soft">
+              <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                {label}
+              </p>
+              <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                {aiOutput[key]}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {repairVisible.length > 0 && (
+          <>
+            <p className="mt-7 text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+              For the repair
+            </p>
+            <div className="mt-2 space-y-3">
+              {repairVisible.map(({ label, key }) => (
+                <div
+                  key={key}
+                  className="rounded-card-sm bg-surface p-4 shadow-soft"
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                    {label}
+                  </p>
+                  <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                    {aiOutput[key]}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {submittedRepairBranchActive && (
+          <div className="mt-7 rounded-card-sm bg-surface p-4 shadow-soft">
+            <p className="text-[13px] font-bold text-ink">
+              Now you write the opening line.
+            </p>
+            <p className="mt-1 text-[12px] font-medium leading-[1.45] text-ink-soft">
+              Write the first thing you would say. Then check it before you
+              send it.
+            </p>
+            <div className="mt-3">
+              <VoiceInput
+                key="review-opening-line"
+                value={openingLine}
+                onChange={setOpeningLine}
+                rows={5}
+                placeholder="The first thing you'd say to them…"
+              />
+            </div>
+            <button
+              onClick={handoffToBys}
+              disabled={!openingLine.trim()}
+              className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-brand text-[14px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+            >
+              Check this before I send it
+            </button>
+          </div>
+        )}
+
+        {reviewEntryId && !outcomeSaved && (
+          <div className="mt-6 rounded-card-sm bg-surface p-4 shadow-soft">
+            <p className="text-[13px] font-bold text-ink">
+              Rate this conversation
+            </p>
+            <p className="mt-1 text-[12px] font-medium text-ink-soft">
+              Optional — helps build your patterns over time.
+            </p>
+            <div className="mt-4 space-y-3">
+              {OUTCOME_QUESTIONS.map((q) => (
+                <div key={q.key}>
+                  <p className="text-[13px] font-semibold text-ink-soft">
+                    {q.title}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {q.options.map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() =>
+                          setOutcomeData((d) => ({
+                            ...d,
+                            [q.key]: opt.value,
+                          }))
+                        }
+                        className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition ${
+                          outcomeData[q.key] === opt.value
+                            ? "bg-brand text-white shadow-cta"
+                            : "bg-surface-tint text-ink"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {allOutcomeAnswered && (
+              <button
+                onClick={submitOutcome}
+                className="mt-4 flex h-12 w-full items-center justify-center rounded-pill bg-brand-deep text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+              >
+                Save outcome
+              </button>
+            )}
+            {outcomeError && (
+              <p className="mt-2 text-[13px] font-medium text-danger">
+                Could not save outcome. Try again.
+              </p>
+            )}
+          </div>
+        )}
+
+        {outcomeSaved && (
+          <p className="mt-6 text-[13px] font-medium text-ink-soft">
+            Outcome saved.
+          </p>
+        )}
+
+        <button
+          onClick={() => router.push("/coach")}
+          className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+        >
+          Done
+        </button>
+      </div>
     );
   }
 
@@ -432,7 +604,7 @@ export default function ReviewPage() {
           className="font-display text-[28px] leading-[1.15] text-ink"
           style={{ letterSpacing: "-0.6px" }}
         >
-          Entry saved
+          Reflection saved
         </h2>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           {savedMessage}
@@ -467,31 +639,23 @@ export default function ReviewPage() {
     );
   }
 
+  // ============================================================
+  // Form
+  // ============================================================
   return (
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <ReviewBackground />
 
-      <div className="flex items-center gap-1.5">
-        {STEPS.map((_, i) => (
-          <div
-            key={i}
-            className={`h-1.5 flex-1 rounded-full transition-colors ${
-              i < step
-                ? "bg-brand"
-                : i === step
-                  ? "bg-brand-deep"
-                  : "bg-white/60"
-            }`}
-          />
-        ))}
-      </div>
-      <div className="mt-3 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
           Review
         </span>
         <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
           {step + 1} / {STEPS.length}
         </p>
+      </div>
+      <div className="mt-3">
+        <StepDots current={step} total={STEPS.length} />
       </div>
 
       <h2
@@ -507,7 +671,7 @@ export default function ReviewPage() {
       )}
 
       <div className="mt-5">
-        {currentStep.type === "person" ? (
+        {currentStep.kind === "person" ? (
           <>
             <PersonPicker
               key={currentStep.key}
@@ -525,6 +689,78 @@ export default function ReviewPage() {
               onChange={setThreadId}
             />
           </>
+        ) : currentStep.kind === "select_ask" ? (
+          <div className="space-y-2">
+            {ASK_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setFieldValue(currentStep.key, opt.value);
+                  setStep(step + 1);
+                }}
+                className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
+                  value === opt.value
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        ) : currentStep.kind === "select_needs" ? (
+          <div className="space-y-2">
+            {NEEDS_NEXT_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  // Reset readiness if user changes needs-next, so a stale
+                  // pre-selection from a different path doesn't gate them
+                  // straight into the wrong branch.
+                  setData((d) => ({
+                    ...d,
+                    [currentStep.key]: opt.value,
+                    readiness: "",
+                  }));
+                  setStep(step + 1);
+                }}
+                className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
+                  value === opt.value
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        ) : currentStep.kind === "select_readiness" ? (
+          <div className="space-y-2">
+            {READINESS_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => {
+                  setFieldValue(currentStep.key, opt.value);
+                  if (opt.value === "no") {
+                    // Submit immediately without repair-branch fields.
+                    // Result screen will show the "come back when ready"
+                    // notice above the base 4 cards.
+                    handleSubmit({ repairBranchActive: false });
+                    return;
+                  }
+                  // yes / somewhat: advance into repair sub-steps.
+                  setStep(step + 1);
+                }}
+                className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
+                  value === opt.value
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         ) : (
           <VoiceInput
             key={currentStep.key}
@@ -548,17 +784,17 @@ export default function ReviewPage() {
             Back
           </button>
         )}
-        <button
-          onClick={handleNext}
-          disabled={!canAdvance}
-          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-        >
-          {step === STEPS.length - 1
-            ? "Get Reflection"
-            : currentStep.optional && !value.trim()
-              ? "Skip"
-              : "Next"}
-        </button>
+        {currentStep.kind !== "select_ask" &&
+          currentStep.kind !== "select_needs" &&
+          currentStep.kind !== "select_readiness" && (
+            <button
+              onClick={handleNext}
+              disabled={!canAdvance()}
+              className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+            >
+              {step === STEPS.length - 1 ? "Get Reflection" : "Next"}
+            </button>
+          )}
       </div>
     </div>
   );
