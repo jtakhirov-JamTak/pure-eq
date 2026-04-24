@@ -309,16 +309,22 @@ export default function BeforeYouSendPage() {
             {RESULT_FIELDS.filter(({ key }) => {
               const v = aiOutput[key];
               return typeof v === "string" && v.trim().length > 0;
-            }).map(({ label, key }) => (
-              <div key={key} className="rounded-card-sm bg-surface p-4 shadow-soft">
-                <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                  {label}
-                </p>
-                <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                  {aiOutput[key]}
-                </p>
-              </div>
-            ))}
+            }).map(({ label, key }) => {
+              const isAction = key === "thing_to_cut";
+              return (
+                <div
+                  key={key}
+                  className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+                >
+                  <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                    {label}
+                  </p>
+                  <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                    {aiOutput[key]}
+                  </p>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-7">

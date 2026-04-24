@@ -135,6 +135,28 @@ input[type="radio"] {
   animation: fade-in 150ms ease-out;
 }
 
+/* Coach result-card entrance. action-in runs 100ms after card-in so the
+   navy action row lands with mild conclusion feel. Global
+   prefers-reduced-motion block below collapses both to ~0ms. */
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-card-in {
+  animation: card-in 150ms ease-out both;
+}
+
+.animate-action-in {
+  animation: card-in 150ms ease-out 100ms both;
+}
+
 /* ============================================================
    Respect prefers-reduced-motion
    ============================================================

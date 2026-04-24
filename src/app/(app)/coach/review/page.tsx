@@ -494,7 +494,10 @@ export default function ReviewPage() {
 
         <div className="mt-5 space-y-3">
           {baseVisible.map(({ label, key }) => (
-            <div key={key} className="rounded-card-sm bg-surface p-4 shadow-soft">
+            <div
+              key={key}
+              className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
+            >
               <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
                 {label}
               </p>
@@ -511,19 +514,23 @@ export default function ReviewPage() {
               For the repair
             </p>
             <div className="mt-2 space-y-3">
-              {repairVisible.map(({ label, key }) => (
-                <div
-                  key={key}
-                  className="rounded-card-sm bg-surface p-4 shadow-soft"
-                >
-                  <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                    {label}
-                  </p>
-                  <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                    {aiOutput[key]}
-                  </p>
-                </div>
-              ))}
+              {repairVisible.map(({ label, key }) => {
+                const isAction =
+                  key === "what_to_own" || key === "thing_not_to_say";
+                return (
+                  <div
+                    key={key}
+                    className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+                  >
+                    <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                      {label}
+                    </p>
+                    <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                      {aiOutput[key]}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}

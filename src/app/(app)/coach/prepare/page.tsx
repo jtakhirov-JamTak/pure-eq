@@ -107,16 +107,22 @@ function NormalResultCard({
         Your <span className="italic">feedback</span>.
       </h2>
       <div className="mt-5 space-y-3">
-        {visible.map(({ label, key }) => (
-          <div key={key} className="rounded-card-sm bg-surface p-4 shadow-soft">
-            <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-              {label}
-            </p>
-            <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-              {output[key]}
-            </p>
-          </div>
-        ))}
+        {visible.map(({ label, key }) => {
+          const isAction = key === "best_next_move";
+          return (
+            <div
+              key={key}
+              className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+            >
+              <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                {label}
+              </p>
+              <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                {output[key]}
+              </p>
+            </div>
+          );
+        })}
       </div>
       <button
         onClick={onBack}
