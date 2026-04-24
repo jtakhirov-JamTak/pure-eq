@@ -29,7 +29,11 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // 2026-04-23 4.0.0: action-field nullability (best_next_move, what_to_own,
 // thing_not_to_say, thing_to_cut) + .max(120) tighten + ACTION RULE in
 // SHARED_RULES. Output schema shape changes (nullable) — major bump.
-const PROMPT_VERSION = "4.0.0";
+// 2026-04-23 4.0.1: BYS thing_to_cut cap relaxed 120 → 300. The prompt
+// instructs the model to emit `They wrote: "...". Cut this because…` which
+// cannot fit in 120 chars for any realistic draft — every BYS call was
+// failing schema_mismatch. No shape change, patch bump only.
+const PROMPT_VERSION = "4.0.1";
 
 const SHARED_RULES = `
 RULES:
@@ -268,7 +272,7 @@ NORMAL MODE:
   "verdict": "safe | risky | do_not_send",
   "how_this_will_land": "string, max 300 chars — name the likely felt experience on the recipient's side, specific not generic",
   "what_its_missing": "string, max 300 chars — name what acknowledgement, ownership, or context the message lacks",
-  "thing_to_cut": "string OR null, max 120 chars — QUOTE their actual words from the draft (in the format: 'They wrote: \\"...\\". Cut this because…'). Return null if nothing in the draft needs cutting.",
+  "thing_to_cut": "string OR null, max 300 chars — QUOTE their actual words from the draft (in the format: 'They wrote: \\"...\\". Cut this because…'). Return null if nothing in the draft needs cutting.",
   "check_in_question": "string, max 300 chars — one question the user should ask themselves before sending"
 }
 

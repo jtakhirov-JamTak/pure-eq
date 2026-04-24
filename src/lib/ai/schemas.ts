@@ -115,8 +115,12 @@ const beforeYouSendNormalShape = z.object({
   verdict: z.enum(["safe", "risky", "do_not_send"]),
   how_this_will_land: z.string().trim().min(1).max(300),
   what_its_missing: z.string().trim().min(1).max(300),
-  // Action field — tighter cap + nullable per the editorial contract.
-  thing_to_cut: z.string().trim().min(1).max(120).nullable(),
+  // Action field — nullable per the editorial contract. Keeps the 300-char
+  // cap (matching the other BYS fields) because the prompt instructs Claude
+  // to emit the format `They wrote: "...". Cut this because…`, which needs
+  // ~200 chars to quote the user + explain. A 120-cap made every BYS call
+  // fail schema validation. stripGeneric still nullifies filler phrasings.
+  thing_to_cut: z.string().trim().min(1).max(300).nullable(),
   check_in_question: z.string().trim().min(1).max(300),
 });
 
