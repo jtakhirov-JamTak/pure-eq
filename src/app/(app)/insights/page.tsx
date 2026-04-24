@@ -176,7 +176,7 @@ export default async function InsightsPage() {
                 <li key={thread.thread_id}>
                   <Link
                     href={`/coach/threads/${thread.thread_id}`}
-                    className="flex items-center gap-3 py-3 active:opacity-70"
+                    className="flex min-h-11 items-center gap-3 py-3 active:opacity-70"
                   >
                     <span
                       aria-hidden="true"

@@ -29,8 +29,8 @@ export default async function CoachPage() {
       {/* Headline */}
       <div className="mb-6 pt-2">
         <h1
-          className="font-display text-[34px] leading-[1.08] text-ink"
-          style={{ letterSpacing: "-0.9px" }}
+          className="font-display text-[28px] leading-[1.1] break-words text-ink sm:text-[34px] sm:leading-[1.08]"
+          style={{ letterSpacing: "-0.7px" }}
         >
           {greeting}
           <br />
@@ -49,7 +49,7 @@ export default async function CoachPage() {
           background: "linear-gradient(160deg, #FFD166 0%, #F39423 100%)",
         }}
       >
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink/70">
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink/85">
           ~90 sec · quick check
         </p>
         <h2
@@ -72,7 +72,7 @@ export default async function CoachPage() {
             background: "linear-gradient(160deg, #4FB0FF 0%, #2A86E3 100%)",
           }}
         >
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white opacity-85">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
             ~3 min · guided
           </p>
           <h2
