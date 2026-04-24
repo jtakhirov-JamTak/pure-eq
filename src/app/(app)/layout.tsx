@@ -24,12 +24,20 @@ export default async function AppLayout({
 
   // Admin bypass: admins skip the subscription gate entirely.
   if (!isAdmin(user.email)) {
-    // Subscription gate: users get a 3-day free period from signup to
-    // complete 1 Prepare + 1 Review. After that, paywall.
+    // Coach backstop: redirect to paywall only when the user has exhausted
+    // every Coach free use (Prepare + Review + Before-You-Send) OR the free
+    // period has elapsed. Until then, the individual Coach surfaces rely on
+    // their API-side `free_one` reservations — so a user with 2 of 3 free
+    // uses burned can still reach the 3rd. Other paid surfaces
+    // (/insights, /history, /coach/threads*, /coach/repair) gate themselves
+    // via requirePaidAccessPage.
     const access = await checkSubscription(user.id);
-    const bothFreeUsed = access.freePrepareUsed && access.freeReviewUsed;
+    const allCoachFreeUsed =
+      access.freePrepareUsed &&
+      access.freeReviewUsed &&
+      access.freeBeforeYouSendUsed;
     const freePeriodExpired = !access.freePeriodActive;
-    if (!access.hasAccess && (bothFreeUsed || freePeriodExpired)) {
+    if (!access.hasAccess && (allCoachFreeUsed || freePeriodExpired)) {
       redirect("/paywall");
     }
   }

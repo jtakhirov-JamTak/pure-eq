@@ -78,7 +78,7 @@ export default async function CoachPage() {
           <span className="italic">Blue Skies ahead.</span>
         </h1>
         <p className="mt-2 text-[15px] font-medium leading-[1.5] text-ink-soft">
-          Prepare, Review, or Repair a conversation.
+          Prepare for, review, or pressure-check a conversation.
         </p>
       </div>
 
@@ -91,9 +91,6 @@ export default async function CoachPage() {
           <span className="rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
             Prepare
           </span>
-          <span className="text-[11px] font-semibold text-ink-muted">
-            · 9 steps
-          </span>
         </div>
         <div
           className="mb-1.5 font-display text-[26px] leading-[1.1] text-ink"
@@ -102,12 +99,30 @@ export default async function CoachPage() {
           A conversation is <span className="italic">coming up</span>.
         </div>
         <p className="text-[14px] font-medium leading-[1.45] text-ink-soft">
-          Get clear on what you want, and how to land it.
+          Or something feels off. Get clear before you act.
         </p>
       </Link>
 
-      {/* Review + Repair grid */}
+      {/* Before-You-Send + Review grid */}
       <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+        <Link
+          href="/coach/before-send"
+          className="relative block overflow-hidden rounded-card-sm bg-surface p-4 shadow-soft transition active:scale-[0.98] min-h-[108px]"
+        >
+          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.5px] text-ink">
+            Before you send
+          </span>
+          <div
+            className="mt-2 font-display text-[20px] italic leading-[1.2] text-ink"
+            style={{ letterSpacing: "-0.4px" }}
+          >
+            Check
+          </div>
+          <p className="mt-1 text-[12px] font-medium leading-[1.4] text-ink-soft">
+            Paste a draft. See how it will land.
+          </p>
+        </Link>
+
         <Link
           href="/coach/review"
           className="relative block overflow-hidden rounded-card-sm bg-surface p-4 shadow-soft transition active:scale-[0.98] min-h-[108px]"
@@ -123,24 +138,6 @@ export default async function CoachPage() {
           </div>
           <p className="mt-1 text-[12px] font-medium leading-[1.4] text-ink-soft">
             A conversation just happened.
-          </p>
-        </Link>
-
-        <Link
-          href="/coach/repair"
-          className="relative block overflow-hidden rounded-card-sm bg-surface p-4 shadow-soft transition active:scale-[0.98] min-h-[108px]"
-        >
-          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.5px] text-ink">
-            Repair
-          </span>
-          <div
-            className="mt-2 font-display text-[20px] italic leading-[1.2] text-ink"
-            style={{ letterSpacing: "-0.4px" }}
-          >
-            Mend
-          </div>
-          <p className="mt-1 text-[12px] font-medium leading-[1.4] text-ink-soft">
-            Something went sideways.
           </p>
         </Link>
       </div>
