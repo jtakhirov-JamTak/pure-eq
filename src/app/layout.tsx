@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Fraunces, Fredoka } from "next/font/google";
+import { DM_Sans, Instrument_Serif, Fredoka } from "next/font/google";
 import "./globals.css";
 
 const dmSans = DM_Sans({
@@ -9,9 +9,9 @@ const dmSans = DM_Sans({
   display: "swap",
 });
 
-const fraunces = Fraunces({
+const instrumentSerif = Instrument_Serif({
   subsets: ["latin"],
-  weight: ["400", "500"],
+  weight: ["400"],
   style: ["normal", "italic"],
   variable: "--font-fraunces",
   display: "swap",
@@ -60,7 +60,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`h-full antialiased ${dmSans.variable} ${fraunces.variable} ${fredoka.variable}`}
+      className={`h-full antialiased ${dmSans.variable} ${instrumentSerif.variable} ${fredoka.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans">{children}</body>
