@@ -81,10 +81,20 @@ interface BaseCoachModuleConfig<
   /** Build the derived table insert row (excluding user_id, raw_record_id, person_id, thread_id, is_complete). */
   buildDerivedInsert: (input: TInput) => Record<string, unknown>;
 
-  /** Build the AI prompt from input + profile. */
+  /**
+   * Build the AI prompt from input + profile + per-request person context.
+   *
+   * `context.personName` / `context.personRelationship` are populated from
+   * the persons row when run-module resolves a non-null effectivePersonId
+   * (post step 7). Both are null when no person was resolved (BYS skip path
+   * or a Review with no picked person). Modules that already collect the
+   * relationship via their input form (Prepare A/B) can ignore context;
+   * modules that don't (Review) consume it.
+   */
   buildPrompt: (
     input: TInput,
     profile: ProfileType,
+    context: { personName: string | null; personRelationship: string | null },
   ) => { system: string; user: string; prompt_version?: string };
 
   // -- Response --

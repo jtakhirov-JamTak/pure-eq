@@ -20,6 +20,15 @@ import type { CoachModuleConfig } from "./types";
 const MAX_RETRIES = 1;
 const ANTHROPIC_TIMEOUT_MS = 30_000;
 
+// Cooldown-latched Sentry capture for the post-resolution person-context
+// fetch. If RLS misconfigures or the persons table schema drifts, every
+// Review submission silently degrades to a no-context prompt — without
+// the latch, a busy outage emits thousands of events per minute and
+// blows the quota that would have surfaced the real signal. Module-
+// scoped (not request-scoped) per the rate-limit.ts pattern.
+const PERSON_FETCH_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastPersonFetchCaptureAt = 0;
+
 const PROFILE_VALUES: ProfileType[] = [
   "direct",
   "reflective",
@@ -226,6 +235,44 @@ export async function runCoachModule<
     }
   }
 
+  // 8b. Fetch person context (display_name + relationship_domain) for
+  // any module that wants to ground coaching in the relationship type.
+  // Single lookup keyed on effectivePersonId — covers both client-provided
+  // personId (verified at step 7) and name-deduped/inserted ids. Lives
+  // after step 8 (thread resolution) because nothing in step 8 needs the
+  // person row, and keeping all post-resolution lookups together is
+  // easier to reason about than interleaving them with step 7's branches.
+  //
+  // On fetch error, degrade to no-context prompt rather than failing the
+  // whole submission — the AI call is still useful without person
+  // context, and a 500 here would erase the user's just-typed Review.
+  // BUT: latch a Sentry capture so an RLS misconfig / schema rename
+  // doesn't silently strip person context from every Review with zero
+  // signal (CLAUDE.md "Latch captures in per-request fallback paths").
+  let personName: string | null = null;
+  let personRelationship: string | null = null;
+  if (effectivePersonId) {
+    const { data: personRow, error: personFetchErr } = await supabase
+      .from("persons")
+      .select("display_name, relationship_domain")
+      .eq("person_id", effectivePersonId)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (personFetchErr) {
+      console.error(`${name}: person context fetch failed`, personFetchErr.code);
+      const now = Date.now();
+      if (now - lastPersonFetchCaptureAt >= PERSON_FETCH_CAPTURE_COOLDOWN_MS) {
+        lastPersonFetchCaptureAt = now;
+        Sentry.captureException(personFetchErr, {
+          tags: { area: "coach", module: name, kind: "person_context_fetch_failed" },
+        });
+      }
+    } else if (personRow) {
+      personName = personRow.display_name;
+      personRelationship = personRow.relationship_domain;
+    }
+  }
+
   // 9. Idempotency check.
   const { data: existingRaw, error: existingErr } = await supabase
     .from("raw_records")
@@ -242,7 +289,10 @@ export async function runCoachModule<
   // into payload_json) AND step 12 (the actual AI call). buildPrompt is
   // pure / cheap; building it before the idempotency branch keeps both
   // the new-row write path and the retry path on the same prompt object.
-  const prompt = config.buildPrompt(input as TInput, userProfile);
+  const prompt = config.buildPrompt(input as TInput, userProfile, {
+    personName,
+    personRelationship,
+  });
 
   let rawRecordId: string;
   if (existingRaw) {

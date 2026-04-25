@@ -64,9 +64,11 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     could_make_them_feel: input.couldMakeThemFeel ?? null,
   }),
 
-  buildPrompt: (input, profile) =>
+  buildPrompt: (input, profile, context) =>
     buildReviewPrompt({
       profile,
+      personName: context.personName,
+      personRelationship: context.personRelationship,
       whatHappened: input.whatHappened,
       hardestMomentFeeling: input.hardestMomentFeeling,
       whatYouDid: input.whatYouDid,

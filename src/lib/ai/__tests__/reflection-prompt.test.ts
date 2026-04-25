@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildReflectionPrompt,
   isBehavioralContextEmpty,
+  PROMPT_VERSION,
   type BehavioralContext,
 } from "../prompts";
 
@@ -97,9 +98,14 @@ describe("buildReflectionPrompt", () => {
     expect(out.user).toMatch(/framing only.*do NOT quote/);
   });
 
-  it("uses prompt_version 4.0.1", () => {
+  it("stamps the current PROMPT_VERSION constant", () => {
+    // Asserts equality against the imported constant, not a literal —
+    // PROMPT_VERSION is shared across all builders in prompts.ts, so a
+    // template bump should not break this test. But the assertion stays
+    // load-bearing: if buildReflectionPrompt ever stops stamping the
+    // field (or stamps a different version source), this fails loudly.
     const out = buildReflectionPrompt(baseParams);
-    expect(out.prompt_version).toBe("4.0.1");
+    expect(out.prompt_version).toBe(PROMPT_VERSION);
   });
 });
 
