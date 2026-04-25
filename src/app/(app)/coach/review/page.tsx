@@ -294,32 +294,40 @@ export default function ReviewPage() {
 
   async function handleSubmit({
     repairBranchActive,
+    override,
   }: {
     repairBranchActive: boolean;
+    // Caller-supplied field values that haven't yet flushed into `data`.
+    // The select_needs / select_readiness handlers `setData(...)` then submit
+    // in the same tick — handleSubmit's closure still sees the pre-pick `data`,
+    // so the just-picked enum field would post as undefined and Zod would 400.
+    // Pass the chosen value here to bypass the stale-closure window.
+    override?: Partial<Record<string, string>>;
   }) {
     if (submitRef.current) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     setSubmittedRepairBranchActive(repairBranchActive);
+    const merged = { ...data, ...override };
     try {
       const res = await fetch("/api/coach/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          personName: data.personName,
-          whatHappened: data.whatHappened,
-          hardestMomentFeeling: data.hardestMomentFeeling,
-          whatYouDid: data.whatYouDid,
-          observedInThem: data.observedInThem,
-          theirExperience: data.theirExperience,
-          whatYouAvoided: data.whatYouAvoided,
-          askBeforeUnderstanding: data.askBeforeUnderstanding,
-          needsToHappenNext: data.needsToHappenNext,
+          personName: merged.personName,
+          whatHappened: merged.whatHappened,
+          hardestMomentFeeling: merged.hardestMomentFeeling,
+          whatYouDid: merged.whatYouDid,
+          observedInThem: merged.observedInThem,
+          theirExperience: merged.theirExperience,
+          whatYouAvoided: merged.whatYouAvoided,
+          askBeforeUnderstanding: merged.askBeforeUnderstanding,
+          needsToHappenNext: merged.needsToHappenNext,
           repairBranchActive,
-          yourPart: repairBranchActive ? data.yourPart : null,
-          secretWant: repairBranchActive ? data.secretWant : null,
-          couldMakeThemFeel: repairBranchActive ? data.couldMakeThemFeel : null,
+          yourPart: repairBranchActive ? merged.yourPart : null,
+          secretWant: repairBranchActive ? merged.secretWant : null,
+          couldMakeThemFeel: repairBranchActive ? merged.couldMakeThemFeel : null,
           personId: personId || null,
           threadId: threadId || null,
           idempotencyKey: idempotencyKeyRef.current,
@@ -767,7 +775,12 @@ export default function ReviewPage() {
                   if (REPAIR_TRIGGER_NEEDS.includes(opt.value)) {
                     setStep(step + 1);
                   } else {
-                    handleSubmit({ repairBranchActive: false });
+                    // setData above hasn't flushed yet — pass the picked
+                    // value through `override` so the POST body has it.
+                    handleSubmit({
+                      repairBranchActive: false,
+                      override: { needsToHappenNext: opt.value },
+                    });
                   }
                 }}
                 className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
@@ -790,8 +803,13 @@ export default function ReviewPage() {
                   if (opt.value === "no") {
                     // Submit immediately without repair-branch fields.
                     // Result screen will show the "come back when ready"
-                    // notice above the base 4 cards.
-                    handleSubmit({ repairBranchActive: false });
+                    // notice above the base 4 cards. `readiness` isn't on
+                    // the wire, but pass through `override` for symmetry
+                    // with select_needs in case the schema ever adds it.
+                    handleSubmit({
+                      repairBranchActive: false,
+                      override: { readiness: opt.value },
+                    });
                     return;
                   }
                   // yes / somewhat: advance into repair sub-steps.
