@@ -10,7 +10,6 @@ import { Wordmark } from "./brand/Wordmark";
 
 const TABS = [
   { href: "/coach", label: "Coach" },
-  { href: "/tools", label: "Tools" },
   { href: "/insights", label: "Insights" },
 ];
 

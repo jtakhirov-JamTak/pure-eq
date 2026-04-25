@@ -351,89 +351,6 @@ export function formatRepairSection(
   );
 }
 
-type TriggerRow = Pick<
-  Tables["trigger_entries"]["Row"],
-  | "created_at"
-  | "event_text"
-  | "interpretation"
-  | "emotion"
-  | "urge"
-  | "behavior"
-  | "outcome"
-  | "learning"
-  | "person_id"
->;
-
-export function formatTriggerSection(
-  rows: TriggerRow[],
-  personMap: PersonMap,
-  truncated = false,
-): string {
-  const title = `Triggered entries (${rows.length})`;
-  if (rows.length === 0) return emptySection(title);
-  const blocks: string[] = [];
-  for (const r of rows) {
-    const lines: string[] = [];
-    lines.push(
-      `[${formatDate(r.created_at)}] — ${personLabel(r.person_id, personMap)}`,
-    );
-    lines.push("");
-    appendField(lines, "Event", r.event_text);
-    appendField(lines, "Interpretation", r.interpretation);
-    appendField(lines, "Emotion", r.emotion);
-    appendField(lines, "Urge", r.urge);
-    appendField(lines, "What I did", r.behavior);
-    appendField(lines, "Outcome", r.outcome);
-    appendField(lines, "Learning", r.learning);
-    blocks.push(lines.join("\n"));
-  }
-  return section(
-    title,
-    truncationPrefix(truncated) + blocks.join(`\n\n${ENTRY_SEP}\n\n`) + "\n",
-  );
-}
-
-type OverwhelmedRow = Pick<
-  Tables["overwhelmed_entries"]["Row"],
-  "created_at" | "what_happened" | "body_sensations" | "overwhelm_before" | "overwhelm_after" | "technique_used"
->;
-
-export function formatOverwhelmedSection(
-  rows: OverwhelmedRow[],
-  truncated = false,
-): string {
-  const title = `Overwhelmed entries (${rows.length})`;
-  if (rows.length === 0) return emptySection(title);
-  const blocks: string[] = [];
-  for (const r of rows) {
-    const lines: string[] = [];
-    lines.push(`[${formatDate(r.created_at)}]`);
-    lines.push("");
-    appendField(lines, "What happened", r.what_happened);
-    appendField(lines, "Body sensations", r.body_sensations);
-    if (r.overwhelm_before !== null) {
-      appendField(
-        lines,
-        "Overwhelm level before",
-        `${r.overwhelm_before} / 5`,
-      );
-    }
-    if (r.overwhelm_after !== null) {
-      appendField(
-        lines,
-        "Overwhelm level after",
-        `${r.overwhelm_after} / 5`,
-      );
-    }
-    appendField(lines, "Technique used", r.technique_used);
-    blocks.push(lines.join("\n"));
-  }
-  return section(
-    title,
-    truncationPrefix(truncated) + blocks.join(`\n\n${ENTRY_SEP}\n\n`) + "\n",
-  );
-}
-
 type PersonRow = Pick<
   Tables["persons"]["Row"],
   "display_name" | "relationship_domain" | "relationship_subtype" | "created_at"
@@ -537,8 +454,6 @@ export async function buildExportText(
     reviewRes,
     repairRes,
     beforeYouSendRes,
-    triggerRes,
-    overwhelmedRes,
     personsRes,
     threadsRes,
     memoriesRes,
@@ -602,26 +517,6 @@ export async function buildExportText(
       .limit(ROW_CAP),
 
     supabase
-      .from("trigger_entries")
-      .select(
-        "created_at, event_text, interpretation, emotion, urge, behavior, outcome, learning, person_id",
-      )
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(ROW_CAP),
-
-    supabase
-      .from("overwhelmed_entries")
-      .select(
-        "created_at, what_happened, body_sensations, overwhelm_before, overwhelm_after, technique_used",
-      )
-      .eq("user_id", userId)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .limit(ROW_CAP),
-
-    supabase
       .from("persons")
       .select("person_id, display_name, relationship_domain, relationship_subtype, created_at")
       .eq("user_id", userId)
@@ -654,8 +549,6 @@ export async function buildExportText(
   if (reviewRes.error) errors.push(`review(${reviewRes.error.code ?? "?"})`);
   if (repairRes.error) errors.push(`repair(${repairRes.error.code ?? "?"})`);
   if (beforeYouSendRes.error) errors.push(`before_you_send(${beforeYouSendRes.error.code ?? "?"})`);
-  if (triggerRes.error) errors.push(`trigger(${triggerRes.error.code ?? "?"})`);
-  if (overwhelmedRes.error) errors.push(`overwhelmed(${overwhelmedRes.error.code ?? "?"})`);
   if (personsRes.error) errors.push(`persons(${personsRes.error.code ?? "?"})`);
   if (threadsRes.error) errors.push(`threads(${threadsRes.error.code ?? "?"})`);
   if (memoriesRes.error) errors.push(`memories(${memoriesRes.error.code ?? "?"})`);
@@ -678,8 +571,6 @@ export async function buildExportText(
   const reviewRows = reviewRes.data ?? [];
   const repairRows = repairRes.data ?? [];
   const beforeYouSendRows = beforeYouSendRes.data ?? [];
-  const triggerRows = triggerRes.data ?? [];
-  const overwhelmedRows = overwhelmedRes.data ?? [];
 
   const parts = [
     formatHeader(userEmail),
@@ -688,8 +579,6 @@ export async function buildExportText(
     formatReviewSection(reviewRows, personMap, threadMap, reviewRows.length >= ROW_CAP),
     formatBeforeYouSendSection(beforeYouSendRows, beforeYouSendRows.length >= ROW_CAP),
     formatRepairSection(repairRows, personMap, threadMap, repairRows.length >= ROW_CAP),
-    formatTriggerSection(triggerRows, personMap, triggerRows.length >= ROW_CAP),
-    formatOverwhelmedSection(overwhelmedRows, overwhelmedRows.length >= ROW_CAP),
     formatPersonsSection(persons),
     formatThreadsSection(threads, personMap),
     formatMemoriesSection(memoriesRes.data ?? [], personMap),

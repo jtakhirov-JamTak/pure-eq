@@ -21,8 +21,6 @@ const DERIVED_TABLE = {
   review: "review_entries",
   before_you_send: "before_you_send_entries",
   repair: "repair_entries",
-  trigger_log: "trigger_entries",
-  overwhelmed: "overwhelmed_entries",
 } as const;
 
 type DeletableRecordType = keyof typeof DERIVED_TABLE;
@@ -148,18 +146,6 @@ export async function softDeleteEntries(
         case "repair":
           return supabase
             .from("repair_entries")
-            .update({ deleted_at: now })
-            .eq("user_id", user.id)
-            .in("raw_record_id", ids);
-        case "trigger_log":
-          return supabase
-            .from("trigger_entries")
-            .update({ deleted_at: now })
-            .eq("user_id", user.id)
-            .in("raw_record_id", ids);
-        case "overwhelmed":
-          return supabase
-            .from("overwhelmed_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);

@@ -14,8 +14,6 @@ const DELETABLE_TYPES = [
   "review",
   "before_you_send",
   "repair",
-  "trigger_log",
-  "overwhelmed",
 ] as const;
 
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
@@ -23,8 +21,6 @@ const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   review: "Review",
   before_you_send: "Before-Send",
   repair: "Repair",
-  trigger_log: "Triggered",
-  overwhelmed: "Overwhelmed",
 };
 
 const querySchema = z.object({

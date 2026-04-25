@@ -313,7 +313,7 @@ export async function generateReflection(
       .from("raw_records")
       .select("raw_record_id, record_type, created_at, person_id, payload_json")
       .eq("user_id", userId)
-      .in("record_type", ["prepare", "review", "repair", "trigger_log", "overwhelmed"])
+      .in("record_type", ["prepare", "review", "repair"])
       .eq("is_complete", true)
       .is("deleted_at", null)
       .gte("created_at", periodStart)

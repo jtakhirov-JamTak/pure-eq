@@ -6,17 +6,14 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
 
 /**
- * Both free windows are anchored to onboarding completion
+ * The Coach free window is anchored to onboarding completion
  * (user_profiles.created_at), not signup, so a workshop attendee who
  * signs up days in advance doesn't burn their window before engaging.
  *
  * Coach: 1 free Prepare + 1 free Review inside COACH_FREE_PERIOD_DAYS.
- * Tools: unlimited Overwhelmed + Triggered inside TOOLS_FREE_PERIOD_DAYS
- *        (monetization test — see docs/access_route_matrix.md).
  */
 const DAY_MS = 24 * 60 * 60 * 1000;
 const COACH_FREE_PERIOD_DAYS = 3;
-const TOOLS_FREE_PERIOD_DAYS = 7;
 
 export type FreeUsageField =
   | "freePrepareUsed"
@@ -38,7 +35,6 @@ export interface SubscriptionAccess {
   freeReviewUsed: boolean;
   freeBeforeYouSendUsed: boolean;
   freePeriodActive: boolean;
-  toolsWindowActive: boolean;
   status: SubscriptionStatus;
   trialEndsAt: string | null;
 }
@@ -94,18 +90,15 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
   const freePeriodActive =
     profileCreatedMs !== null &&
     now - profileCreatedMs < COACH_FREE_PERIOD_DAYS * DAY_MS;
-  const toolsWindowActive =
-    profileCreatedMs !== null &&
-    now - profileCreatedMs < TOOLS_FREE_PERIOD_DAYS * DAY_MS;
 
   if (error) {
     console.error("subscription: lookup failed", error.code);
     // Fail closed — a DB hiccup must not grant free access.
-    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freeBeforeYouSendUsed: true, freePeriodActive: false, toolsWindowActive: false, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: true, freeReviewUsed: true, freeBeforeYouSendUsed: true, freePeriodActive: false, status: "none", trialEndsAt: null };
   }
 
   if (!row) {
-    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freeBeforeYouSendUsed: false, freePeriodActive, toolsWindowActive, status: "none", trialEndsAt: null };
+    return { hasAccess: false, freePrepareUsed: false, freeReviewUsed: false, freeBeforeYouSendUsed: false, freePeriodActive, status: "none", trialEndsAt: null };
   }
 
   const freePrepareUsed = row.free_prepare_used_at !== null;
@@ -139,7 +132,6 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
     freeReviewUsed,
     freeBeforeYouSendUsed,
     freePeriodActive,
-    toolsWindowActive,
     status,
     trialEndsAt: row.trial_ends_at,
   };
