@@ -135,7 +135,7 @@ describe("reflectionOutputSchema", () => {
       mode: "refusal",
       refusal_reason: "out_of_scope",
       message_to_user:
-        "Not enough entries yet to surface patterns — keep using Coach and Tools for another week or two and come back.",
+        "Not enough entries yet to surface patterns — keep using Coach for another week or two and come back.",
       suggested_resource: "none",
     });
     expect(result.success).toBe(true);

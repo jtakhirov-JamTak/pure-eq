@@ -326,9 +326,6 @@ FIELD GLOSSARY (what the entry fields mean — use as interpretive context):
 - Before-You-Send entries (record_type "before_you_send"): the user pasted
   a draft message and had the coach check it before sending. messageType
   categorizes the draft: ${BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES.map((v) => `"${v}"`).join(", ")}.
-- Trigger logs (record_type "trigger_log") and overwhelmed entries
-  (record_type "overwhelmed") are in-the-moment self-regulation logs, not
-  planned conversations. Treat them as signal about dysregulation patterns.
 `;
 
 const REFLECTION_RULES = `

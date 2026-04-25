@@ -128,7 +128,7 @@ export function HistoryList({
           No completed entries yet.
         </p>
         <p className="mt-1 text-[13px] font-medium text-ink-soft">
-          Entries you complete in Coach or Tools will show up here.
+          Entries you complete in Coach will show up here.
         </p>
       </div>
     );

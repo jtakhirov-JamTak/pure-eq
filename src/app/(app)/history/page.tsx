@@ -21,7 +21,7 @@ const DELETABLE_TYPES = [
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   prepare: "Prepare",
   review: "Review",
-  before_you_send: "Before-Send",
+  before_you_send: "Before Send",
   repair: "Repair",
 };
 
@@ -118,7 +118,7 @@ export default async function HistoryPage() {
         Everything you&apos;ve completed, newest first.
       </p>
 
-      <div className="mt-5 grid grid-cols-2 gap-2">
+      <div className="mt-5 grid grid-cols-4 gap-1.5">
         {DELETABLE_TYPES.map((t) => (
           <div
             key={t}

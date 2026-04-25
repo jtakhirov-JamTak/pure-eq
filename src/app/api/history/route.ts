@@ -19,7 +19,7 @@ const DELETABLE_TYPES = [
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   prepare: "Prepare",
   review: "Review",
-  before_you_send: "Before-Send",
+  before_you_send: "Before Send",
   repair: "Repair",
 };
 
