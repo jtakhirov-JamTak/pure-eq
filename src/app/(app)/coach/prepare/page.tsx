@@ -49,6 +49,10 @@ const STEPS_PATH_B: StepDef[] = [
   { key: "whatChanged", title: "What changed recently?", prompt: "What's different between now and when things felt fine? Timing, tone, something they said or did.", type: "textarea" },
   { key: "storyTellingYourself", title: "What story are you telling yourself about it?", prompt: "What meaning are you assigning to what changed.", type: "textarea" },
   { key: "afraidItMeans", title: "What are you afraid this means?", prompt: "Name the worst-case interpretation, even if you suspect it's wrong.", type: "textarea" },
+  // Cross-eval batch #1 (2026-05-03): the user names a falsifiable
+  // observation BEFORE the AI's best_next_move lands. A follow-up
+  // ticket will read this column to schedule a 3–7 day check-back.
+  { key: "signalNoiseObservation", title: "What would tell you this is real?", prompt: "What would you need to observe over the next 3–7 days to know this is signal, not noise? A specific behavior, message, or change.", type: "textarea" },
   { key: "realityCheckQuestion", title: "What question could you ask to check your read instead of stewing?", prompt: null, type: "textarea" },
   { key: "triggerPlan", title: "If you decide to talk to them and get triggered, what will you do instead?", prompt: "Complete this: If I notice myself feeling ___, then I will ___.", type: "textarea" },
 ];

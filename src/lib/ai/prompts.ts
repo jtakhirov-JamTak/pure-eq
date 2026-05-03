@@ -36,10 +36,14 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // 2026-05-03 4.3.0: Cross-eval batch #1 — Review prompt receives the new
 // observedRaw / interpretedRaw fields (two-column step). User block grows
 // by two lines; output schema unchanged.
+// 2026-05-03 4.4.0: Cross-eval batch #1 — Prepare Path B prompt receives
+// the signalNoiseObservation field (3–7 day check). User block grows by
+// one line; Path B trailing instruction extended so best_next_move can
+// reference what the user said they'd watch for. Output schema unchanged.
 // Exported so tests can assert equality against the same constant the
 // builders stamp into prompt outputs — pinning a literal in tests next
 // to a moving constant is the canary trap CLAUDE.md warns about.
-export const PROMPT_VERSION = "4.3.0";
+export const PROMPT_VERSION = "4.4.0";
 
 const SHARED_RULES = `
 RULES:
@@ -204,6 +208,10 @@ export function buildPreparePromptPathB(params: {
   whatChanged: string;
   storyTellingYourself: string;
   afraidItMeans: string;
+  // Cross-eval batch #1 (2026-05-03): the user's own falsifiable
+  // observation for the next 3–7 days. Surfaced verbatim so
+  // best_next_move can reference it when relevant.
+  signalNoiseObservation: string;
   realityCheckQuestion: string;
   triggerPlan: string;
 }) {
@@ -223,11 +231,12 @@ What feels off: ${params.whatFeelsOff}
 What changed recently: ${params.whatChanged}
 Story they're telling themselves: ${params.storyTellingYourself}
 What they're afraid this means: ${params.afraidItMeans}
+What they'd need to observe over the next 3–7 days to know this is signal, not noise: ${params.signalNoiseObservation}
 Reality-check question they could ask: ${params.realityCheckQuestion}
 Trigger plan: ${params.triggerPlan}
 """
 
-Generate coaching feedback as the JSON object specified above. Treat the early-detection context: best_next_move should usually be a small check-in or a self-question, not a major action.`,
+Generate coaching feedback as the JSON object specified above. Treat the early-detection context: best_next_move should usually be a small check-in or a self-question, not a major action. When relevant, best_next_move should reference what the user said they'd watch for over the next few days.`,
   };
 }
 

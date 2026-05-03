@@ -389,6 +389,7 @@ export type Database = {
           prepare_entry_id: string
           primary_value: string | null
           raw_record_id: string | null
+          signal_noise_observation: string | null
           situation_text: string | null
           story_telling_yourself: string | null
           their_need: string | null
@@ -418,6 +419,7 @@ export type Database = {
           prepare_entry_id?: string
           primary_value?: string | null
           raw_record_id?: string | null
+          signal_noise_observation?: string | null
           situation_text?: string | null
           story_telling_yourself?: string | null
           their_need?: string | null
@@ -447,6 +449,7 @@ export type Database = {
           prepare_entry_id?: string
           primary_value?: string | null
           raw_record_id?: string | null
+          signal_noise_observation?: string | null
           situation_text?: string | null
           story_telling_yourself?: string | null
           their_need?: string | null

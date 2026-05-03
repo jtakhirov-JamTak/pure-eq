@@ -121,6 +121,7 @@ const configB: CoachModuleConfig<InputB, AiOutput> = {
     whatChanged: input.whatChanged,
     storyTellingYourself: input.storyTellingYourself,
     afraidItMeans: input.afraidItMeans,
+    signalNoiseObservation: input.signalNoiseObservation,
     realityCheckQuestion: input.realityCheckQuestion,
     triggerPlan: input.triggerPlan,
   }),
@@ -131,6 +132,7 @@ const configB: CoachModuleConfig<InputB, AiOutput> = {
     what_changed: input.whatChanged,
     story_telling_yourself: input.storyTellingYourself,
     afraid_it_means: input.afraidItMeans,
+    signal_noise_observation: input.signalNoiseObservation,
   }),
 
   buildPrompt: (input, profile) =>
@@ -142,6 +144,7 @@ const configB: CoachModuleConfig<InputB, AiOutput> = {
       whatChanged: input.whatChanged,
       storyTellingYourself: input.storyTellingYourself,
       afraidItMeans: input.afraidItMeans,
+      signalNoiseObservation: input.signalNoiseObservation,
       realityCheckQuestion: input.realityCheckQuestion,
       triggerPlan: input.triggerPlan,
     }),

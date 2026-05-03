@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { createReviewSchema } from "@/lib/validation";
+import {
+  createReviewSchema,
+  prepareSchemaPathA,
+  prepareSchemaPathB,
+} from "@/lib/validation";
 
 // ============================================================
 // Helpers — minimal valid payloads. Tests override individual
@@ -67,6 +71,71 @@ describe("createReviewSchema — observedRaw / interpretedRaw", () => {
     const result = createReviewSchema.safeParse({
       ...validReviewBase,
       observedRaw: "a".repeat(2000),
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ============================================================
+// Prepare Path B — signalNoiseObservation
+// (cross-eval batch #1, 2026-05-03)
+// ============================================================
+const validPathBBase = {
+  path: "path_b" as const,
+  personName: "Alex",
+  relationship: "partner" as const,
+  whatFeelsOff: "We've been distant for the past week.",
+  whatChanged: "They stopped initiating texts during the day.",
+  storyTellingYourself: "I'm telling myself they're losing interest.",
+  afraidItMeans: "I'm afraid this means they're checking out.",
+  signalNoiseObservation:
+    "If they don't initiate a substantive conversation in 5 days, that's signal.",
+  realityCheckQuestion: "Has anything else changed for them recently?",
+  triggerPlan: "If I notice myself spiraling, I will go for a walk first.",
+};
+
+describe("prepareSchemaPathB — signalNoiseObservation", () => {
+  it("accepts a Path B payload with the field populated", () => {
+    const result = prepareSchemaPathB.safeParse(validPathBBase);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty signalNoiseObservation", () => {
+    const result = prepareSchemaPathB.safeParse({
+      ...validPathBBase,
+      signalNoiseObservation: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a missing signalNoiseObservation", () => {
+    const { signalNoiseObservation: _, ...rest } = validPathBBase;
+    void _;
+    const result = prepareSchemaPathB.safeParse(rest);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects signalNoiseObservation over 1000 chars", () => {
+    const result = prepareSchemaPathB.safeParse({
+      ...validPathBBase,
+      signalNoiseObservation: "a".repeat(1001),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("Path A schema does not require signalNoiseObservation", () => {
+    const result = prepareSchemaPathA.safeParse({
+      path: "path_a",
+      personName: "Alex",
+      relationship: "partner",
+      situation: "Quarterly review conversation.",
+      primaryEmotion: "Anxious about how this will land.",
+      defaultPattern: "I tend to over-explain when I'm anxious.",
+      otherPersonHypothesis: "They might be defensive about the numbers.",
+      theirNeed: "They want to feel competent.",
+      realityCheckQuestion: "What outcome would feel like a win for them?",
+      howToMakeThemFeel: "Respected and supported.",
+      triggerPlan: "If I get triggered, I'll pause and breathe.",
     });
     expect(result.success).toBe(true);
   });

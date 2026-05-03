@@ -72,6 +72,13 @@ export const prepareSchemaPathB = z.object({
   whatChanged: z.string().min(1).max(5000),
   storyTellingYourself: z.string().min(1).max(5000),
   afraidItMeans: z.string().min(1).max(5000),
+  // Cross-eval batch #1 (2026-05-03): the 3–7 day signal/noise observation
+  // sits between afraidItMeans and realityCheckQuestion. The user names
+  // their own falsifiable observation before the AI's best_next_move
+  // lands, so a follow-up review can distinguish signal from rumination.
+  // Tighter cap (1000) because a falsifiable observation should be
+  // specific, not an essay.
+  signalNoiseObservation: z.string().min(1).max(1000),
   realityCheckQuestion: z.string().min(1).max(5000),
   triggerPlan: z.string().min(1).max(5000),
   personId: z.string().uuid().nullable().optional(),
