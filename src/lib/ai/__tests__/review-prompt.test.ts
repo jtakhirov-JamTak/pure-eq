@@ -4,6 +4,8 @@ import { buildReviewPrompt, PROMPT_VERSION } from "../prompts";
 const baseParams = {
   profile: "reflective" as const,
   whatHappened: "We argued about dinner plans.",
+  observedRaw: "they raised their voice and walked to the kitchen",
+  interpretedRaw: "I read it as them shutting the conversation down",
   hardestMomentFeeling: "shut down",
   whatYouDid: "went quiet",
   observedInThem: "they kept pushing for an answer",

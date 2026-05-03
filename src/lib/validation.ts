@@ -119,6 +119,12 @@ export const BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES = [
 export const createReviewSchema = z.object({
   // Base fields (always required by the new form).
   whatHappened: z.string().min(1).max(5000),
+  // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
+  // The form-factor itself trains the split — left column is facts, right
+  // column is meaning-making. 2000 cap (vs 5000 elsewhere) is deliberate
+  // for the compact two-column UX.
+  observedRaw: z.string().min(1).max(2000),
+  interpretedRaw: z.string().min(1).max(2000),
   hardestMomentFeeling: z.string().min(1).max(5000),
   whatYouDid: z.string().min(1).max(5000),
   observedInThem: z.string().min(1).max(5000),

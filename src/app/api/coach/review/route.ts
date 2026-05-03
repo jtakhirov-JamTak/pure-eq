@@ -36,6 +36,8 @@ const config: CoachModuleConfig<Input, AiOutput> = {
 
   buildPayloadFields: (input) => ({
     whatHappened: input.whatHappened,
+    observedRaw: input.observedRaw,
+    interpretedRaw: input.interpretedRaw,
     hardestMomentFeeling: input.hardestMomentFeeling,
     whatYouDid: input.whatYouDid,
     observedInThem: input.observedInThem,
@@ -51,6 +53,8 @@ const config: CoachModuleConfig<Input, AiOutput> = {
 
   buildDerivedInsert: (input) => ({
     what_happened: input.whatHappened,
+    observed_raw: input.observedRaw,
+    interpreted_raw: input.interpretedRaw,
     hardest_moment_feeling: input.hardestMomentFeeling,
     what_you_did: input.whatYouDid,
     observed_in_them: input.observedInThem,
@@ -70,6 +74,8 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       personName: context.personName,
       personRelationship: context.personRelationship,
       whatHappened: input.whatHappened,
+      observedRaw: input.observedRaw,
+      interpretedRaw: input.interpretedRaw,
       hardestMomentFeeling: input.hardestMomentFeeling,
       whatYouDid: input.whatYouDid,
       observedInThem: input.observedInThem,

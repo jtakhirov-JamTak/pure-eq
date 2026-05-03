@@ -675,9 +675,11 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           hardest_moment_feeling: string | null
+          interpreted_raw: string | null
           is_complete: boolean
           needs_to_happen_next: string | null
           observed_in_them: string | null
+          observed_raw: string | null
           outcome_json: Json | null
           pattern_tag: string | null
           person_id: string | null
@@ -706,9 +708,11 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           hardest_moment_feeling?: string | null
+          interpreted_raw?: string | null
           is_complete?: boolean
           needs_to_happen_next?: string | null
           observed_in_them?: string | null
+          observed_raw?: string | null
           outcome_json?: Json | null
           pattern_tag?: string | null
           person_id?: string | null
@@ -737,9 +741,11 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           hardest_moment_feeling?: string | null
+          interpreted_raw?: string | null
           is_complete?: boolean
           needs_to_happen_next?: string | null
           observed_in_them?: string | null
+          observed_raw?: string | null
           outcome_json?: Json | null
           pattern_tag?: string | null
           person_id?: string | null

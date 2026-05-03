@@ -15,11 +15,12 @@ import { createClient } from "@/lib/supabase/client";
 // ============================================================
 // Step taxonomy
 // ============================================================
-// Base form: 9 steps (1 person picker + 8 fields). Some text, some
-// enum-select. After step 8 (needsToHappenNext), if the user picked a
+// Base form: 10 steps (1 person picker + 8 single-field steps + 1
+// two-column observed/interpreted step). Some text, some enum-select.
+// After the final base step (needsToHappenNext), if the user picked a
 // "needs repair" option, we insert a readiness gate. If they pass the
-// gate, 3 repair sub-steps appear before submit. Total step count is
-// 9 / 10 / 13 depending on path.
+// gate, repair sub-steps appear before submit. Total step count is
+// 10 / 11 / 14 depending on path (cross-eval batch #1 added 1 step).
 
 type Ask = "yes" | "no" | "unclear";
 
@@ -66,7 +67,13 @@ const REPAIR_TRIGGER_NEEDS: NeedsNext[] = [
   "ask_for_repair",
 ];
 
-type StepKind = "person" | "textarea" | "select_ask" | "select_needs" | "select_readiness";
+type StepKind =
+  | "person"
+  | "textarea"
+  | "textarea_two_column"
+  | "select_ask"
+  | "select_needs"
+  | "select_readiness";
 type StepDef = {
   key: string;
   title: string;
@@ -77,6 +84,11 @@ type StepDef = {
 const BASE_STEPS: StepDef[] = [
   { key: "personName", title: "Who was this conversation with?", prompt: "Start typing to see people you've mentioned before.", kind: "person" },
   { key: "whatHappened", title: "What actually happened in the conversation?", prompt: "Stick to facts. What was said and done — not interpretations yet.", kind: "textarea" },
+  // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
+  // The form-factor itself is the training move — left = observation, right
+  // = meaning-making. `key` is a synthetic step identifier; the field-level
+  // keys posted to the API are `observedRaw` / `interpretedRaw`.
+  { key: "observedInterpreted", title: "Split what you saw from what you thought", prompt: "Left: what did you observe (facts, body, tone, exact words). Right: what did you think it meant?", kind: "textarea_two_column" },
   { key: "hardestMomentFeeling", title: "What was the hardest moment, and what did you feel in it?", prompt: "Name the moment and the feeling that showed up for you.", kind: "textarea" },
   { key: "whatYouDid", title: "What did you do during the conversation?", prompt: "What did you say or do — including the small moves you noticed yourself making.", kind: "textarea" },
   { key: "observedInThem", title: "What did you observe in them — body, tone, words?", prompt: "What did you actually see or hear. Observations, not conclusions.", kind: "textarea" },
@@ -280,6 +292,16 @@ export default function ReviewPage() {
     ) {
       return !!value;
     }
+    if (currentStep.kind === "textarea_two_column") {
+      // Two distinct fields share one step. Advance only when both
+      // columns have non-empty trimmed content. Field keys diverge
+      // from the synthetic step `key` (observedInterpreted) because
+      // the API + payload distinguish observedRaw vs interpretedRaw.
+      return (
+        (data.observedRaw ?? "").trim().length > 0 &&
+        (data.interpretedRaw ?? "").trim().length > 0
+      );
+    }
     return value.trim().length > 0;
   }
 
@@ -317,6 +339,8 @@ export default function ReviewPage() {
         body: JSON.stringify({
           personName: merged.personName,
           whatHappened: merged.whatHappened,
+          observedRaw: merged.observedRaw,
+          interpretedRaw: merged.interpretedRaw,
           hardestMomentFeeling: merged.hardestMomentFeeling,
           whatYouDid: merged.whatYouDid,
           observedInThem: merged.observedInThem,
@@ -824,6 +848,33 @@ export default function ReviewPage() {
                 {opt.label}
               </button>
             ))}
+          </div>
+        ) : currentStep.kind === "textarea_two_column" ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                What did you observe?
+              </p>
+              <VoiceInput
+                key="observedRaw"
+                value={data.observedRaw ?? ""}
+                onChange={(next) => setFieldValue("observedRaw", next)}
+                rows={4}
+                placeholder="Facts only — what was said, body, tone."
+              />
+            </div>
+            <div>
+              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                What did you think it meant?
+              </p>
+              <VoiceInput
+                key="interpretedRaw"
+                value={data.interpretedRaw ?? ""}
+                onChange={(next) => setFieldValue("interpretedRaw", next)}
+                rows={4}
+                placeholder="Your interpretation — what you read into it."
+              />
+            </div>
           </div>
         ) : (
           <VoiceInput
