@@ -110,6 +110,7 @@ describe("formatPrepareSection", () => {
         {
           created_at: "2026-03-20T14:22:00.000Z",
           path: "path_a",
+          signal_noise_observation: null,
           situation_text: "I want to ask for time off.",
           desired_outcome: "They understand why this matters.",
           primary_value: "", // empty → omitted
@@ -134,6 +135,7 @@ describe("formatPrepareSection", () => {
           what_changed: null,
           story_telling_yourself: null,
           afraid_it_means: null,
+          signal_noise_observation: null,
           person_id: null,
           thread_id: null,
         },
@@ -165,6 +167,7 @@ describe("formatPrepareSection", () => {
           what_changed: null,
           story_telling_yourself: null,
           afraid_it_means: null,
+          signal_noise_observation: null,
           person_id: null,
           thread_id: null,
         },
@@ -180,6 +183,7 @@ describe("formatPrepareSection", () => {
           what_changed: null,
           story_telling_yourself: null,
           afraid_it_means: null,
+          signal_noise_observation: null,
           person_id: null,
           thread_id: null,
         },
@@ -200,6 +204,8 @@ describe("formatReviewSection", () => {
         {
           created_at: "2026-03-20T14:22:00.000Z",
           what_happened: "It went sideways.",
+          observed_raw: null,
+          interpreted_raw: null,
           hardest_moment_feeling: "anxious",
           observed_in_them: "they crossed their arms",
           their_experience: "they felt cornered",
@@ -240,6 +246,8 @@ describe("formatReviewSection", () => {
         {
           created_at: "2026-03-20T14:22:00.000Z",
           what_happened: "We talked.",
+          observed_raw: null,
+          interpreted_raw: null,
           hardest_moment_feeling: "defensive",
           observed_in_them: null,
           their_experience: null,
@@ -265,6 +273,70 @@ describe("formatReviewSection", () => {
     expect(out).toContain("What I did:");
     expect(out).toContain("My part in this:");
     expect(out).toContain("safe enough to disagree");
+  });
+
+  it("renders observed_raw / interpreted_raw fields when populated (cross-eval batch #1)", () => {
+    const out = formatReviewSection(
+      [
+        {
+          created_at: "2026-05-04T09:00:00.000Z",
+          what_happened: "We talked about the budget.",
+          observed_raw: "they kept looking at the door",
+          interpreted_raw: "I read it as them wanting to leave",
+          hardest_moment_feeling: "anxious",
+          observed_in_them: null,
+          their_experience: null,
+          what_helped: null,
+          what_hurt: null,
+          validated_assumptions: null,
+          unresolved_and_next: null,
+          what_you_did: "rushed through the agenda",
+          what_you_avoided: "the real ask",
+          ask_before_understanding: "no",
+          needs_to_happen_next: "clarify",
+          repair_branch_active: false,
+          your_part: null,
+          secret_want: null,
+          could_make_them_feel: null,
+          person_id: null,
+          thread_id: null,
+        },
+      ],
+      personMap,
+      threadMap,
+    );
+    expect(out).toContain("What I observed (facts):");
+    expect(out).toContain("they kept looking at the door");
+    expect(out).toContain("What I thought it meant:");
+    expect(out).toContain("I read it as them wanting to leave");
+  });
+
+  it("renders signal_noise_observation in Prepare export when populated (cross-eval batch #1)", () => {
+    const out = formatPrepareSection(
+      [
+        {
+          created_at: "2026-05-04T09:00:00.000Z",
+          path: "path_b",
+          situation_text: null,
+          desired_outcome: null,
+          primary_value: null,
+          their_need: null,
+          how_to_make_them_feel: null,
+          what_feels_off: "they've been distant",
+          what_changed: "stopped texting in the morning",
+          story_telling_yourself: "they're losing interest",
+          afraid_it_means: "the relationship is fading",
+          signal_noise_observation:
+            "If they don't initiate plans in the next 5 days, that's signal.",
+          person_id: null,
+          thread_id: null,
+        },
+      ],
+      personMap,
+      threadMap,
+    );
+    expect(out).toContain("What would tell me this is real (3–7 day signal/noise):");
+    expect(out).toContain("If they don't initiate plans in the next 5 days");
   });
 });
 

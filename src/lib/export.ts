@@ -167,6 +167,7 @@ type PrepareRow = Pick<
   | "what_changed"
   | "story_telling_yourself"
   | "afraid_it_means"
+  | "signal_noise_observation"
   | "person_id"
   | "thread_id"
 >;
@@ -204,6 +205,11 @@ export function formatPrepareSection(
     appendField(lines, "What changed", r.what_changed);
     appendField(lines, "Story I'm telling myself", r.story_telling_yourself);
     appendField(lines, "What I'm afraid it means", r.afraid_it_means);
+    appendField(
+      lines,
+      "What would tell me this is real (3–7 day signal/noise)",
+      r.signal_noise_observation,
+    );
     blocks.push(lines.join("\n"));
   }
   return section(
@@ -221,6 +227,8 @@ type ReviewRow = Pick<
   Tables["review_entries"]["Row"],
   | "created_at"
   | "what_happened"
+  | "observed_raw"
+  | "interpreted_raw"
   | "hardest_moment_feeling"
   | "observed_in_them"
   | "their_experience"
@@ -256,6 +264,10 @@ export function formatReviewSection(
     );
     lines.push("");
     appendField(lines, "What happened", r.what_happened);
+    // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
+    // Legacy rows have null on these and skip via appendField.
+    appendField(lines, "What I observed (facts)", r.observed_raw);
+    appendField(lines, "What I thought it meant", r.interpreted_raw);
     appendField(lines, "Hardest moment — what I was feeling", r.hardest_moment_feeling);
     appendField(lines, "What I observed in them", r.observed_in_them);
     appendField(lines, "Their experience", r.their_experience);
@@ -564,7 +576,7 @@ export async function buildExportText(
     supabase
       .from("prepare_entries")
       .select(
-        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, person_id, thread_id",
+        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, signal_noise_observation, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)
@@ -574,7 +586,7 @@ export async function buildExportText(
     supabase
       .from("review_entries")
       .select(
-        "created_at, what_happened, hardest_moment_feeling, observed_in_them, their_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, repair_branch_active, your_part, secret_want, could_make_them_feel, person_id, thread_id",
+        "created_at, what_happened, observed_raw, interpreted_raw, hardest_moment_feeling, observed_in_them, their_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, repair_branch_active, your_part, secret_want, could_make_them_feel, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)

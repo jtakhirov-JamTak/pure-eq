@@ -141,6 +141,7 @@ export interface PrepareEntry {
   whatChanged: string | null;
   storyTellingYourself: string | null;
   afraidItMeans: string | null;
+  signalNoiseObservation: string | null;
   // Common
   patternTag: ObservationTag | null;
   inputModes: Record<string, InputMode>;
@@ -154,6 +155,8 @@ export interface ReviewEntry {
   personId: string | null;
   threadId: string | null;
   whatHappened: string;
+  observedRaw: string | null;
+  interpretedRaw: string | null;
   hardestMomentFeeling: string;
   whatYouDid: string;
   observedInThem: string;
@@ -164,6 +167,8 @@ export interface ReviewEntry {
   // Repair branch (only when repair_branch_active === true)
   repairBranchActive: boolean;
   yourPart: string | null;
+  // Deprecated 2026-05-03 per cross-eval batch #1; retained for historical
+  // rows. New rows write null. See validation.ts for rationale.
   secretWant: string | null;
   couldMakeThemFeel: string | null;
   patternTag: ObservationTag | null;

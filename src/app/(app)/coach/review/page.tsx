@@ -90,7 +90,7 @@ const BASE_STEPS: StepDef[] = [
   // The form-factor itself is the training move — left = observation, right
   // = meaning-making. `key` is a synthetic step identifier; the field-level
   // keys posted to the API are `observedRaw` / `interpretedRaw`.
-  { key: "observedInterpreted", title: "Split what you saw from what you thought", prompt: "Left: what did you observe (facts, body, tone, exact words). Right: what did you think it meant?", kind: "textarea_two_column" },
+  { key: "observedInterpreted", title: "Split what you saw from what you thought", prompt: "Two boxes. One for facts (body, tone, exact words). One for what you read into them.", kind: "textarea_two_column" },
   { key: "hardestMomentFeeling", title: "What was the hardest moment, and what did you feel in it?", prompt: "Name the moment and the feeling that showed up for you.", kind: "textarea" },
   { key: "whatYouDid", title: "What did you do during the conversation?", prompt: "What did you say or do — including the small moves you noticed yourself making.", kind: "textarea" },
   { key: "observedInThem", title: "What did you observe in them — body, tone, words?", prompt: "What did you actually see or hear. Observations, not conclusions.", kind: "textarea" },
