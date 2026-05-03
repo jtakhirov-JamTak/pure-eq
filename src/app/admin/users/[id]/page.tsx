@@ -209,13 +209,18 @@ export default async function AdminUserDetail({
         <h3 className="text-sm font-medium uppercase tracking-wide text-zinc-400">
           Entries by Module
         </h3>
-        <div className="mt-3 grid grid-cols-3 gap-4">
-          {["prepare", "review", "tools"].map((mod) => (
-            <div key={mod}>
+        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {[
+            { key: "prepare", label: "Prepare" },
+            { key: "review", label: "Review" },
+            { key: "before_you_send", label: "Before-Send" },
+            { key: "tools", label: "Tools" },
+          ].map((mod) => (
+            <div key={mod.key}>
               <p className="text-2xl font-bold text-zinc-900">
-                {moduleCounts[mod] ?? 0}
+                {moduleCounts[mod.key] ?? 0}
               </p>
-              <p className="text-xs capitalize text-zinc-500">{mod}</p>
+              <p className="text-xs text-zinc-500">{mod.label}</p>
             </div>
           ))}
         </div>

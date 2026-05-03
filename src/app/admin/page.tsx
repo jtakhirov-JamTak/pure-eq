@@ -7,26 +7,36 @@ export default async function AdminDashboard() {
 
   // Parallel queries for stats — all use head:true or count to avoid
   // fetching unbounded result sets.
-  const [usersRes, subsRes, prepareCount, reviewCount, toolsCount] =
-    await Promise.all([
-      sc.auth.admin.listUsers({ perPage: 1000 }),
-      sc
-        .from("user_subscriptions")
-        .select("status", { count: "exact", head: true })
-        .in("status", ["trial_active", "active"]),
-      sc
-        .from("raw_records")
-        .select("*", { count: "exact", head: true })
-        .eq("module_type", "prepare"),
-      sc
-        .from("raw_records")
-        .select("*", { count: "exact", head: true })
-        .eq("module_type", "review"),
-      sc
-        .from("raw_records")
-        .select("*", { count: "exact", head: true })
-        .eq("module_type", "tools"),
-    ]);
+  const [
+    usersRes,
+    subsRes,
+    prepareCount,
+    reviewCount,
+    bysCount,
+    toolsCount,
+  ] = await Promise.all([
+    sc.auth.admin.listUsers({ perPage: 1000 }),
+    sc
+      .from("user_subscriptions")
+      .select("status", { count: "exact", head: true })
+      .in("status", ["trial_active", "active"]),
+    sc
+      .from("raw_records")
+      .select("*", { count: "exact", head: true })
+      .eq("module_type", "prepare"),
+    sc
+      .from("raw_records")
+      .select("*", { count: "exact", head: true })
+      .eq("module_type", "review"),
+    sc
+      .from("raw_records")
+      .select("*", { count: "exact", head: true })
+      .eq("module_type", "before_you_send"),
+    sc
+      .from("raw_records")
+      .select("*", { count: "exact", head: true })
+      .eq("module_type", "tools"),
+  ]);
 
   const allUsers = usersRes.data?.users ?? [];
   const totalUsers = allUsers.length;
@@ -49,6 +59,7 @@ export default async function AdminDashboard() {
   const moduleStats = [
     { label: "Prepare", value: prepareCount.count ?? 0 },
     { label: "Review", value: reviewCount.count ?? 0 },
+    { label: "Before-Send", value: bysCount.count ?? 0 },
     { label: "Tools", value: toolsCount.count ?? 0 },
   ];
 
@@ -73,7 +84,7 @@ export default async function AdminDashboard() {
       <h3 className="mt-8 text-sm font-medium uppercase tracking-wide text-zinc-400">
         Entries by Module
       </h3>
-      <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {moduleStats.map((s) => (
           <div
             key={s.label}

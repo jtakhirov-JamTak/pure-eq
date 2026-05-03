@@ -1,6 +1,7 @@
 // Pure EQ domain — replace in fork.
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { createOverwhelmedSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
@@ -12,6 +13,12 @@ export const runtime = "nodejs";
 const requestSchema = createOverwhelmedSchema.extend({
   idempotencyKey: z.string().uuid(),
 });
+
+// Cooldown-latched Sentry for cleanup-delete failures. A failed cleanup
+// leaves an orphan raw_records row with no derived row — quietly inflates
+// admin "Tools" counts and fakes the user out of idempotent retries.
+const CLEANUP_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastCleanupCaptureAt = 0;
 
 export async function POST(req: Request) {
   if (!checkOrigin(req)) {
@@ -163,11 +170,25 @@ export async function POST(req: Request) {
       console.error("overwhelmed: derived insert failed", derivedErr.code);
       // Cleanup raw row only if we inserted it this request.
       if (!existingRaw) {
-        await supabase
+        const { error: cleanupErr } = await supabase
           .from("raw_records")
           .delete()
           .eq("user_id", user.id)
           .eq("raw_record_id", rawRecordId);
+        if (cleanupErr) {
+          const now = Date.now();
+          if (now - lastCleanupCaptureAt > CLEANUP_CAPTURE_COOLDOWN_MS) {
+            lastCleanupCaptureAt = now;
+            Sentry.captureException(
+              new Error("overwhelmed_cleanup_failed"),
+              { tags: { area: "tools", kind: "cleanup_orphan_raw" } },
+            );
+          }
+          console.error(
+            "overwhelmed: cleanup delete failed",
+            cleanupErr.code,
+          );
+        }
       }
       return NextResponse.json(
         { error: "Could not save entry" },

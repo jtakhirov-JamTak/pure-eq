@@ -36,6 +36,24 @@ create table if not exists public.overwhelmed_entries (
 create index if not exists overwhelmed_entries_user_idx
   on public.overwhelmed_entries (user_id, created_at desc) where deleted_at is null;
 
+-- Pre-flight dedup before unique-index creation. CREATE UNIQUE INDEX IF
+-- NOT EXISTS aborts the migration on the first duplicate row with no
+-- automatic remediation. Idempotent on a clean DB; defends against
+-- partial replays or hand-edits leaving dupes.
+with ranked as (
+  select overwhelmed_entry_id,
+    row_number() over (
+      partition by raw_record_id
+      order by overwhelmed_entry_id
+    ) as rn
+  from public.overwhelmed_entries
+  where deleted_at is null and raw_record_id is not null
+)
+delete from public.overwhelmed_entries
+where overwhelmed_entry_id in (
+  select overwhelmed_entry_id from ranked where rn > 1
+);
+
 create unique index if not exists overwhelmed_entries_raw_record_uniq
   on public.overwhelmed_entries (raw_record_id)
   where deleted_at is null;
@@ -86,6 +104,21 @@ create index if not exists trigger_entries_user_idx
   on public.trigger_entries (user_id, created_at desc) where deleted_at is null;
 create index if not exists trigger_entries_person_idx
   on public.trigger_entries (person_id) where deleted_at is null;
+
+-- Pre-flight dedup before unique-index creation; same rationale as above.
+with ranked as (
+  select trigger_entry_id,
+    row_number() over (
+      partition by raw_record_id
+      order by trigger_entry_id
+    ) as rn
+  from public.trigger_entries
+  where deleted_at is null and raw_record_id is not null
+)
+delete from public.trigger_entries
+where trigger_entry_id in (
+  select trigger_entry_id from ranked where rn > 1
+);
 
 create unique index if not exists trigger_entries_raw_record_uniq
   on public.trigger_entries (raw_record_id)

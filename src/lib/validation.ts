@@ -147,13 +147,27 @@ export const createBeforeYouSendSchema = z.object({
   // + threadBehavior:"none" config skips those resolution steps.
 });
 
+// Tools after_feeling: must mirror the DB CHECK in
+// 0033_restore_tools_tables.sql (overwhelmed_entries_after_feeling_check
+// + trigger_entries_after_feeling_check). Loose z.string() Zod let
+// off-list values pass and 23514 at insert time, surfacing as a generic
+// 500. Enum here gives a clean 400.
+export const TOOLS_AFTER_FEELING_VALUES = [
+  "Calmer",
+  "Lighter",
+  "Hopeful",
+  "Relieved",
+  "Energized",
+  "Same",
+] as const;
+
 // Tools — Overwhelmed
 export const createOverwhelmedSchema = z.object({
   beforeRating: z.number().int().min(1).max(5),
   bodyLocation: z.string().max(200).nullable().optional(),
   feelingLabel: z.string().min(1).max(5000),
   afterRating: z.number().int().min(1).max(5),
-  afterFeeling: z.string().min(1).max(200),
+  afterFeeling: z.enum(TOOLS_AFTER_FEELING_VALUES),
 });
 
 // Tools — Trigger Log
@@ -167,7 +181,7 @@ export const createTriggerSchema = z.object({
   behavior: z.string().min(1).max(5000),
   outcome: z.string().min(1).max(5000),
   reflection: z.string().min(1).max(5000),
-  afterFeeling: z.string().min(1).max(200),
+  afterFeeling: z.enum(TOOLS_AFTER_FEELING_VALUES),
 });
 
 // Persons

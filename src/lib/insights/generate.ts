@@ -32,12 +32,19 @@ import { buildReflectionInput } from "./reflection-input";
 import type { ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 
+// v3 (2026-05-03): Tools restored. The reflection prompt's FIELD GLOSSARY
+// re-includes trigger_log + overwhelmed bullets, and the input record_type
+// filter once again pulls Tools entries. v2 cached rows from the 6-day
+// removal window (2026-04-25 → 2026-05-03) were generated without Tools
+// signal; bumping to v3 forces recompute via the writer-side symmetric
+// guard so users see reflections that include their Tools entries.
+//
 // v2 (2026-04-23): reflection prompt now includes FIELD GLOSSARY + optional
 // BEHAVIORAL CONTEXT block (BYS verdicts + Review repair-branch counters).
 // Migration 0031 moved generator_version into the weekly_reflections unique
 // index, so a mid-week version bump is handled natively by an INSERT of a
 // new (user_id, date, version) row — no UPDATE fallback needed.
-export const GENERATOR_VERSION = "reflection_v2";
+export const GENERATOR_VERSION = "reflection_v3";
 
 // Allowlist for review.needs_to_happen_next. Gates arbitrary DB strings
 // (legacy rows, schema drift) from leaking into the prompt. Single source

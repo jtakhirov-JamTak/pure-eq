@@ -1,6 +1,7 @@
 // Pure EQ domain — replace in fork.
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { createTriggerSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
@@ -12,6 +13,11 @@ export const runtime = "nodejs";
 const requestSchema = createTriggerSchema.extend({
   idempotencyKey: z.string().uuid(),
 });
+
+// Cooldown-latched Sentry for cleanup-delete failures. See overwhelmed
+// route for rationale.
+const CLEANUP_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
+let lastCleanupCaptureAt = 0;
 
 export async function POST(req: Request) {
   if (!checkOrigin(req)) {
@@ -172,11 +178,25 @@ export async function POST(req: Request) {
       console.error("triggered: derived insert failed", derivedErr.code);
       // Cleanup raw row only if we inserted it this request.
       if (!existingRaw) {
-        await supabase
+        const { error: cleanupErr } = await supabase
           .from("raw_records")
           .delete()
           .eq("user_id", user.id)
           .eq("raw_record_id", rawRecordId);
+        if (cleanupErr) {
+          const now = Date.now();
+          if (now - lastCleanupCaptureAt > CLEANUP_CAPTURE_COOLDOWN_MS) {
+            lastCleanupCaptureAt = now;
+            Sentry.captureException(
+              new Error("triggered_cleanup_failed"),
+              { tags: { area: "tools", kind: "cleanup_orphan_raw" } },
+            );
+          }
+          console.error(
+            "triggered: cleanup delete failed",
+            cleanupErr.code,
+          );
+        }
       }
       return NextResponse.json(
         { error: "Could not save entry" },
