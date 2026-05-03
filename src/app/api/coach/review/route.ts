@@ -32,7 +32,12 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   // nullable-action-field shape change (what_to_own, thing_not_to_say).
   // Distinguishes post-shape rows that may contain explicit null action
   // values from legacy 5-rows that guaranteed non-null strings.
-  aiVersionValue: 6,
+  // 2026-05-03: bump 6 → 7 alongside PROMPT_VERSION 4.4.0 → 4.5.0 and the
+  // cross-eval deprecation of secretWant + couldMakeThemFeel inputs.
+  // Output schema unchanged, but the model sees a different repair-branch
+  // user block — distinguishes rows generated under the 3-Q repair input
+  // set from rows generated under the new 1-Q (yourPart only) set.
+  aiVersionValue: 7,
 
   buildPayloadFields: (input) => ({
     whatHappened: input.whatHappened,
@@ -47,8 +52,6 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     needsToHappenNext: input.needsToHappenNext,
     repairBranchActive: input.repairBranchActive,
     yourPart: input.yourPart ?? null,
-    secretWant: input.secretWant ?? null,
-    couldMakeThemFeel: input.couldMakeThemFeel ?? null,
   }),
 
   buildDerivedInsert: (input) => ({
@@ -64,8 +67,9 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     needs_to_happen_next: input.needsToHappenNext,
     repair_branch_active: input.repairBranchActive,
     your_part: input.yourPart ?? null,
-    secret_want: input.secretWant ?? null,
-    could_make_them_feel: input.couldMakeThemFeel ?? null,
+    // secret_want / could_make_them_feel deprecated 2026-05-03 per
+    // cross-eval batch #1. Columns retained for historical reads; new
+    // rows omit them (DB default null).
   }),
 
   buildPrompt: (input, profile, context) =>
@@ -85,8 +89,6 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       needsToHappenNext: input.needsToHappenNext,
       repairBranchActive: input.repairBranchActive,
       yourPart: input.yourPart,
-      secretWant: input.secretWant,
-      couldMakeThemFeel: input.couldMakeThemFeel,
     }),
 
   buildResponseExtras: (derivedEntryId) => ({

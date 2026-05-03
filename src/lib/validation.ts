@@ -142,7 +142,15 @@ export const createReviewSchema = z.object({
   // Repair-branch fields (optional — populated only on repair flow).
   repairBranchActive: z.boolean().default(false),
   yourPart: z.string().min(1).max(5000).nullable().optional(),
+  // Deprecated 2026-05-03 per cross-eval batch #1; field retained for
+  // historical reads only. New form does not collect; new posts send null.
+  // Both Qs trained projection of the other person's emotional state
+  // rather than honest repair — highest backfire risk for anxious /
+  // defensive / Tier 2 user-classes. SOT replacements (pressure-vs-care,
+  // distress-tolerance) are a separate ticket.
   secretWant: z.string().min(1).max(5000).nullable().optional(),
+  // Deprecated 2026-05-03 per cross-eval batch #1; field retained for
+  // historical reads only. New form does not collect; new posts send null.
   couldMakeThemFeel: z.string().min(1).max(5000).nullable().optional(),
   // Person/thread.
   personId: z.string().uuid().nullable().optional(),

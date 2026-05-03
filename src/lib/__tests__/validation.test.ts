@@ -140,3 +140,43 @@ describe("prepareSchemaPathB — signalNoiseObservation", () => {
     expect(result.success).toBe(true);
   });
 });
+
+// ============================================================
+// Review repair branch — secretWant / couldMakeThemFeel deprecation
+// (cross-eval batch #1, 2026-05-03)
+// ============================================================
+describe("createReviewSchema — repair branch (deprecated fields)", () => {
+  it("accepts a repair-active payload with only yourPart (the new common case)", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      needsToHappenNext: "apologize",
+      repairBranchActive: true,
+      yourPart: "I cut them off when they tried to explain.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("still accepts payloads carrying populated secretWant / couldMakeThemFeel (historical-row compat)", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      needsToHappenNext: "apologize",
+      repairBranchActive: true,
+      yourPart: "I dismissed their concern.",
+      secretWant: "I want them to admit they overreacted.",
+      couldMakeThemFeel: "Heard and respected.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts null secretWant / couldMakeThemFeel", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      needsToHappenNext: "apologize",
+      repairBranchActive: true,
+      yourPart: "I steered the conversation away from their question.",
+      secretWant: null,
+      couldMakeThemFeel: null,
+    });
+    expect(result.success).toBe(true);
+  });
+});

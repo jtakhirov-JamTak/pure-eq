@@ -40,10 +40,16 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // the signalNoiseObservation field (3–7 day check). User block grows by
 // one line; Path B trailing instruction extended so best_next_move can
 // reference what the user said they'd watch for. Output schema unchanged.
+// 2026-05-03 4.5.0: Cross-eval batch #1 — Review repair-branch user block
+// loses secretWant + couldMakeThemFeel (both trained projection of the
+// other person's emotional state, highest backfire risk for anxious /
+// defensive / Tier 2 classes). buildReviewPrompt params type drops the
+// two fields. Output schema unchanged; aiVersionValue 6 → 7 on Review
+// distinguishes pre/post-deprecation rows.
 // Exported so tests can assert equality against the same constant the
 // builders stamp into prompt outputs — pinning a literal in tests next
 // to a moving constant is the canary trap CLAUDE.md warns about.
-export const PROMPT_VERSION = "4.4.0";
+export const PROMPT_VERSION = "4.5.0";
 
 const SHARED_RULES = `
 RULES:
@@ -551,8 +557,6 @@ export function buildReviewPrompt(params: {
   // Repair branch (optional)
   repairBranchActive: boolean;
   yourPart?: string | null;
-  secretWant?: string | null;
-  couldMakeThemFeel?: string | null;
   // Person context — fetched server-side from persons.{display_name,
   // relationship_domain} when run-module resolved a non-null person.
   // Both null on no-person Review submissions; prompt renders without
@@ -599,8 +603,6 @@ the JSON output. The user's needs_to_happen_next does not require repair.
   const repairContext = params.repairBranchActive
     ? `
 What part is yours to own: ${params.yourPart ?? ""}
-What they secretly want from the other person right now: ${params.secretWant ?? ""}
-What they want the other person to feel after the repair: ${params.couldMakeThemFeel ?? ""}
 `
     : "";
 

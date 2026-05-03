@@ -20,7 +20,9 @@ import { createClient } from "@/lib/supabase/client";
 // After the final base step (needsToHappenNext), if the user picked a
 // "needs repair" option, we insert a readiness gate. If they pass the
 // gate, repair sub-steps appear before submit. Total step count is
-// 10 / 11 / 14 depending on path (cross-eval batch #1 added 1 step).
+// 10 / 11 / 12 depending on path (cross-eval batch #1: added 1 base
+// step, shrunk repair branch from 3 to 1 by removing secretWant and
+// couldMakeThemFeel).
 
 type Ask = "yes" | "no" | "unclear";
 
@@ -105,10 +107,13 @@ const READINESS_STEP: StepDef = {
   kind: "select_readiness",
 };
 
+// Cross-eval batch #1 (2026-05-03): repair branch shrunk from 3 Qs to 1.
+// secretWant + couldMakeThemFeel both trained projection of the other
+// person's emotional state rather than honest repair — highest backfire
+// risk for anxious / defensive / Tier 2 user-classes. SOT replacements
+// (pressure-vs-care, distress-tolerance) are a separate ticket.
 const REPAIR_STEPS: StepDef[] = [
   { key: "yourPart", title: "What's your part in this?", prompt: "The piece that's actually yours, not the part that's about them.", kind: "textarea" },
-  { key: "secretWant", title: "What do you secretly want from them right now?", prompt: "Honest. Not the polite version.", kind: "textarea" },
-  { key: "couldMakeThemFeel", title: "What would you want them to feel after the repair?", prompt: "Name the emotional state you're hoping for.", kind: "textarea" },
 ];
 
 // ============================================================
@@ -350,8 +355,6 @@ export default function ReviewPage() {
           needsToHappenNext: merged.needsToHappenNext,
           repairBranchActive,
           yourPart: repairBranchActive ? merged.yourPart : null,
-          secretWant: repairBranchActive ? merged.secretWant : null,
-          couldMakeThemFeel: repairBranchActive ? merged.couldMakeThemFeel : null,
           personId: personId || null,
           threadId: threadId || null,
           idempotencyKey: idempotencyKeyRef.current,
