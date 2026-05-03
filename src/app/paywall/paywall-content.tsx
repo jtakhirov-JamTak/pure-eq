@@ -116,13 +116,14 @@ export function PaywallContent() {
         </div>
 
         <p className="mt-4 text-center text-[12px] font-medium text-ink-soft">
-          Free so far: 1 Prepare + 1 Review in your first 3 days. Subscribe for
-          ongoing access.
+          Free so far: 1 Prepare + 1 Review (first 3 days) plus unlimited Tools
+          (first 7 days). Subscribe for ongoing access.
         </p>
 
         <ul className="mt-5 w-full space-y-2 text-[14px] font-medium text-ink-soft">
           {[
             "Unlimited AI coaching sessions",
+            "Regulation tools for tough moments",
             "Weekly reflection with quoted evidence",
             "Cancel anytime in 1 click",
           ].map((item) => (

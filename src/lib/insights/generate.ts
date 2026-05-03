@@ -37,15 +37,6 @@ import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 // Migration 0031 moved generator_version into the weekly_reflections unique
 // index, so a mid-week version bump is handled natively by an INSERT of a
 // new (user_id, date, version) row — no UPDATE fallback needed.
-//
-// Tools removal 2026-04-25 narrowed the record_type filter (dropped
-// "trigger_log" + "overwhelmed") and removed two FIELD GLOSSARY bullets.
-// GENERATOR_VERSION intentionally NOT bumped: (a) the substring verifier
-// guarantees every quote came from a real entry that existed at generation
-// time, so any stale weekly_reflections row in the wild already cites a
-// valid raw_record; (b) the 7-day idempotency window naturally expires
-// stale rows within a week post-deploy. Bump only on actual output-shape
-// changes, per playbook §16.32.
 export const GENERATOR_VERSION = "reflection_v2";
 
 // Allowlist for review.needs_to_happen_next. Gates arbitrary DB strings
@@ -322,7 +313,7 @@ export async function generateReflection(
       .from("raw_records")
       .select("raw_record_id, record_type, created_at, person_id, payload_json")
       .eq("user_id", userId)
-      .in("record_type", ["prepare", "review", "repair"])
+      .in("record_type", ["prepare", "review", "repair", "trigger_log", "overwhelmed"])
       .eq("is_complete", true)
       .is("deleted_at", null)
       .gte("created_at", periodStart)
@@ -522,7 +513,7 @@ export async function generateReflection(
         mode: "refusal",
         refusal_reason: "out_of_scope",
         message_to_user:
-          "I could not ground enough patterns in your own words this week. Keep using Coach for another week or two and come back.",
+          "I could not ground enough patterns in your own words this week. Keep using Coach and Tools for another week or two and come back.",
         suggested_resource: "none",
       };
     } else {

@@ -16,13 +16,17 @@ const DELETABLE_TYPES = [
   "review",
   "before_you_send",
   "repair",
+  "trigger_log",
+  "overwhelmed",
 ] as const;
 
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   prepare: "Prepare",
   review: "Review",
-  before_you_send: "Before Send",
+  before_you_send: "Before-Send",
   repair: "Repair",
+  trigger_log: "Triggered",
+  overwhelmed: "Overwhelmed",
 };
 
 export default async function HistoryPage() {
@@ -87,6 +91,8 @@ export default async function HistoryPage() {
     review: 0,
     before_you_send: 0,
     repair: 0,
+    trigger_log: 0,
+    overwhelmed: 0,
   };
   DELETABLE_TYPES.forEach((t, i) => {
     counts[t] = countResults[i].count ?? 0;
@@ -118,7 +124,7 @@ export default async function HistoryPage() {
         Everything you&apos;ve completed, newest first.
       </p>
 
-      <div className="mt-5 grid grid-cols-4 gap-1.5">
+      <div className="mt-5 grid grid-cols-3 gap-2">
         {DELETABLE_TYPES.map((t) => (
           <div
             key={t}

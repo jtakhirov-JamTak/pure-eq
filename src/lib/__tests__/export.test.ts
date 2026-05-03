@@ -4,6 +4,8 @@ import {
   formatPrepareSection,
   formatReviewSection,
   formatRepairSection,
+  formatTriggerSection,
+  formatOverwhelmedSection,
   formatPersonsSection,
   formatThreadsSection,
   formatMemoriesSection,
@@ -289,6 +291,61 @@ describe("formatRepairSection", () => {
     expect(out).toContain("I raised my voice.");
     expect(out).toContain("Channel:");
     expect(out).toContain("in_person");
+  });
+});
+
+describe("formatTriggerSection", () => {
+  it("does not print a Thread: label (trigger entries are person-only)", () => {
+    const out = formatTriggerSection(
+      [
+        {
+          created_at: "2026-03-20T14:22:00.000Z",
+          event_text: "email arrived",
+          interpretation: "they're mad",
+          emotion: "panic",
+          urge: "reply immediately",
+          behavior: "closed the laptop",
+          outcome: "cooled down",
+          learning: "breathe first",
+          person_id: "person-1",
+        },
+      ],
+      personMap,
+    );
+    expect(out).toContain("Sarah");
+    expect(out).not.toContain("Thread:");
+    expect(out).toContain("Learning:");
+  });
+});
+
+describe("formatOverwhelmedSection", () => {
+  it("includes the 1-5 scale suffix for intensity ratings", () => {
+    const out = formatOverwhelmedSection([
+      {
+        created_at: "2026-03-20T14:22:00.000Z",
+        what_happened: "backed up",
+        body_sensations: "tight chest",
+        overwhelm_before: 4,
+        overwhelm_after: 2,
+        technique_used: "4-7-8",
+      },
+    ]);
+    expect(out).toContain("4 / 5");
+    expect(out).toContain("2 / 5");
+  });
+
+  it("omits 0 intensity when null", () => {
+    const out = formatOverwhelmedSection([
+      {
+        created_at: "2026-03-20T14:22:00.000Z",
+        what_happened: "x",
+        body_sensations: null,
+        overwhelm_before: null,
+        overwhelm_after: null,
+        technique_used: null,
+      },
+    ]);
+    expect(out).not.toContain("/ 5");
   });
 });
 

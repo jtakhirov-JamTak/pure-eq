@@ -7,7 +7,7 @@ export default async function AdminDashboard() {
 
   // Parallel queries for stats — all use head:true or count to avoid
   // fetching unbounded result sets.
-  const [usersRes, subsRes, prepareCount, reviewCount, beforeYouSendCount] =
+  const [usersRes, subsRes, prepareCount, reviewCount, toolsCount] =
     await Promise.all([
       sc.auth.admin.listUsers({ perPage: 1000 }),
       sc
@@ -25,7 +25,7 @@ export default async function AdminDashboard() {
       sc
         .from("raw_records")
         .select("*", { count: "exact", head: true })
-        .eq("module_type", "before_you_send"),
+        .eq("module_type", "tools"),
     ]);
 
   const allUsers = usersRes.data?.users ?? [];
@@ -49,7 +49,7 @@ export default async function AdminDashboard() {
   const moduleStats = [
     { label: "Prepare", value: prepareCount.count ?? 0 },
     { label: "Review", value: reviewCount.count ?? 0 },
-    { label: "Before-Send", value: beforeYouSendCount.count ?? 0 },
+    { label: "Tools", value: toolsCount.count ?? 0 },
   ];
 
   return (

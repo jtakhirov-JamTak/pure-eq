@@ -184,6 +184,37 @@ export interface BeforeYouSendEntry {
   completedAt: string | null;
 }
 
+// Tools types
+export interface OverwhelmedEntry {
+  id: string;
+  userId: string;
+  beforeRating: number; // 1-5
+  bodyLocation: string | null;
+  feelingLabel: string;
+  afterRating: number; // 1-5
+  afterFeeling: string;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+export interface TriggerEntry {
+  id: string;
+  userId: string;
+  trigger: string;
+  interpretation: string;
+  emotion: string;
+  emotionIntensity: number; // 1-10
+  urge: string;
+  urgeIntensity: number; // 1-10
+  behavior: string;
+  outcome: string;
+  reflection: string;
+  afterFeeling: string;
+  inputModes: Record<string, InputMode>;
+  createdAt: string;
+  completedAt: string | null;
+}
+
 // Subscription states
 export type SubscriptionStatus =
   | "none"

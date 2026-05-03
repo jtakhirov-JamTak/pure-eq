@@ -210,7 +210,7 @@ export default async function AdminUserDetail({
           Entries by Module
         </h3>
         <div className="mt-3 grid grid-cols-3 gap-4">
-          {["prepare", "review", "before_you_send"].map((mod) => (
+          {["prepare", "review", "tools"].map((mod) => (
             <div key={mod}>
               <p className="text-2xl font-bold text-zinc-900">
                 {moduleCounts[mod] ?? 0}

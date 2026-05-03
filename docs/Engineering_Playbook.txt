@@ -1707,9 +1707,9 @@ What matters more than WHEN is HOW.
     // RIGHT — one helper per policy, one variant per mechanism
     requirePaidAccessPage(user)          // throws redirect
     requirePaidAccessApi(user)           // returns NextResponse|null
-    requireTrialAccessPage(user)         // (hypothetical 2nd policy)
-    requireTrialAccessApi(user)
-    hasTrialAccess(user): boolean        // for surfaces that render state
+    requireToolsAccessPage(user)
+    requireToolsAccessApi(user)
+    hasToolsAccess(user): boolean        // for surfaces that render state
                                           // instead of redirecting
 
 Policies are load-bearing — mixing "paid-only" with "paid OR trial OR
@@ -1726,11 +1726,12 @@ Tell-tale signs you waited too long:
 - Helper signature includes every access type the app supports
 
 Common mistake when extracting: leave one call site inlined because it
-has a slightly-different shape (e.g. a primary-flow free-trial gate that
-uses `bothFreeUsed || freePeriodExpired` on `!hasAccess`, not plain
-`!hasAccess`). That is FINE — helpers should cover the common policies,
-and the one-off gate can keep its bespoke inline block with a comment
-explaining why it's not using the helper.
+has a slightly-different shape (the Coach 3-day free window vs. Tools
+7-day window is a real example — Coach gate uses `bothFreeUsed ||
+freePeriodExpired` on `!hasAccess`, not plain `!hasAccess`). That is
+FINE — helpers should cover the common policies, and the one-off gate
+can keep its bespoke inline block with a comment explaining why it's
+not using the helper.
 
 §16.20 Protect access-anchor columns from user-writable RLS
 
