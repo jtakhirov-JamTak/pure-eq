@@ -7,7 +7,18 @@ import { PersonPicker } from "@/components/person-picker";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
-import { StepDots } from "@/components/brand/StepDots";
+import { CoachPage } from "@/components/coach/coach-page";
+import {
+  TextareaWithBodyChip,
+  type TextareaWithBodyChipValue,
+} from "@/components/coach/steps/textarea-with-body-chip";
+import { TextareaIfThen } from "@/components/coach/steps/textarea-if-then";
+import {
+  pageCanAdvance,
+  type PageDef,
+  type StepDef,
+} from "@/lib/coach/page-flow";
+import { BODY_LOCATION_VALUES } from "@/lib/validation";
 import { safeUUID } from "@/lib/utils";
 import type { RelationshipDomain } from "@/types";
 
@@ -22,42 +33,119 @@ const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-type StepDef = {
-  key: string;
-  title: string;
-  prompt: string | null;
-  type: "person" | "select" | "textarea";
-};
-
-const STEPS_PATH_A: StepDef[] = [
-  { key: "personName", title: "Who is this with?", prompt: "Start typing to see people you've mentioned before.", type: "person" },
-  { key: "relationship", title: "What is your relationship?", prompt: null, type: "select" },
-  { key: "situation", title: "What is this conversation about?", prompt: "Describe the situation in facts only. What needs to be discussed?", type: "textarea" },
-  { key: "primaryEmotion", title: "What is the main emotion you're most likely to feel going in?", prompt: "Name 1 emotion and why.", type: "textarea" },
-  { key: "defaultPattern", title: "When you feel that way, what do you usually do that gets in the way?", prompt: "What is your likely default pattern here?", type: "textarea" },
-  { key: "otherPersonHypothesis", title: "What do you think may be going on for them — and what makes you think that?", prompt: "Your best guess about what may be happening for them, and what evidence you actually have.", type: "textarea" },
-  { key: "theirNeed", title: "What do they actually need or want from this conversation?", prompt: "The underlying need or want you think they might be expressing.", type: "textarea" },
-  { key: "realityCheckQuestion", title: "What question can you ask to test your read instead of assuming?", prompt: null, type: "textarea" },
-  { key: "howToMakeThemFeel", title: "How do you want them to feel by the end?", prompt: "What emotional state would a good outcome leave them in?", type: "textarea" },
-  { key: "triggerPlan", title: "If you get triggered, what will you do instead?", prompt: "Complete this: If I notice myself feeling ___, then I will ___.", type: "textarea" },
+// Coach SOT 2026-05-06: 5 pages, 14 fields. Path A/B split is gone —
+// Pulse Check is now its own module with own table + own free-use flag.
+const PREPARE_PAGES: PageDef[] = [
+  {
+    pageKey: "person",
+    qs: [
+      {
+        key: "personName",
+        title: "Who is this with?",
+        prompt: "Start typing to see people you've mentioned before.",
+        kind: "person",
+      },
+      {
+        key: "relationship",
+        title: "What is your relationship?",
+        prompt: null,
+        kind: "select",
+      },
+    ],
+  },
+  {
+    pageKey: "situation",
+    qs: [
+      {
+        key: "situation",
+        title: "What is this conversation about?",
+        prompt: "Describe the situation in facts only. What needs to be discussed?",
+        kind: "textarea",
+      },
+      {
+        key: "emotionAsData",
+        title: "What is your emotion telling you?",
+        prompt:
+          "The feeling you're carrying in is signal. Treat it as data, not noise — what is it pointing at?",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "their_read",
+    qs: [
+      {
+        key: "observedFromThem",
+        title: "What have you observed from them recently?",
+        prompt: "Specific behaviors — body, tone, words. Not interpretations yet.",
+        kind: "textarea",
+      },
+      {
+        key: "theirStateHedged",
+        title: "Your hedged read of their state",
+        prompt:
+          "Your best guess at where they are right now, hedged: 'They might be…'",
+        kind: "textarea",
+      },
+      {
+        key: "fairestVersion",
+        title: "The fairest version of them you can name",
+        prompt:
+          "Not the worst-case read. The most charitable take that still fits what you've observed.",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "shape",
+    qs: [
+      {
+        key: "predictedReaction",
+        title: "How do you predict they'll react?",
+        prompt: "To the way you're planning to bring this up.",
+        kind: "textarea",
+      },
+      {
+        key: "hiddenExpectation",
+        title: "What hidden expectation are you carrying in?",
+        prompt:
+          "The thing you're hoping for or assuming will happen, that you haven't said out loud — even to yourself.",
+        kind: "textarea",
+      },
+      {
+        key: "specificShift",
+        title: "What specific shift do you want?",
+        prompt: "One concrete change in them, the situation, or the relationship.",
+        kind: "textarea",
+      },
+      {
+        key: "outcomeFloor",
+        title: "What's your outcome floor?",
+        prompt:
+          "If the shift doesn't fully land, what would still be acceptable? The line below which it's a bad outcome.",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "opener",
+    qs: [
+      {
+        key: "openerWithBody",
+        title: "Your opening line — and where you feel it",
+        prompt:
+          "The first thing you're planning to say, plus where in your body you feel this conversation right now.",
+        kind: "textarea_with_body_chip",
+      },
+      {
+        key: "triggerPlan",
+        title: "If you get triggered, what will you do instead?",
+        prompt: "Complete this: If I notice myself feeling ___, then I will ___.",
+        kind: "textarea_if_then",
+      },
+    ],
+  },
 ];
-
-const STEPS_PATH_B: StepDef[] = [
-  { key: "personName", title: "Who is this about?", prompt: "Start typing to see people you've mentioned before.", type: "person" },
-  { key: "relationship", title: "What is your relationship?", prompt: null, type: "select" },
-  { key: "whatFeelsOff", title: "What feels off?", prompt: "What's bugging you or pulling at your attention — even if you can't name it yet.", type: "textarea" },
-  { key: "whatChanged", title: "What changed recently?", prompt: "What's different between now and when things felt fine? Timing, tone, something they said or did.", type: "textarea" },
-  { key: "storyTellingYourself", title: "What story are you telling yourself about it?", prompt: "What meaning are you assigning to what changed.", type: "textarea" },
-  { key: "afraidItMeans", title: "What are you afraid this means?", prompt: "Name the worst-case interpretation, even if you suspect it's wrong.", type: "textarea" },
-  // Cross-eval batch #1 (2026-05-03): the user names a falsifiable
-  // observation BEFORE the AI's best_next_move lands. A follow-up
-  // ticket will read this column to schedule a 3–7 day check-back.
-  { key: "signalNoiseObservation", title: "What would tell you this is real?", prompt: "What would you need to observe over the next 3–7 days to know this is signal, not noise? A specific behavior, message, or change.", type: "textarea" },
-  { key: "realityCheckQuestion", title: "What question could you ask to check your read instead of stewing?", prompt: null, type: "textarea" },
-  { key: "triggerPlan", title: "If you decide to talk to them and get triggered, what will you do instead?", prompt: "Complete this: If I notice myself feeling ___, then I will ___.", type: "textarea" },
-];
-
-type Path = "path_a" | "path_b";
 
 type AiNormal = {
   mode: "normal";
@@ -65,7 +153,7 @@ type AiNormal = {
   reality_check_question: string;
   thing_not_to_do: string;
   they_might_need: string;
-  best_next_move: string;
+  best_next_move: string | null;
   pattern_tag: string;
 };
 
@@ -210,9 +298,10 @@ function EmptyOutputCard({
 
 export default function PreparePage() {
   const router = useRouter();
-  const [path, setPath] = useState<Path | null>(null);
-  const [step, setStep] = useState(0);
-  const [data, setData] = useState<Record<string, string>>({});
+  const [pageIndex, setPageIndex] = useState(0);
+  // State is keyed by SOT field name where flat, by step.key where the
+  // step bundles fields (openerWithBody → { text, bodyLocation }).
+  const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -224,53 +313,66 @@ export default function PreparePage() {
     idempotencyKeyRef.current = safeUUID();
   }
 
-  // Default to Path A when path is null (pre-entry-choice). Early returns
-  // gate render before STEPS is read today, so no bug fires either way,
-  // but Path A is the happier default if the render path ever moves.
-  const STEPS = path === "path_b" ? STEPS_PATH_B : STEPS_PATH_A;
-  const currentStep = path ? STEPS[step] : null;
-  const value = currentStep ? data[currentStep.key] || "" : "";
+  const totalPages = PREPARE_PAGES.length;
+  const currentPage = PREPARE_PAGES[pageIndex];
 
-  function setFieldValue(key: string, next: string) {
+  function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
   }
 
+  function canAdvance(): boolean {
+    return pageCanAdvance(currentPage, data);
+  }
+
   function handleNext() {
-    if (!currentStep) return;
-    if (!value.trim()) return;
-    if (step < STEPS.length - 1) {
-      let next = step + 1;
-      // Skip the relationship step when it was auto-filled from an
-      // existing person — the user already confirmed it on personName.
-      if (
-        STEPS[next]?.key === "relationship" &&
-        personId &&
-        data.relationship
-      ) {
-        next = Math.min(next + 1, STEPS.length - 1);
-      }
-      setStep(next);
+    if (!canAdvance()) return;
+    if (pageIndex < totalPages - 1) {
+      setPageIndex(pageIndex + 1);
     } else {
       handleSubmit();
     }
   }
 
+  function handleBack() {
+    if (pageIndex > 0) setPageIndex(pageIndex - 1);
+  }
+
   async function handleSubmit() {
-    if (!path) return;
     if (submitRef.current) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     try {
+      // Flatten openerWithBody back into top-level opener + bodyLocation
+      // to match the createPrepareSchema shape.
+      const opener =
+        (data.openerWithBody as TextareaWithBodyChipValue | undefined)?.text ??
+        "";
+      const bodyLocation =
+        (data.openerWithBody as TextareaWithBodyChipValue | undefined)
+          ?.bodyLocation ?? "";
+      const body = {
+        personName: data.personName,
+        relationship: data.relationship,
+        situation: data.situation,
+        emotionAsData: data.emotionAsData,
+        observedFromThem: data.observedFromThem,
+        theirStateHedged: data.theirStateHedged,
+        fairestVersion: data.fairestVersion,
+        predictedReaction: data.predictedReaction,
+        hiddenExpectation: data.hiddenExpectation,
+        specificShift: data.specificShift,
+        outcomeFloor: data.outcomeFloor,
+        opener,
+        bodyLocation,
+        triggerPlan: data.triggerPlan,
+        personId: personId || null,
+        idempotencyKey: idempotencyKeyRef.current,
+      };
       const res = await fetch("/api/coach/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          path,
-          ...data,
-          personId: personId || null,
-          idempotencyKey: idempotencyKeyRef.current,
-        }),
+        body: JSON.stringify(body),
       });
       if (res.status === 403) {
         router.push("/paywall");
@@ -353,169 +455,113 @@ export default function PreparePage() {
     );
   }
 
-  // --- Step 0: entry-choice screen ---
-  if (!path) {
-    return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <PrepareBackground />
-        <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
-          Prepare
-        </span>
-        <h2
-          className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
-        >
-          Where are <span className="italic">you</span>?
-        </h2>
-        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          Pick the one that fits. You can change your mind later.
-        </p>
-
-        <button
-          onClick={() => {
-            setPath("path_a");
-            setStep(0);
+  // --- Form: page-level renderer ---
+  function renderStep(step: StepDef) {
+    if (step.kind === "person") {
+      return (
+        <PersonPicker
+          value={(data.personName as string | undefined) ?? ""}
+          onChange={(next) => setFieldValue("personName", next)}
+          onPersonSelect={(id, relationship) => {
+            setPersonId(id);
+            if (id && relationship) {
+              setFieldValue("relationship", relationship);
+            }
           }}
-          className="mt-6 block w-full rounded-card bg-surface p-5 text-left shadow-card transition active:scale-[0.99]"
-        >
-          <div
-            className="font-display text-[22px] leading-[1.15] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            I need to have a <span className="italic">conversation</span>.
-          </div>
-          <p className="mt-1.5 text-[13px] font-medium leading-[1.45] text-ink-soft">
-            Something's coming up and you want to land it well.
-          </p>
-        </button>
-
-        <button
-          onClick={() => {
-            setPath("path_b");
-            setStep(0);
-          }}
-          className="mt-3 block w-full rounded-card bg-surface p-5 text-left shadow-card transition active:scale-[0.99]"
-        >
-          <div
-            className="font-display text-[22px] leading-[1.15] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            Something <span className="italic">feels off</span>.
-          </div>
-          <p className="mt-1.5 text-[13px] font-medium leading-[1.45] text-ink-soft">
-            You can't fully name it, but something's pulling at you.
-          </p>
-        </button>
-      </div>
-    );
+          selectedPersonId={personId}
+        />
+      );
+    }
+    if (step.kind === "select") {
+      // The relationship select. Auto-skipped when the person picker
+      // already populated relationship — see currentPage.qs[1].conditional
+      // below in PageDef build... actually we use PersonPicker auto-fill;
+      // when a person is chosen, relationship is set inline. The user can
+      // still see/change it on the form. No conditional hide here.
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <div className="space-y-2">
+          {RELATIONSHIPS.map((rel) => (
+            <button
+              key={rel.value}
+              type="button"
+              onClick={() => setFieldValue(step.key, rel.value)}
+              className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
+                value === rel.value
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              {rel.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (step.kind === "textarea") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <VoiceInput
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          rows={4}
+          placeholder="Type or tap the mic to speak..."
+        />
+      );
+    }
+    if (step.kind === "textarea_if_then") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <TextareaIfThen
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+        />
+      );
+    }
+    if (step.kind === "textarea_with_body_chip") {
+      const value = data[step.key] as TextareaWithBodyChipValue | undefined;
+      return (
+        <TextareaWithBodyChip
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          chipValues={BODY_LOCATION_VALUES}
+        />
+      );
+    }
+    return null;
   }
 
-  if (!currentStep) return null;
-
-  // --- Step 1..N: form ---
   return (
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
-
-      <div className="flex items-center justify-between">
-        <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
-          Prepare
-        </span>
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          {step + 1} / {STEPS.length}
-        </p>
-      </div>
-      <div className="mt-3">
-        <StepDots current={step} total={STEPS.length} />
-      </div>
-
-      <h2
-        className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
-        style={{ letterSpacing: "-0.5px" }}
-      >
-        {currentStep.title}
-      </h2>
-      {currentStep.prompt && (
-        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          {currentStep.prompt}
-        </p>
-      )}
-
-      <div className="mt-5">
-        {currentStep.type === "person" ? (
-          <PersonPicker
-            key={currentStep.key}
-            value={value}
-            onChange={(next) => setFieldValue(currentStep.key, next)}
-            onPersonSelect={(id, relationship) => {
-              setPersonId(id);
-              if (id && relationship) {
-                setFieldValue("relationship", relationship);
-              }
-            }}
-            selectedPersonId={personId}
-          />
-        ) : currentStep.type === "select" ? (
-          <div className="space-y-2">
-            {RELATIONSHIPS.map((rel) => (
-              <button
-                key={rel.value}
-                onClick={() => {
-                  setFieldValue(currentStep.key, rel.value);
-                  setStep(step + 1);
-                }}
-                className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
-                  value === rel.value
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {rel.label}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <VoiceInput
-            key={currentStep.key}
-            value={value}
-            onChange={(next) => setFieldValue(currentStep.key, next)}
-            rows={4}
-            placeholder="Type or tap the mic to speak..."
-          />
-        )}
-      </div>
+      <CoachPage
+        eyebrow="Prepare"
+        pageIndex={pageIndex}
+        totalPages={totalPages}
+        page={currentPage}
+        state={data}
+        renderStep={renderStep}
+        pageTitle={null}
+      />
       {submitError && (
         <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
       )}
-
       <div className="mt-6 flex gap-3">
-        {step > 0 && (
+        {pageIndex > 0 && (
           <button
-            onClick={() => {
-              let prev = step - 1;
-              if (
-                STEPS[prev]?.key === "relationship" &&
-                personId &&
-                data.relationship
-              ) {
-                prev = Math.max(prev - 1, 0);
-              }
-              setStep(prev);
-            }}
+            onClick={handleBack}
             className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
           >
             Back
           </button>
         )}
-        {currentStep.type !== "select" && (
-          <button
-            onClick={handleNext}
-            disabled={!value.trim()}
-            className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-          >
-            {step === STEPS.length - 1 ? "Get Feedback" : "Next"}
-          </button>
-        )}
+        <button
+          onClick={handleNext}
+          disabled={!canAdvance()}
+          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+        >
+          {pageIndex === totalPages - 1 ? "Get Feedback" : "Next"}
+        </button>
       </div>
     </div>
   );

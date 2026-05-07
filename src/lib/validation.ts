@@ -36,59 +36,132 @@ export const submitQuizSchema = z
   );
 
 // ============================================================
-// Coach — Prepare (Coach redesign 2026-04-23: 2 entry paths)
+// Coach SOT 2026-05-06 — shared enum tuples.
 // ============================================================
-// Path A — "I need to have a conversation" (9 user-fillable fields).
-// Path B — "Something feels off" (7 user-fillable fields).
-// Both paths share person picker + relationship + idempotencyKey + thread.
-// Discriminated by `path` field; routes pick a config per path.
+// Tuples exported as const so step components, prompts, schemas, and
+// (eventually) Insights aggregator all derive from one source. Adding a
+// new value here propagates to all consumers; drift fails the build.
+// Defined ABOVE the schemas that consume them so the file reads top-to-
+// bottom without forward references.
 
 const RELATIONSHIP_ENUM = z.enum([
   "partner", "friend", "family", "manager",
   "direct_report", "coworker", "client", "other",
 ]);
 
-export const prepareSchemaPathA = z.object({
-  path: z.literal("path_a"),
+/**
+ * Body location values for Prepare + Review (8 chips).
+ * Pulse Check uses BODY_LOCATION_PULSE_VALUES (this set + `fuzzy_cant_tell`).
+ * The fuzzy chip is intentionally NOT available outside Pulse Check —
+ * Insights aggregator never sees `fuzzy_cant_tell` from non-pulse rows.
+ */
+export const BODY_LOCATION_VALUES = [
+  "throat",
+  "chest",
+  "stomach",
+  "jaw",
+  "shoulders",
+  "face",
+  "other",
+  "dont_notice",
+] as const;
+
+/**
+ * Pulse Check body locations (8 base + fuzzy_cant_tell).
+ * `fuzzy_cant_tell` is the "I can't quite tell where it is" escape hatch
+ * specific to the Pulse Check use case (early-detection, often pre-verbal).
+ */
+export const BODY_LOCATION_PULSE_VALUES = [
+  ...BODY_LOCATION_VALUES,
+  "fuzzy_cant_tell",
+] as const;
+
+/**
+ * Pulse Check next-move chip (7 values). Determines the result-screen
+ * routing matrix: wait_observe → close, regulate_first → /tools/overwhelmed,
+ * ask_clarifying → BYS, prepare_conversation → /coach/prepare,
+ * use_bys → /coach/before-send, review → /coach/review, do_nothing → close.
+ */
+export const PULSE_NEXT_MOVE_VALUES = [
+  "wait_observe",
+  "regulate_first",
+  "ask_clarifying",
+  "prepare_conversation",
+  "use_bys",
+  "review",
+  "do_nothing",
+] as const;
+
+/**
+ * Review "what was I protecting?" chip (9 values). Optional one-line
+ * companion text in `whatProtectingText`.
+ */
+export const WHAT_PROTECTING_VALUES = [
+  "status",
+  "safety",
+  "image",
+  "relationship",
+  "time",
+  "boundaries",
+  "being_right",
+  "not_feeling_stupid",
+  "other",
+] as const;
+
+/**
+ * Review Repair "what they need first" chip (5 values). Drives both the
+ * Repair branch field and the AI's `recommended_timing` derivation.
+ */
+export const THEIR_NEED_FIRST_VALUES = [
+  "acknowledgment",
+  "clarity",
+  "safety",
+  "space",
+  "boundary",
+] as const;
+
+// ============================================================
+// Coach — Prepare (Coach SOT 2026-05-06)
+// ============================================================
+// Single flat 14-field schema. Replaces the 2026-04-23 Path A/B split:
+// the locked SOT cross-eval batch determined that Pulse Check ("something
+// feels off") deserves its own module + table; Prepare is now exclusively
+// "I need to have a conversation". The 14 SOT fields land across 5 pages:
+//   1. personName, relationship                    (2)
+//   2. situation, emotionAsData                    (2)
+//   3. observedFromThem, theirStateHedged,
+//      fairestVersion                              (3 — three-field lesson UI)
+//   4. predictedReaction, hiddenExpectation,
+//      specificShift, outcomeFloor                 (4)
+//   5. opener + bodyLocation, triggerPlan          (2 fields, 2 step rows)
+//
+// Old fields (situation_text/primary_value/their_need/etc.) stay nullable
+// in the DB for /history reads on legacy rows; new posts do not send them.
+
+export const createPrepareSchema = z.object({
+  // Page 1 — person + relationship
   personName: z.string().trim().min(1).max(200),
   relationship: RELATIONSHIP_ENUM,
+  // Page 2 — situation + emotion-as-data
   situation: z.string().min(1).max(5000),
-  primaryEmotion: z.string().min(1).max(1000),
-  defaultPattern: z.string().min(1).max(5000),
-  otherPersonHypothesis: z.string().min(1).max(5000),
-  theirNeed: z.string().min(1).max(5000),
-  realityCheckQuestion: z.string().min(1).max(5000),
-  howToMakeThemFeel: z.string().min(1).max(5000),
-  triggerPlan: z.string().min(1).max(5000),
+  emotionAsData: z.string().min(1).max(2000),
+  // Page 3 — observed/state-hedged/fairest (three-field lesson)
+  observedFromThem: z.string().min(1).max(2000),
+  theirStateHedged: z.string().min(1).max(2000),
+  fairestVersion: z.string().min(1).max(2000),
+  // Page 4 — predicted reaction + hidden expectation + specific shift + outcome floor
+  predictedReaction: z.string().min(1).max(2000),
+  hiddenExpectation: z.string().min(1).max(2000),
+  specificShift: z.string().min(1).max(2000),
+  outcomeFloor: z.string().min(1).max(2000),
+  // Page 5 — opener + body location, then trigger plan
+  opener: z.string().min(1).max(1000),
+  bodyLocation: z.enum(BODY_LOCATION_VALUES),
+  triggerPlan: z.string().min(1).max(2000),
+  // Person/thread + idempotency. idempotencyKey is injected by route layer.
   personId: z.string().uuid().nullable().optional(),
   threadId: z.string().uuid().nullable().optional(),
 });
-
-export const prepareSchemaPathB = z.object({
-  path: z.literal("path_b"),
-  personName: z.string().trim().min(1).max(200),
-  relationship: RELATIONSHIP_ENUM,
-  whatFeelsOff: z.string().min(1).max(5000),
-  whatChanged: z.string().min(1).max(5000),
-  storyTellingYourself: z.string().min(1).max(5000),
-  afraidItMeans: z.string().min(1).max(5000),
-  // Cross-eval batch #1 (2026-05-03): the 3–7 day signal/noise observation
-  // sits between afraidItMeans and realityCheckQuestion. The user names
-  // their own falsifiable observation before the AI's best_next_move
-  // lands, so a follow-up review can distinguish signal from rumination.
-  // Tighter cap (1000) because a falsifiable observation should be
-  // specific, not an essay.
-  signalNoiseObservation: z.string().min(1).max(1000),
-  realityCheckQuestion: z.string().min(1).max(5000),
-  triggerPlan: z.string().min(1).max(5000),
-  personId: z.string().uuid().nullable().optional(),
-  threadId: z.string().uuid().nullable().optional(),
-});
-
-export const createPrepareSchema = z.discriminatedUnion("path", [
-  prepareSchemaPathA,
-  prepareSchemaPathB,
-]);
 
 // ============================================================
 // Coach — Review (Coach redesign 2026-04-23: new fields + repair branch)
@@ -171,84 +244,6 @@ export const createBeforeYouSendSchema = z.object({
   // BYS has no person/thread concept; runCoachModule's personBehavior:"skip"
   // + threadBehavior:"none" config skips those resolution steps.
 });
-
-// ============================================================
-// Coach SOT 2026-05-06 — enum tuples + Pulse Check schema.
-// ============================================================
-// Tuples exported as const so step components, prompts, schemas, and
-// (eventually) Insights aggregator all derive from one source. Adding a
-// new value here propagates to all consumers; drift fails the build.
-
-/**
- * Body location values for Prepare + Review (8 chips).
- * Pulse Check uses BODY_LOCATION_PULSE_VALUES (this set + `fuzzy_cant_tell`).
- * The fuzzy chip is intentionally NOT available outside Pulse Check —
- * Insights aggregator never sees `fuzzy_cant_tell` from non-pulse rows.
- */
-export const BODY_LOCATION_VALUES = [
-  "throat",
-  "chest",
-  "stomach",
-  "jaw",
-  "shoulders",
-  "face",
-  "other",
-  "dont_notice",
-] as const;
-
-/**
- * Pulse Check body locations (8 base + fuzzy_cant_tell).
- * `fuzzy_cant_tell` is the "I can't quite tell where it is" escape hatch
- * specific to the Pulse Check use case (early-detection, often pre-verbal).
- */
-export const BODY_LOCATION_PULSE_VALUES = [
-  ...BODY_LOCATION_VALUES,
-  "fuzzy_cant_tell",
-] as const;
-
-/**
- * Pulse Check next-move chip (7 values). Determines the result-screen
- * routing matrix: wait_observe → close, regulate_first → /tools/overwhelmed,
- * ask_clarifying → BYS, prepare_conversation → /coach/prepare,
- * use_bys → /coach/before-send, review → /coach/review, do_nothing → close.
- */
-export const PULSE_NEXT_MOVE_VALUES = [
-  "wait_observe",
-  "regulate_first",
-  "ask_clarifying",
-  "prepare_conversation",
-  "use_bys",
-  "review",
-  "do_nothing",
-] as const;
-
-/**
- * Review "what was I protecting?" chip (9 values). Optional one-line
- * companion text in `whatProtectingText`.
- */
-export const WHAT_PROTECTING_VALUES = [
-  "status",
-  "safety",
-  "image",
-  "relationship",
-  "time",
-  "boundaries",
-  "being_right",
-  "not_feeling_stupid",
-  "other",
-] as const;
-
-/**
- * Review Repair "what they need first" chip (5 values). Drives both the
- * Repair branch field and the AI's `recommended_timing` derivation.
- */
-export const THEIR_NEED_FIRST_VALUES = [
-  "acknowledgment",
-  "clarity",
-  "safety",
-  "space",
-  "boundary",
-] as const;
 
 /**
  * Pulse Check Zod schema. Mirrors the createReviewSchema shape

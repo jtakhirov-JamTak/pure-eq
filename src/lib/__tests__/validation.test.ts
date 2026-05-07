@@ -1,10 +1,9 @@
 import { describe, it, expect } from "vitest";
 import {
   createBeforeYouSendSchema,
+  createPrepareSchema,
   createPulseCheckSchema,
   createReviewSchema,
-  prepareSchemaPathA,
-  prepareSchemaPathB,
 } from "@/lib/validation";
 
 // ============================================================
@@ -79,66 +78,97 @@ describe("createReviewSchema — observedRaw / interpretedRaw", () => {
 });
 
 // ============================================================
-// Prepare Path B — signalNoiseObservation
-// (cross-eval batch #1, 2026-05-03)
+// Prepare — single 14-field SOT schema (Coach SOT 2026-05-06)
 // ============================================================
-const validPathBBase = {
-  path: "path_b" as const,
+const validPrepareBase = {
   personName: "Alex",
   relationship: "partner" as const,
-  whatFeelsOff: "We've been distant for the past week.",
-  whatChanged: "They stopped initiating texts during the day.",
-  storyTellingYourself: "I'm telling myself they're losing interest.",
-  afraidItMeans: "I'm afraid this means they're checking out.",
-  signalNoiseObservation:
-    "If they don't initiate a substantive conversation in 5 days, that's signal.",
-  realityCheckQuestion: "Has anything else changed for them recently?",
-  triggerPlan: "If I notice myself spiraling, I will go for a walk first.",
+  situation: "Need to talk about how chores are getting split.",
+  emotionAsData: "Resentment — pointing at unfairness over the last month.",
+  observedFromThem:
+    "They sigh when I bring it up and change the subject within a minute.",
+  theirStateHedged:
+    "They might be already running on empty and reading my raises as criticism.",
+  fairestVersion:
+    "They've been picking up extra at work and aren't dodging on purpose.",
+  predictedReaction:
+    "If I open with stats, they'll go quiet and we'll loop back into the same fight.",
+  hiddenExpectation:
+    "I'm hoping they'll volunteer to take over the dishes without me asking.",
+  specificShift:
+    "A standing rotation we both put on the calendar for two specific tasks.",
+  outcomeFloor:
+    "If we don't agree on a rotation tonight, at least name that this keeps coming back.",
+  opener: "Hey, can we talk about how we split things up at home?",
+  bodyLocation: "chest" as const,
+  triggerPlan: "If I feel chest-tightening, I'll pause and ask one question.",
 };
 
-describe("prepareSchemaPathB — signalNoiseObservation", () => {
-  it("accepts a Path B payload with the field populated", () => {
-    const result = prepareSchemaPathB.safeParse(validPathBBase);
+describe("createPrepareSchema — SOT shape", () => {
+  it("accepts a fully-populated SOT payload", () => {
+    const result = createPrepareSchema.safeParse(validPrepareBase);
     expect(result.success).toBe(true);
   });
 
-  it("rejects an empty signalNoiseObservation", () => {
-    const result = prepareSchemaPathB.safeParse({
-      ...validPathBBase,
-      signalNoiseObservation: "",
+  it("rejects an empty emotionAsData", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      emotionAsData: "",
     });
     expect(result.success).toBe(false);
   });
 
-  it("rejects a missing signalNoiseObservation", () => {
-    const { signalNoiseObservation: _, ...rest } = validPathBBase;
-    void _;
-    const result = prepareSchemaPathB.safeParse(rest);
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects signalNoiseObservation over 1000 chars", () => {
-    const result = prepareSchemaPathB.safeParse({
-      ...validPathBBase,
-      signalNoiseObservation: "a".repeat(1001),
+  it("rejects an empty opener", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      opener: "",
     });
     expect(result.success).toBe(false);
   });
 
-  it("Path A schema does not require signalNoiseObservation", () => {
-    const result = prepareSchemaPathA.safeParse({
-      path: "path_a",
-      personName: "Alex",
-      relationship: "partner",
-      situation: "Quarterly review conversation.",
-      primaryEmotion: "Anxious about how this will land.",
-      defaultPattern: "I tend to over-explain when I'm anxious.",
-      otherPersonHypothesis: "They might be defensive about the numbers.",
-      theirNeed: "They want to feel competent.",
-      realityCheckQuestion: "What outcome would feel like a win for them?",
-      howToMakeThemFeel: "Respected and supported.",
-      triggerPlan: "If I get triggered, I'll pause and breathe.",
+  it("rejects an unknown bodyLocation chip", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      bodyLocation: "fuzzy_cant_tell",
     });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts every BODY_LOCATION chip (8 values)", () => {
+    const chips = [
+      "throat",
+      "chest",
+      "stomach",
+      "jaw",
+      "shoulders",
+      "face",
+      "other",
+      "dont_notice",
+    ] as const;
+    for (const chip of chips) {
+      const result = createPrepareSchema.safeParse({
+        ...validPrepareBase,
+        bodyLocation: chip,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("rejects opener over 1000 chars", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      opener: "a".repeat(1001),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("does NOT accept legacy Path A primaryEmotion field as required", () => {
+    // Legacy Path A had primaryEmotion + defaultPattern + theirNeed +
+    // howToMakeThemFeel + otherPersonHypothesis. New schema doesn't list
+    // them — passing them shouldn't error (Zod object passthrough), but
+    // omitting them should NOT fail.
+    const { ...minus } = validPrepareBase;
+    const result = createPrepareSchema.safeParse(minus);
     expect(result.success).toBe(true);
   });
 });

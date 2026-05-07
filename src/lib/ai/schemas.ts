@@ -63,6 +63,32 @@ export const prepareOutputSchema = z.discriminatedUnion("mode", [
 ]);
 
 // ============================================================
+// Pulse Check — discriminated union (Coach SOT 2026-05-06)
+// ============================================================
+// Pulse Check is a distinct module from Prepare with its own table and
+// its own AI output column (pulse_check_entries.ai_output_json,
+// ai_output_version). The 5-card output shape mirrors Prepare's today, but
+// the schema is defined separately so the two modules can evolve their
+// outputs independently — Prepare may grow opener-specific fields (e.g.,
+// opener_revision); Pulse Check may grow observation-window fields. Same
+// .max(300) caps and .min(1).trim() whitespace gates.
+
+const pulseCheckNormalShape = z.object({
+  mode: z.literal("normal"),
+  real_issue: z.string().trim().min(1).max(300),
+  reality_check_question: z.string().trim().min(1).max(300),
+  thing_not_to_do: z.string().trim().min(1).max(300),
+  they_might_need: z.string().trim().min(1).max(300),
+  best_next_move: z.string().trim().min(1).max(120).nullable(),
+  pattern_tag: z.enum(OBSERVATION_TAGS),
+});
+
+export const pulseCheckOutputSchema = z.discriminatedUnion("mode", [
+  pulseCheckNormalShape,
+  refusalShape,
+]);
+
+// ============================================================
 // Review — discriminated union with optional repair-branch fields
 // ============================================================
 // Review's output shape is conditional. Always shows 4 base cards
