@@ -196,34 +196,58 @@ export const BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES = [
   "other",
 ] as const;
 
+// Coach SOT 2026-05-06: Review now splits Quick (~2 min, 4 Qs, no repair)
+// vs Full (~5 min, branches into calibration vs standalone on page 5,
+// optional Repair sub-flow). Both depths share the same baseline first-page
+// fields. Repair-branch field swap (impactToName, theirNeedFirst, etc.)
+// lands in Commit 6; for now repair fields stay optional + nullable so
+// new posts can ship without them and historical reads still parse.
 export const createReviewSchema = z.object({
-  // Base fields (always required by the new form).
+  // Depth discriminator. Quick = 2 pages, no repair branch. Full = up to
+  // 5 pages with conditional repair branch.
+  reviewDepth: z.enum(["quick", "full"]).default("full"),
+  // Base fields (always required by both depths).
   whatHappened: z.string().min(1).max(5000),
   // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
-  // The form-factor itself trains the split — left column is facts, right
-  // column is meaning-making. 2000 cap (vs 5000 elsewhere) is deliberate
-  // for the compact two-column UX.
   observedRaw: z.string().min(1).max(2000),
   interpretedRaw: z.string().min(1).max(2000),
   hardestMomentFeeling: z.string().min(1).max(5000),
-  whatYouDid: z.string().min(1).max(5000),
-  observedInThem: z.string().min(1).max(5000),
-  theirExperience: z.string().min(1).max(5000),
-  whatYouAvoided: z.string().min(1).max(5000),
-  askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]),
-  needsToHappenNext: z.enum(REVIEW_NEEDS_NEXT_VALUES),
-  // Repair-branch fields (optional — populated only on repair flow).
+  // Full-only fields (optional on Quick — page never collects them, post
+  // either omits or sends an empty string which Zod rejects, so consumers
+  // must omit on Quick).
+  whatYouDid: z.string().min(1).max(5000).optional(),
+  observedInThem: z.string().min(1).max(5000).optional(),
+  theirExperience: z.string().min(1).max(5000).optional(),
+  whatYouAvoided: z.string().min(1).max(5000).optional(),
+  askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]).optional(),
+  needsToHappenNext: z.enum(REVIEW_NEEDS_NEXT_VALUES).optional(),
+  // Page-5 calibration block: populated when linkedPrepareEntryId exists.
+  linkedPrepareEntryId: z.string().uuid().nullable().optional(),
+  calibrationBlock: z
+    .object({
+      compare: z.string().min(1).max(40),
+      shift: z.string().min(1).max(40),
+      floor: z.string().min(1).max(40),
+    })
+    .nullable()
+    .optional(),
+  // Page-5 standalone branch: populated when no linked Prepare. Mutually
+  // exclusive with calibrationBlock — page renders one or the other.
+  whatProtecting: z
+    .object({
+      chip: z.enum(WHAT_PROTECTING_VALUES),
+      text: z.string().max(500).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  whatYouLearned: z.string().max(2000).nullable().optional(),
+  // Repair-branch fields. Old yourPart kept for back-compat; Commit 6 adds
+  // impactToName / theirNeedFirst / pressureVsCare / timing /
+  // firstRepairSentence as the new SOT shape.
   repairBranchActive: z.boolean().default(false),
   yourPart: z.string().min(1).max(5000).nullable().optional(),
-  // Deprecated 2026-05-03 per cross-eval batch #1; field retained for
-  // historical reads only. New form does not collect; new posts send null.
-  // Both Qs trained projection of the other person's emotional state
-  // rather than honest repair — highest backfire risk for anxious /
-  // defensive / Tier 2 user-classes. SOT replacements (pressure-vs-care,
-  // distress-tolerance) are a separate ticket.
+  // Deprecated 2026-05-03 per cross-eval batch #1.
   secretWant: z.string().min(1).max(5000).nullable().optional(),
-  // Deprecated 2026-05-03 per cross-eval batch #1; field retained for
-  // historical reads only. New form does not collect; new posts send null.
   couldMakeThemFeel: z.string().min(1).max(5000).nullable().optional(),
   // Person/thread.
   personId: z.string().uuid().nullable().optional(),
