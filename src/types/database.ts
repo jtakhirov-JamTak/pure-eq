@@ -29,6 +29,7 @@ export type Database = {
           outcome_json: Json | null
           person_id: string | null
           raw_record_id: string | null
+          risk_context: string | null
           thread_id: string | null
           user_id: string
         }
@@ -46,6 +47,7 @@ export type Database = {
           outcome_json?: Json | null
           person_id?: string | null
           raw_record_id?: string | null
+          risk_context?: string | null
           thread_id?: string | null
           user_id: string
         }
@@ -63,6 +65,7 @@ export type Database = {
           outcome_json?: Json | null
           person_id?: string | null
           raw_record_id?: string | null
+          risk_context?: string | null
           thread_id?: string | null
           user_id?: string
         }
@@ -373,26 +376,36 @@ export type Database = {
           ai_plan_json: Json | null
           ai_plan_version: number | null
           ambiguity_flag: boolean
+          body_location: string | null
           completed_at: string | null
           created_at: string
           deleted_at: string | null
           desired_outcome: string | null
+          emotion_as_data: string | null
+          fairest_version: string | null
+          hidden_expectation: string | null
           how_to_make_them_feel: string | null
           is_complete: boolean
           needs_user_confirmation: boolean
+          observed_from_them: string | null
+          opener: string | null
+          outcome_floor: string | null
           parse_confidence: number | null
           parsed_candidates: Json | null
           parser_version: number
           path: string | null
           pattern_tag: string | null
           person_id: string | null
+          predicted_reaction: string | null
           prepare_entry_id: string
           primary_value: string | null
           raw_record_id: string | null
           signal_noise_observation: string | null
           situation_text: string | null
+          specific_shift: string | null
           story_telling_yourself: string | null
           their_need: string | null
+          their_state_hedged: string | null
           thread_id: string | null
           user_id: string
           what_changed: string | null
@@ -403,26 +416,36 @@ export type Database = {
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
           ambiguity_flag?: boolean
+          body_location?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           desired_outcome?: string | null
+          emotion_as_data?: string | null
+          fairest_version?: string | null
+          hidden_expectation?: string | null
           how_to_make_them_feel?: string | null
           is_complete?: boolean
           needs_user_confirmation?: boolean
+          observed_from_them?: string | null
+          opener?: string | null
+          outcome_floor?: string | null
           parse_confidence?: number | null
           parsed_candidates?: Json | null
           parser_version?: number
           path?: string | null
           pattern_tag?: string | null
           person_id?: string | null
+          predicted_reaction?: string | null
           prepare_entry_id?: string
           primary_value?: string | null
           raw_record_id?: string | null
           signal_noise_observation?: string | null
           situation_text?: string | null
+          specific_shift?: string | null
           story_telling_yourself?: string | null
           their_need?: string | null
+          their_state_hedged?: string | null
           thread_id?: string | null
           user_id: string
           what_changed?: string | null
@@ -433,26 +456,36 @@ export type Database = {
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
           ambiguity_flag?: boolean
+          body_location?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           desired_outcome?: string | null
+          emotion_as_data?: string | null
+          fairest_version?: string | null
+          hidden_expectation?: string | null
           how_to_make_them_feel?: string | null
           is_complete?: boolean
           needs_user_confirmation?: boolean
+          observed_from_them?: string | null
+          opener?: string | null
+          outcome_floor?: string | null
           parse_confidence?: number | null
           parsed_candidates?: Json | null
           parser_version?: number
           path?: string | null
           pattern_tag?: string | null
           person_id?: string | null
+          predicted_reaction?: string | null
           prepare_entry_id?: string
           primary_value?: string | null
           raw_record_id?: string | null
           signal_noise_observation?: string | null
           situation_text?: string | null
+          specific_shift?: string | null
           story_telling_yourself?: string | null
           their_need?: string | null
+          their_state_hedged?: string | null
           thread_id?: string | null
           user_id?: string
           what_changed?: string | null
@@ -475,6 +508,106 @@ export type Database = {
           },
           {
             foreignKeyName: "prepare_entries_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "conversation_threads"
+            referencedColumns: ["thread_id"]
+          },
+        ]
+      }
+      pulse_check_entries: {
+        Row: {
+          ai_output_json: Json | null
+          ai_output_version: number | null
+          alternative: string | null
+          body_location: string | null
+          completed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          feeling_text: string | null
+          is_complete: boolean
+          light_check_question: string | null
+          next_move_chip: string | null
+          outcome_json: Json | null
+          person_id: string | null
+          pulse_check_entry_id: string
+          raw_record_id: string
+          signal_noise_observation: string | null
+          story: string | null
+          theirs_not_about_you: string | null
+          thread_id: string | null
+          user_id: string
+          what_changed_and_before: string | null
+          what_feels_off: string | null
+          when_it_shifted: string | null
+        }
+        Insert: {
+          ai_output_json?: Json | null
+          ai_output_version?: number | null
+          alternative?: string | null
+          body_location?: string | null
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          feeling_text?: string | null
+          is_complete?: boolean
+          light_check_question?: string | null
+          next_move_chip?: string | null
+          outcome_json?: Json | null
+          person_id?: string | null
+          pulse_check_entry_id?: string
+          raw_record_id: string
+          signal_noise_observation?: string | null
+          story?: string | null
+          theirs_not_about_you?: string | null
+          thread_id?: string | null
+          user_id: string
+          what_changed_and_before?: string | null
+          what_feels_off?: string | null
+          when_it_shifted?: string | null
+        }
+        Update: {
+          ai_output_json?: Json | null
+          ai_output_version?: number | null
+          alternative?: string | null
+          body_location?: string | null
+          completed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          feeling_text?: string | null
+          is_complete?: boolean
+          light_check_question?: string | null
+          next_move_chip?: string | null
+          outcome_json?: Json | null
+          person_id?: string | null
+          pulse_check_entry_id?: string
+          raw_record_id?: string
+          signal_noise_observation?: string | null
+          story?: string | null
+          theirs_not_about_you?: string | null
+          thread_id?: string | null
+          user_id?: string
+          what_changed_and_before?: string | null
+          what_feels_off?: string | null
+          when_it_shifted?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pulse_check_entries_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["person_id"]
+          },
+          {
+            foreignKeyName: "pulse_check_entries_raw_record_id_fkey"
+            columns: ["raw_record_id"]
+            isOneToOne: false
+            referencedRelation: "raw_records"
+            referencedColumns: ["raw_record_id"]
+          },
+          {
+            foreignKeyName: "pulse_check_entries_thread_id_fkey"
             columns: ["thread_id"]
             isOneToOne: false
             referencedRelation: "conversation_threads"
@@ -673,31 +806,55 @@ export type Database = {
           ai_reflection_json: Json | null
           ai_reflection_version: number | null
           ask_before_understanding: string | null
+          body_location: string | null
+          calibration_block: Json | null
           completed_at: string | null
           could_make_them_feel: string | null
           created_at: string
           deleted_at: string | null
+          easier_or_harder: string | null
+          feeling_tracking: string | null
+          first_repair_sentence: string | null
+          forecast: string | null
           hardest_moment_feeling: string | null
+          impact_to_name: string | null
           interpreted_raw: string | null
           is_complete: boolean
+          lesson_about_self: string | null
+          lesson_about_them: string | null
+          lesson_differently: string | null
+          linked_prepare_entry_id: string | null
           needs_to_happen_next: string | null
           observed_in_them: string | null
           observed_raw: string | null
           outcome_json: Json | null
           pattern_tag: string | null
           person_id: string | null
+          pressure_vs_care: string | null
           raw_record_id: string | null
           repair_branch_active: boolean
+          review_depth: string | null
           review_entry_id: string
           secret_want: string | null
+          signs_how_they_left: string | null
+          something_that_helped: string | null
           their_experience: string | null
+          their_need_first: string | null
           thread_id: string | null
+          timing_now: boolean | null
+          timing_when: string | null
+          treat_as_data: string | null
+          turning_point: string | null
           unresolved_and_next: string | null
           user_id: string
           validated_assumptions: string | null
+          what_else_explains: string | null
           what_happened: string | null
           what_helped: string | null
           what_hurt: string | null
+          what_protecting: string | null
+          what_protecting_text: string | null
+          what_read_missed: string | null
           what_you_avoided: string | null
           what_you_did: string | null
           your_part: string | null
@@ -706,31 +863,55 @@ export type Database = {
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
           ask_before_understanding?: string | null
+          body_location?: string | null
+          calibration_block?: Json | null
           completed_at?: string | null
           could_make_them_feel?: string | null
           created_at?: string
           deleted_at?: string | null
+          easier_or_harder?: string | null
+          feeling_tracking?: string | null
+          first_repair_sentence?: string | null
+          forecast?: string | null
           hardest_moment_feeling?: string | null
+          impact_to_name?: string | null
           interpreted_raw?: string | null
           is_complete?: boolean
+          lesson_about_self?: string | null
+          lesson_about_them?: string | null
+          lesson_differently?: string | null
+          linked_prepare_entry_id?: string | null
           needs_to_happen_next?: string | null
           observed_in_them?: string | null
           observed_raw?: string | null
           outcome_json?: Json | null
           pattern_tag?: string | null
           person_id?: string | null
+          pressure_vs_care?: string | null
           raw_record_id?: string | null
           repair_branch_active?: boolean
+          review_depth?: string | null
           review_entry_id?: string
           secret_want?: string | null
+          signs_how_they_left?: string | null
+          something_that_helped?: string | null
           their_experience?: string | null
+          their_need_first?: string | null
           thread_id?: string | null
+          timing_now?: boolean | null
+          timing_when?: string | null
+          treat_as_data?: string | null
+          turning_point?: string | null
           unresolved_and_next?: string | null
           user_id: string
           validated_assumptions?: string | null
+          what_else_explains?: string | null
           what_happened?: string | null
           what_helped?: string | null
           what_hurt?: string | null
+          what_protecting?: string | null
+          what_protecting_text?: string | null
+          what_read_missed?: string | null
           what_you_avoided?: string | null
           what_you_did?: string | null
           your_part?: string | null
@@ -739,36 +920,67 @@ export type Database = {
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
           ask_before_understanding?: string | null
+          body_location?: string | null
+          calibration_block?: Json | null
           completed_at?: string | null
           could_make_them_feel?: string | null
           created_at?: string
           deleted_at?: string | null
+          easier_or_harder?: string | null
+          feeling_tracking?: string | null
+          first_repair_sentence?: string | null
+          forecast?: string | null
           hardest_moment_feeling?: string | null
+          impact_to_name?: string | null
           interpreted_raw?: string | null
           is_complete?: boolean
+          lesson_about_self?: string | null
+          lesson_about_them?: string | null
+          lesson_differently?: string | null
+          linked_prepare_entry_id?: string | null
           needs_to_happen_next?: string | null
           observed_in_them?: string | null
           observed_raw?: string | null
           outcome_json?: Json | null
           pattern_tag?: string | null
           person_id?: string | null
+          pressure_vs_care?: string | null
           raw_record_id?: string | null
           repair_branch_active?: boolean
+          review_depth?: string | null
           review_entry_id?: string
           secret_want?: string | null
+          signs_how_they_left?: string | null
+          something_that_helped?: string | null
           their_experience?: string | null
+          their_need_first?: string | null
           thread_id?: string | null
+          timing_now?: boolean | null
+          timing_when?: string | null
+          treat_as_data?: string | null
+          turning_point?: string | null
           unresolved_and_next?: string | null
           user_id?: string
           validated_assumptions?: string | null
+          what_else_explains?: string | null
           what_happened?: string | null
           what_helped?: string | null
           what_hurt?: string | null
+          what_protecting?: string | null
+          what_protecting_text?: string | null
+          what_read_missed?: string | null
           what_you_avoided?: string | null
           what_you_did?: string | null
           your_part?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "review_entries_linked_prepare_entry_id_fkey"
+            columns: ["linked_prepare_entry_id"]
+            isOneToOne: false
+            referencedRelation: "prepare_entries"
+            referencedColumns: ["prepare_entry_id"]
+          },
           {
             foreignKeyName: "review_entries_person_id_fkey"
             columns: ["person_id"]
@@ -938,6 +1150,7 @@ export type Database = {
           created_at: string
           free_before_you_send_used_at: string | null
           free_prepare_used_at: string | null
+          free_pulse_check_used_at: string | null
           free_review_used_at: string | null
           role: string
           status: string
@@ -955,6 +1168,7 @@ export type Database = {
           created_at?: string
           free_before_you_send_used_at?: string | null
           free_prepare_used_at?: string | null
+          free_pulse_check_used_at?: string | null
           free_review_used_at?: string | null
           role?: string
           status?: string
@@ -972,6 +1186,7 @@ export type Database = {
           created_at?: string
           free_before_you_send_used_at?: string | null
           free_prepare_used_at?: string | null
+          free_pulse_check_used_at?: string | null
           free_review_used_at?: string | null
           role?: string
           status?: string
