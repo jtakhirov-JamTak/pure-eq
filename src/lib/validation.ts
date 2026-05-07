@@ -164,8 +164,147 @@ export const createBeforeYouSendSchema = z.object({
   draftText: z.string().trim().min(1).max(10000),
   messageType: z.enum(BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES),
   intentOptional: z.string().max(5000).nullable().optional(),
+  // Coach SOT 2026-05-06: optional risk-context field above the draft.
+  // Surfaces "what might make this land badly" so BYS can flag specific
+  // risk patterns (pressure, blame, projection). Empty allowed.
+  riskContext: z.string().max(2000).nullable().optional(),
   // BYS has no person/thread concept; runCoachModule's personBehavior:"skip"
   // + threadBehavior:"none" config skips those resolution steps.
+});
+
+// ============================================================
+// Coach SOT 2026-05-06 — enum tuples + Pulse Check schema.
+// ============================================================
+// Tuples exported as const so step components, prompts, schemas, and
+// (eventually) Insights aggregator all derive from one source. Adding a
+// new value here propagates to all consumers; drift fails the build.
+
+/**
+ * Body location values for Prepare + Review (8 chips).
+ * Pulse Check uses BODY_LOCATION_PULSE_VALUES (this set + `fuzzy_cant_tell`).
+ * The fuzzy chip is intentionally NOT available outside Pulse Check —
+ * Insights aggregator never sees `fuzzy_cant_tell` from non-pulse rows.
+ */
+export const BODY_LOCATION_VALUES = [
+  "throat",
+  "chest",
+  "stomach",
+  "jaw",
+  "shoulders",
+  "face",
+  "other",
+  "dont_notice",
+] as const;
+
+/**
+ * Pulse Check body locations (8 base + fuzzy_cant_tell).
+ * `fuzzy_cant_tell` is the "I can't quite tell where it is" escape hatch
+ * specific to the Pulse Check use case (early-detection, often pre-verbal).
+ */
+export const BODY_LOCATION_PULSE_VALUES = [
+  ...BODY_LOCATION_VALUES,
+  "fuzzy_cant_tell",
+] as const;
+
+/**
+ * Pulse Check next-move chip (7 values). Determines the result-screen
+ * routing matrix: wait_observe → close, regulate_first → /tools/overwhelmed,
+ * ask_clarifying → BYS, prepare_conversation → /coach/prepare,
+ * use_bys → /coach/before-send, review → /coach/review, do_nothing → close.
+ */
+export const PULSE_NEXT_MOVE_VALUES = [
+  "wait_observe",
+  "regulate_first",
+  "ask_clarifying",
+  "prepare_conversation",
+  "use_bys",
+  "review",
+  "do_nothing",
+] as const;
+
+/**
+ * Review "what was I protecting?" chip (9 values). Optional one-line
+ * companion text in `whatProtectingText`.
+ */
+export const WHAT_PROTECTING_VALUES = [
+  "status",
+  "safety",
+  "image",
+  "relationship",
+  "time",
+  "boundaries",
+  "being_right",
+  "not_feeling_stupid",
+  "other",
+] as const;
+
+/**
+ * Review Repair "what they need first" chip (5 values). Drives both the
+ * Repair branch field and the AI's `recommended_timing` derivation.
+ */
+export const THEIR_NEED_FIRST_VALUES = [
+  "acknowledgment",
+  "clarity",
+  "safety",
+  "space",
+  "boundary",
+] as const;
+
+/**
+ * Pulse Check Zod schema. Mirrors the createReviewSchema shape
+ * (personId/threadId nullable, idempotencyKey injected by runner config).
+ *
+ * `lightCheckQuestion` is required when `nextMoveChip ∈ {ask_clarifying,
+ * use_bys}` and forbidden otherwise — those two chips lead to a follow-up
+ * question that the user pre-drafts on the same screen. Enforced via
+ * `.refine` so wrong-shape posts fail at the API boundary, not at the
+ * step renderer.
+ */
+export const createPulseCheckSchema = z
+  .object({
+    personName: z.string().trim().min(1).max(200),
+    relationship: RELATIONSHIP_ENUM,
+    whatFeelsOff: z.string().min(1).max(2000),
+    whatChangedAndBefore: z.string().min(1).max(2000),
+    whenItShifted: z.string().min(1).max(2000),
+    feelingAndBody: z.object({
+      text: z.string().min(1).max(2000),
+      bodyLocation: z.enum(BODY_LOCATION_PULSE_VALUES),
+    }),
+    theirsNotAboutYou: z.string().min(1).max(2000),
+    storyAndAlternative: z.object({
+      story: z.string().min(1).max(2000),
+      alternative: z.string().min(1).max(2000),
+    }),
+    signalNoiseObservation: z.string().min(1).max(1000),
+    nextMoveChip: z.enum(PULSE_NEXT_MOVE_VALUES),
+    lightCheckQuestion: z.string().max(2000).nullable().optional(),
+    personId: z.string().uuid().nullable().optional(),
+    threadId: z.string().uuid().nullable().optional(),
+  })
+  .refine(
+    (data) => {
+      const requires = data.nextMoveChip === "ask_clarifying" || data.nextMoveChip === "use_bys";
+      const has = typeof data.lightCheckQuestion === "string" && data.lightCheckQuestion.trim().length > 0;
+      return requires ? has : true;
+    },
+    {
+      message: "lightCheckQuestion required when nextMoveChip is ask_clarifying or use_bys",
+      path: ["lightCheckQuestion"],
+    },
+  );
+
+/**
+ * Review calibration block (3 chips, jsonb in DB). Stored as a structured
+ * object; chip values are constrained to non-empty strings here. Specific
+ * chip-id enums are page-side (Commit 5 — see review/page.tsx) so the
+ * step component owns its label/value mapping; the schema layer only
+ * guarantees the 3-field shape arrived intact.
+ */
+export const calibrationBlockSchema = z.object({
+  compare: z.string().min(1).max(40),
+  shift: z.string().min(1).max(40),
+  floor: z.string().min(1).max(40),
 });
 
 // Tools after_feeling: must mirror the DB CHECK in

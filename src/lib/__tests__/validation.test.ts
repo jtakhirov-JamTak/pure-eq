@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  createBeforeYouSendSchema,
+  createPulseCheckSchema,
   createReviewSchema,
   prepareSchemaPathA,
   prepareSchemaPathB,
@@ -178,5 +180,122 @@ describe("createReviewSchema — repair branch (deprecated fields)", () => {
       couldMakeThemFeel: null,
     });
     expect(result.success).toBe(true);
+  });
+});
+
+// ============================================================
+// Pulse Check schema — Coach SOT 2026-05-06
+// ============================================================
+const validPulseCheckBase = {
+  personName: "Sam",
+  relationship: "partner" as const,
+  whatFeelsOff: "Quieter than usual the past few days.",
+  whatChangedAndBefore: "Last weekend we were laughing; now short replies.",
+  whenItShifted: "Sometime after Sunday brunch.",
+  feelingAndBody: {
+    text: "Tight chest, slight dread.",
+    bodyLocation: "chest" as const,
+  },
+  theirsNotAboutYou: "They started a new job — could be load not me.",
+  storyAndAlternative: {
+    story: "I'm being avoided.",
+    alternative: "They're tapped out by work and going quiet across the board.",
+  },
+  signalNoiseObservation: "If they're still terse by Friday, it's signal.",
+  nextMoveChip: "wait_observe" as const,
+};
+
+describe("createPulseCheckSchema", () => {
+  it("accepts a wait_observe payload without lightCheckQuestion", () => {
+    const result = createPulseCheckSchema.safeParse(validPulseCheckBase);
+    expect(result.success).toBe(true);
+  });
+
+  it("requires lightCheckQuestion when nextMoveChip is ask_clarifying", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      nextMoveChip: "ask_clarifying",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("requires lightCheckQuestion when nextMoveChip is use_bys", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      nextMoveChip: "use_bys",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts ask_clarifying with a non-empty lightCheckQuestion", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      nextMoveChip: "ask_clarifying",
+      lightCheckQuestion: "Hey, all good? You've been quiet — anything I should know?",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects fuzzy_cant_tell on non-pulse body location enums but accepts it here", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      feelingAndBody: { text: "Cloudy.", bodyLocation: "fuzzy_cant_tell" },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown nextMoveChip value", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      nextMoveChip: "spelunk",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty whatFeelsOff", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      whatFeelsOff: "",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================
+// BYS schema — riskContext optional (Coach SOT 2026-05-06)
+// ============================================================
+const validBysBase = {
+  draftText: "Hey, I noticed you went quiet at dinner. Want to talk now?",
+  messageType: "check_in" as const,
+};
+
+describe("createBeforeYouSendSchema — riskContext", () => {
+  it("accepts payload without riskContext", () => {
+    const result = createBeforeYouSendSchema.safeParse(validBysBase);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts payload with riskContext populated", () => {
+    const result = createBeforeYouSendSchema.safeParse({
+      ...validBysBase,
+      riskContext: "They might read this as pressure if I send it before they're home.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts null riskContext", () => {
+    const result = createBeforeYouSendSchema.safeParse({
+      ...validBysBase,
+      riskContext: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects riskContext over 2000 chars", () => {
+    const result = createBeforeYouSendSchema.safeParse({
+      ...validBysBase,
+      riskContext: "x".repeat(2001),
+    });
+    expect(result.success).toBe(false);
   });
 });
