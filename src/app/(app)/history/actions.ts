@@ -18,6 +18,7 @@ const MAX_BATCH_SIZE = 10;
 // row in the history list.
 const DERIVED_TABLE = {
   prepare: "prepare_entries",
+  pulse_check: "pulse_check_entries",
   review: "review_entries",
   before_you_send: "before_you_send_entries",
   repair: "repair_entries",
@@ -130,6 +131,12 @@ export async function softDeleteEntries(
         case "prepare":
           return supabase
             .from("prepare_entries")
+            .update({ deleted_at: now })
+            .eq("user_id", user.id)
+            .in("raw_record_id", ids);
+        case "pulse_check":
+          return supabase
+            .from("pulse_check_entries")
             .update({ deleted_at: now })
             .eq("user_id", user.id)
             .in("raw_record_id", ids);

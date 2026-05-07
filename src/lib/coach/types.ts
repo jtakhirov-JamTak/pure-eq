@@ -69,7 +69,8 @@ interface BaseCoachModuleConfig<
     | "prepare_entries"
     | "review_entries"
     | "repair_entries"
-    | "before_you_send_entries";
+    | "before_you_send_entries"
+    | "pulse_check_entries";
   derivedIdColumn: string;
   aiJsonColumn: string;
   aiVersionColumn: string;
@@ -96,6 +97,25 @@ interface BaseCoachModuleConfig<
     profile: ProfileType,
     context: { personName: string | null; personRelationship: string | null },
   ) => { system: string; user: string; prompt_version?: string };
+
+  /**
+   * Optional pre-prompt enrichment hook. Runs after person + thread + person-
+   * context resolution (post step 8b) but before the prompt is built. Lets
+   * a module mutate `input` based on a server-side lookup that the client
+   * couldn't authoritatively make (e.g. Review's `linked_prepare_entry_id`
+   * + Prepare snapshot prepend).
+   *
+   * Returns the (possibly augmented) input. On error: log + Sentry capture
+   * (cooldown-latched per the run-module pattern), return the original
+   * input unchanged. The AI call is still useful without the enrichment;
+   * a 500 here would erase the user's just-typed entry.
+   */
+  prePromptEnrich?: (
+    input: TInput,
+    supabase: AppSupabase,
+    userId: string,
+    effectivePersonId: string | null,
+  ) => Promise<TInput>;
 
   // -- Response --
 

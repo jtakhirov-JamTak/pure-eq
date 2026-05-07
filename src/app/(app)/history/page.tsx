@@ -13,6 +13,7 @@ const PAGE_SIZE = 10;
 // (2026-04-23); new repair content ships inside review_entries.
 const DELETABLE_TYPES = [
   "prepare",
+  "pulse_check",
   "review",
   "before_you_send",
   "repair",
@@ -22,6 +23,7 @@ const DELETABLE_TYPES = [
 
 const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
   prepare: "Prepare",
+  pulse_check: "Pulse Check",
   review: "Review",
   before_you_send: "Before-Send",
   repair: "Repair",
@@ -88,6 +90,7 @@ export default async function HistoryPage() {
 
   const counts: Record<(typeof DELETABLE_TYPES)[number], number> = {
     prepare: 0,
+    pulse_check: 0,
     review: 0,
     before_you_send: 0,
     repair: 0,
