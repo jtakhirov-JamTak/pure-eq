@@ -40,12 +40,14 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     draftText: input.draftText,
     messageType: input.messageType,
     intentOptional: input.intentOptional ?? null,
+    riskContext: input.riskContext ?? null,
   }),
 
   buildDerivedInsert: (input) => ({
     draft_text: input.draftText,
     message_type: input.messageType,
     intent_optional: input.intentOptional ?? null,
+    risk_context: input.riskContext ?? null,
   }),
 
   buildPrompt: (input, profile) =>
@@ -54,6 +56,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       draftText: input.draftText,
       messageType: input.messageType,
       intentOptional: input.intentOptional ?? null,
+      riskContext: input.riskContext ?? null,
     }),
 
   buildResponseExtras: (derivedEntryId) => ({

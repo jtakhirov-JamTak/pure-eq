@@ -4,130 +4,254 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
-import ThreadPicker from "@/components/thread-picker";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
-import { StepDots } from "@/components/brand/StepDots";
+import { CoachPage } from "@/components/coach/coach-page";
+import {
+  TextareaTwoColumn,
+  type TextareaTwoColumnValue,
+} from "@/components/coach/steps/textarea-two-column";
+import {
+  SelectNeedsWithForecast,
+  type SelectNeedsWithForecastValue,
+} from "@/components/coach/steps/select-needs-with-forecast";
+import {
+  SelectProtectingWithOptionalText,
+  type SelectProtectingValue,
+} from "@/components/coach/steps/select-protecting-with-optional-text";
+import {
+  SelectCalibrationChip,
+  type CalibrationBlockValue,
+} from "@/components/coach/steps/select-calibration-chip";
+import { SelectRepairNeed } from "@/components/coach/steps/select-repair-need";
+import {
+  TimingCombo,
+  type TimingComboValue,
+} from "@/components/coach/steps/timing-combo";
+import {
+  pageCanAdvance,
+  REPAIR_TRIGGER_NEEDS,
+  type PageDef,
+  type StepDef,
+} from "@/lib/coach/page-flow";
 import { safeUUID } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import type { PrepareSnapshot } from "@/lib/coach/calibration";
 
-// ============================================================
-// Step taxonomy
-// ============================================================
-// Base form: 10 steps (1 person picker + 8 single-field steps + 1
-// two-column observed/interpreted step). Some text, some enum-select.
-// After the final base step (needsToHappenNext), if the user picked a
-// "needs repair" option, we insert a readiness gate. If they pass the
-// gate, repair sub-steps appear before submit. Total step count is
-// 10 / 11 / 12 depending on path (cross-eval batch #1: added 1 base
-// step, shrunk repair branch from 3 to 1 by removing secretWant and
-// couldMakeThemFeel).
+// Coach SOT 2026-05-06: calibration chip enums live page-side (the schema
+// only validates non-empty 3-field shape). Future iterations may swap the
+// chip labels/values; refactor into a constants module if a second page
+// consumes them.
+const CALIBRATION_CHIPS = {
+  compare: [
+    { value: "matched", label: "Matched my forecast" },
+    { value: "off_softer", label: "Softer than I forecast" },
+    { value: "off_harder", label: "Harder than I forecast" },
+    { value: "different_topic", label: "Different topic surfaced" },
+  ],
+  shift: [
+    { value: "i_softened", label: "I softened first" },
+    { value: "they_opened", label: "They opened first" },
+    { value: "we_pivoted", label: "We pivoted to a new frame" },
+    { value: "stuck", label: "We stayed stuck" },
+  ],
+  floor: [
+    { value: "named_it", label: "I named it" },
+    { value: "stayed_present", label: "I stayed present" },
+    { value: "didnt_make_worse", label: "I didn't make it worse" },
+    { value: "no_floor", label: "No floor held" },
+  ],
+} as const;
 
-type Ask = "yes" | "no" | "unclear";
+const REVIEW_QUICK_PAGES: PageDef[] = [
+  {
+    pageKey: "quick_1",
+    qs: [
+      {
+        key: "personName",
+        title: "Who was this conversation with?",
+        prompt: "Start typing to see people you've mentioned before.",
+        kind: "person",
+      },
+      {
+        key: "whatHappened",
+        title: "What actually happened?",
+        prompt: "Stick to facts — what was said and done.",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "quick_2",
+    qs: [
+      {
+        key: "observedInterpreted",
+        title: "Split what you saw from what you thought",
+        prompt:
+          "Two boxes. Facts on the left (body, tone, exact words). Interpretation on the right.",
+        kind: "textarea_two_column",
+      },
+      {
+        key: "hardestMomentFeeling",
+        title: "What was the hardest moment, and what did you feel in it?",
+        prompt: null,
+        kind: "textarea",
+      },
+    ],
+  },
+];
 
-type NeedsNext =
-  | "nothing"
-  | "clarify"
-  | "align"
-  | "apologize"
-  | "reassure"
-  | "give_space"
-  | "set_boundary"
-  | "ask_for_repair";
+const REVIEW_FULL_BASE_PAGES: PageDef[] = [
+  {
+    pageKey: "full_1",
+    qs: [
+      {
+        key: "personName",
+        title: "Who was this conversation with?",
+        prompt: "Start typing to see people you've mentioned before.",
+        kind: "person",
+      },
+    ],
+  },
+  {
+    pageKey: "full_2",
+    qs: [
+      {
+        key: "whatHappened",
+        title: "What actually happened?",
+        prompt: "Stick to facts.",
+        kind: "textarea",
+      },
+      {
+        key: "observedInterpreted",
+        title: "Split what you saw from what you thought",
+        prompt: null,
+        kind: "textarea_two_column",
+      },
+      {
+        key: "hardestMomentFeeling",
+        title: "What was the hardest moment, and what did you feel?",
+        prompt: null,
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "full_3",
+    qs: [
+      {
+        key: "whatYouDid",
+        title: "What did you do during the conversation?",
+        prompt: "Including the small moves you noticed yourself making.",
+        kind: "textarea",
+      },
+      {
+        key: "observedInThem",
+        title: "What did you observe in them — body, tone, words?",
+        prompt: null,
+        kind: "textarea",
+      },
+      {
+        key: "theirExperience",
+        title: "Looking back, what do you think their experience was?",
+        prompt: null,
+        kind: "textarea",
+      },
+      {
+        key: "whatYouAvoided",
+        title: "What did you avoid saying or doing?",
+        prompt: null,
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "full_4",
+    qs: [
+      {
+        key: "askBeforeUnderstanding",
+        title: "Did you ask before assuming what was going on for them?",
+        prompt: null,
+        kind: "select",
+      },
+      {
+        key: "needsAndForecast",
+        title: "What needs to happen next?",
+        prompt: "Pick the closest fit. Then forecast what you think will happen.",
+        kind: "select_needs_with_forecast",
+      },
+    ],
+  },
+  // Page 5 shape derives from linkedPrepareEntryId — see PAGES build below.
+];
 
-type Readiness = "yes" | "somewhat" | "no";
+const REPAIR_PAGES: PageDef[] = [
+  {
+    pageKey: "repair_1",
+    qs: [
+      {
+        key: "impactToName",
+        title: "Name the impact you can see now",
+        prompt:
+          "What did this likely feel like for them? Specific, not generic.",
+        kind: "textarea",
+      },
+      {
+        key: "theirNeedFirst",
+        title: "What do they need first?",
+        prompt: null,
+        kind: "select_repair_need",
+      },
+    ],
+  },
+  {
+    pageKey: "repair_2",
+    qs: [
+      {
+        key: "pressureVsCare",
+        title: "Where on the pressure / care line is your repair?",
+        prompt:
+          "Honest — pressure leaks into repair more than people think. Name where this lands.",
+        kind: "textarea",
+      },
+      {
+        key: "timing",
+        title: "When could this land best?",
+        prompt: null,
+        kind: "timing_combo",
+      },
+    ],
+  },
+  {
+    pageKey: "repair_3",
+    qs: [
+      {
+        key: "firstRepairSentence",
+        title: "Write the first sentence of the repair",
+        prompt:
+          "Just the opening line. The Before-Send check will catch what to cut.",
+        kind: "textarea",
+      },
+    ],
+  },
+];
 
-const ASK_OPTIONS: { value: Ask; label: string }[] = [
+const ASK_OPTIONS = [
   { value: "yes", label: "Yes, I asked" },
   { value: "no", label: "No, I assumed" },
   { value: "unclear", label: "Not sure" },
-];
+] as const;
 
-const NEEDS_NEXT_OPTIONS: { value: NeedsNext; label: string }[] = [
-  { value: "nothing", label: "Nothing — I'm good with how it landed" },
-  { value: "clarify", label: "Clarify something I said" },
-  { value: "align", label: "Get back on the same page" },
-  { value: "apologize", label: "Apologize" },
-  { value: "reassure", label: "Reassure them" },
-  { value: "give_space", label: "Give it space" },
-  { value: "set_boundary", label: "Set a boundary" },
-  { value: "ask_for_repair", label: "Ask them to repair something" },
-];
-
-const READINESS_OPTIONS: { value: Readiness; label: string }[] = [
-  { value: "yes", label: "Yes — I can name their hurt without defending myself" },
-  { value: "somewhat", label: "Somewhat — I'll need to be careful" },
-  { value: "no", label: "No — I'm still defending my intent" },
-];
-
-// Repair triggers: only these needs-next options gate into the repair branch.
-const REPAIR_TRIGGER_NEEDS: NeedsNext[] = [
-  "clarify",
-  "apologize",
-  "reassure",
-  "ask_for_repair",
-];
-
-type StepKind =
-  | "person"
-  | "textarea"
-  | "textarea_two_column"
-  | "select_ask"
-  | "select_needs"
-  | "select_readiness";
-type StepDef = {
-  key: string;
-  title: string;
-  prompt: string | null;
-  kind: StepKind;
-};
-
-const BASE_STEPS: StepDef[] = [
-  { key: "personName", title: "Who was this conversation with?", prompt: "Start typing to see people you've mentioned before.", kind: "person" },
-  { key: "whatHappened", title: "What actually happened in the conversation?", prompt: "Stick to facts. What was said and done — not interpretations yet.", kind: "textarea" },
-  // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
-  // The form-factor itself is the training move — left = observation, right
-  // = meaning-making. `key` is a synthetic step identifier; the field-level
-  // keys posted to the API are `observedRaw` / `interpretedRaw`.
-  { key: "observedInterpreted", title: "Split what you saw from what you thought", prompt: "Two boxes. One for facts (body, tone, exact words). One for what you read into them.", kind: "textarea_two_column" },
-  { key: "hardestMomentFeeling", title: "What was the hardest moment, and what did you feel in it?", prompt: "Name the moment and the feeling that showed up for you.", kind: "textarea" },
-  { key: "whatYouDid", title: "What did you do during the conversation?", prompt: "What did you say or do — including the small moves you noticed yourself making.", kind: "textarea" },
-  { key: "observedInThem", title: "What did you observe in them — body, tone, words?", prompt: "What did you actually see or hear. Observations, not conclusions.", kind: "textarea" },
-  { key: "theirExperience", title: "Looking back, what do you think their experience was?", prompt: "Your best guess at what the conversation was like for them.", kind: "textarea" },
-  { key: "whatYouAvoided", title: "What did you avoid saying or doing?", prompt: "What did you sidestep — the question you didn't ask, the thing you didn't admit, the topic you steered away from.", kind: "textarea" },
-  { key: "askBeforeUnderstanding", title: "Did you ask before assuming what was going on for them?", prompt: null, kind: "select_ask" },
-  { key: "needsToHappenNext", title: "What needs to happen next?", prompt: "Pick the closest fit.", kind: "select_needs" },
-];
-
-const READINESS_STEP: StepDef = {
-  key: "readiness",
-  title: "Are you ready to repair?",
-  prompt: "Repair only works if you can hold their hurt without defending yourself first.",
-  kind: "select_readiness",
-};
-
-// Cross-eval batch #1 (2026-05-03): repair branch shrunk from 3 Qs to 1.
-// secretWant + couldMakeThemFeel both trained projection of the other
-// person's emotional state rather than honest repair — highest backfire
-// risk for anxious / defensive / Tier 2 user-classes. SOT replacements
-// (pressure-vs-care, distress-tolerance) are a separate ticket.
-const REPAIR_STEPS: StepDef[] = [
-  { key: "yourPart", title: "What's your part in this?", prompt: "The piece that's actually yours, not the part that's about them.", kind: "textarea" },
-];
-
-// ============================================================
-// AI output shape
-// ============================================================
 type AiNormal = {
   mode: "normal";
   how_you_came_across: string;
   impact_vs_intent: string;
   alternative_explanation: string;
   question_you_missed: string;
-  what_to_own?: string;
+  what_to_own?: string | null;
   impact_on_them?: string;
-  thing_not_to_say?: string;
+  thing_not_to_say?: string | null;
   recommended_timing?: string;
   pattern_tag: string;
 };
@@ -155,97 +279,29 @@ const REPAIR_RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
   { label: "Recommended timing", key: "recommended_timing" },
 ];
 
-const OUTCOME_QUESTIONS = [
-  {
-    key: "movedForward",
-    title: "Did this move things forward?",
-    options: [
-      { value: "yes", label: "Yes" },
-      { value: "partly", label: "Partly" },
-      { value: "no", label: "No" },
-      { value: "unclear", label: "Unclear" },
-    ],
-  },
-  {
-    key: "theySeemUnderstood",
-    title: "Did they seem more understood?",
-    options: [
-      { value: "more", label: "More" },
-      { value: "same", label: "Same" },
-      { value: "less", label: "Less" },
-      { value: "unclear", label: "Unclear" },
-    ],
-  },
-  {
-    key: "usedPreparePlan",
-    title: "Did you use your prepare plan?",
-    options: [
-      { value: "yes", label: "Yes" },
-      { value: "partly", label: "Partly" },
-      { value: "no", label: "No" },
-      { value: "no_prepare", label: "No plan" },
-    ],
-  },
-] as const;
-
 const PREFILL_KEY = "pure-eq:bys-prefill";
 
 const ReviewBackground = () => <SkyBackground variant="warm" />;
 
-function RefusalCard({
-  output,
-  onBack,
-}: {
-  output: AiRefusal;
-  onBack: () => void;
-}) {
-  return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <ReviewBackground />
-      <h2
-        className="font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
-      >
-        A note before you go further.
-      </h2>
-      <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
-        <p className="text-[14px] font-medium leading-[1.55] text-ink">
-          {output.message_to_user}
-        </p>
-      </div>
-      <button
-        onClick={onBack}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
-        Back to Coach
-      </button>
-    </div>
-  );
-}
+type ReviewDepth = "quick" | "full";
 
 export default function ReviewPage() {
   const router = useRouter();
-  const [step, setStep] = useState(0);
-  const [data, setData] = useState<Record<string, string>>({});
+  const [reviewDepth, setReviewDepth] = useState<ReviewDepth | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
-  const [threadId, setThreadId] = useState<string | null>(null);
+  const [linkedPrepareEntryId, setLinkedPrepareEntryId] = useState<
+    string | null
+  >(null);
+  const [, setPrepareSnapshot] = useState<PrepareSnapshot | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
   const [reviewEntryId, setReviewEntryId] = useState<string | null>(null);
-  const [outcomeData, setOutcomeData] = useState<Record<string, string>>({});
-  const [outcomeSaved, setOutcomeSaved] = useState(false);
-  const [outcomeError, setOutcomeError] = useState(false);
-  const [openingLine, setOpeningLine] = useState("");
-  // Tracks whether the user actually went through the repair branch in
-  // this submission (yes/somewhat readiness + repair-trigger needs).
-  // Drives the result-screen "show repair cards" + opening-line CTA.
   const [submittedRepairBranchActive, setSubmittedRepairBranchActive] =
     useState(false);
-  // Cached at mount so handoffToBys can stamp the BYS prefill synchronously.
-  // Cross-user sessionStorage bleed requires both a matching userId AND a
-  // fresh stashedAt on the reader side (see /coach/before-send).
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
@@ -265,100 +321,166 @@ export default function ReviewPage() {
     };
   }, []);
 
-  // Dynamic step list — recomputed each render from form state. Length
-  // moves between 9, 10, and 13 depending on whether the readiness gate
-  // and repair sub-steps apply.
-  const needsRepair = REPAIR_TRIGGER_NEEDS.includes(
-    data.needsToHappenNext as NeedsNext,
-  );
-  const includesReadiness = needsRepair;
-  const passedReadiness =
-    data.readiness === "yes" || data.readiness === "somewhat";
-  const includesRepairSteps = includesReadiness && passedReadiness;
+  // Linked-Prepare lookup — fires when personId is set on a Full review.
+  // Drives the page-5 shape (calibration vs standalone). On error: degrade
+  // to standalone (linkedPrepareEntryId stays null).
+  useEffect(() => {
+    if (!personId || reviewDepth !== "full") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/coach/prepare/most-recent?personId=${encodeURIComponent(personId)}`,
+        );
+        if (!res.ok) return;
+        const json = await res.json();
+        if (cancelled) return;
+        if (json.snapshot) {
+          setLinkedPrepareEntryId(json.snapshot.prepareEntryId);
+          setPrepareSnapshot(json.snapshot);
+        } else {
+          setLinkedPrepareEntryId(null);
+          setPrepareSnapshot(null);
+        }
+      } catch {
+        // Silent — the server lookup at submit is the authoritative path.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [personId, reviewDepth]);
 
-  const STEPS: StepDef[] = [
-    ...BASE_STEPS,
-    ...(includesReadiness ? [READINESS_STEP] : []),
-    ...(includesRepairSteps ? REPAIR_STEPS : []),
-  ];
-  const currentStep = STEPS[step] ?? BASE_STEPS[BASE_STEPS.length - 1];
-  const value = data[currentStep.key] || "";
+  // Build page-5 dynamically based on linked status.
+  const page5: PageDef = linkedPrepareEntryId
+    ? {
+        pageKey: "full_5_calibration",
+        qs: [
+          {
+            key: "calibrationBlock",
+            title: "Calibrate against your forecast",
+            prompt:
+              "We pulled your most recent Prepare for this person — pick how it actually compared.",
+            kind: "select_calibration_chip",
+          },
+        ],
+      }
+    : {
+        pageKey: "full_5_standalone",
+        qs: [
+          {
+            key: "whatProtecting",
+            title: "What were you protecting?",
+            prompt: null,
+            kind: "select_protecting_with_optional_text",
+          },
+          {
+            key: "whatYouLearned",
+            title: "What did you learn that you'll carry forward?",
+            prompt: "One specific takeaway, in your own words.",
+            kind: "textarea",
+          },
+        ],
+      };
 
-  function setFieldValue(key: string, next: string) {
+  // Repair branch active when needsAndForecast.chip ∈ REPAIR_TRIGGER_NEEDS
+  // AND we're on Full path. Quick path NEVER triggers repair.
+  const needsForecast = data.needsAndForecast as
+    | SelectNeedsWithForecastValue
+    | undefined;
+  const repairActive =
+    reviewDepth === "full" &&
+    needsForecast !== undefined &&
+    (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(needsForecast.chip);
+
+  const PAGES: PageDef[] =
+    reviewDepth === "quick"
+      ? REVIEW_QUICK_PAGES
+      : reviewDepth === "full"
+        ? [
+            ...REVIEW_FULL_BASE_PAGES,
+            page5,
+            ...(repairActive ? REPAIR_PAGES : []),
+          ]
+        : [];
+  const totalPages = PAGES.length;
+  const currentPage: PageDef | null = PAGES[pageIndex] ?? null;
+
+  function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
   }
 
   function canAdvance(): boolean {
-    if (currentStep.kind === "person") return true;
-    if (
-      currentStep.kind === "select_ask" ||
-      currentStep.kind === "select_needs" ||
-      currentStep.kind === "select_readiness"
-    ) {
-      return !!value;
-    }
-    if (currentStep.kind === "textarea_two_column") {
-      // Two distinct fields share one step. Advance only when both
-      // columns have non-empty trimmed content. Field keys diverge
-      // from the synthetic step `key` (observedInterpreted) because
-      // the API + payload distinguish observedRaw vs interpretedRaw.
-      return (
-        (data.observedRaw ?? "").trim().length > 0 &&
-        (data.interpretedRaw ?? "").trim().length > 0
-      );
-    }
-    return value.trim().length > 0;
+    if (!currentPage) return false;
+    return pageCanAdvance(currentPage, data);
   }
 
   function handleNext() {
     if (!canAdvance()) return;
-    if (step < STEPS.length - 1) {
-      setStep(step + 1);
+    if (pageIndex < totalPages - 1) {
+      setPageIndex(pageIndex + 1);
     } else {
-      handleSubmit({ repairBranchActive: includesRepairSteps });
+      handleSubmit();
     }
   }
 
-  async function handleSubmit({
-    repairBranchActive,
-    override,
-  }: {
-    repairBranchActive: boolean;
-    // Caller-supplied field values that haven't yet flushed into `data`.
-    // The select_needs / select_readiness handlers `setData(...)` then submit
-    // in the same tick — handleSubmit's closure still sees the pre-pick `data`,
-    // so the just-picked enum field would post as undefined and Zod would 400.
-    // Pass the chosen value here to bypass the stale-closure window.
-    override?: Partial<Record<string, string>>;
-  }) {
+  function handleBack() {
+    if (pageIndex > 0) setPageIndex(pageIndex - 1);
+  }
+
+  async function handleSubmit() {
     if (submitRef.current) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
-    setSubmittedRepairBranchActive(repairBranchActive);
-    const merged = { ...data, ...override };
     try {
+      const observedInterpreted =
+        (data.observedInterpreted as TextareaTwoColumnValue | undefined) ??
+        { left: "", right: "" };
+      const calibration = data.calibrationBlock as
+        | CalibrationBlockValue
+        | undefined;
+      const protectingValue = data.whatProtecting as
+        | SelectProtectingValue
+        | undefined;
+      const timing = data.timing as TimingComboValue | undefined;
+      const repairBranchActive = repairActive;
+      setSubmittedRepairBranchActive(repairBranchActive);
+      const body = {
+        reviewDepth,
+        personName: data.personName,
+        whatHappened: data.whatHappened,
+        observedRaw: observedInterpreted.left,
+        interpretedRaw: observedInterpreted.right,
+        hardestMomentFeeling: data.hardestMomentFeeling,
+        whatYouDid: data.whatYouDid ?? undefined,
+        observedInThem: data.observedInThem ?? undefined,
+        theirExperience: data.theirExperience ?? undefined,
+        whatYouAvoided: data.whatYouAvoided ?? undefined,
+        askBeforeUnderstanding: data.askBeforeUnderstanding ?? undefined,
+        needsToHappenNext: needsForecast?.chip ?? undefined,
+        repairBranchActive,
+        // Repair-swap fields (Commit 6).
+        impactToName: repairBranchActive ? data.impactToName : null,
+        theirNeedFirst: repairBranchActive ? data.theirNeedFirst : null,
+        pressureVsCare: repairBranchActive ? data.pressureVsCare : null,
+        timingWhen: repairBranchActive ? timing?.when ?? null : null,
+        timingNow: repairBranchActive ? timing?.isNowThatMoment ?? null : null,
+        firstRepairSentence: repairBranchActive
+          ? data.firstRepairSentence
+          : null,
+        // Page 5
+        linkedPrepareEntryId: linkedPrepareEntryId,
+        calibrationBlock: calibration ?? null,
+        whatProtecting: protectingValue ?? null,
+        whatYouLearned: data.whatYouLearned ?? null,
+        personId: personId || null,
+        idempotencyKey: idempotencyKeyRef.current,
+      };
       const res = await fetch("/api/coach/review", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          personName: merged.personName,
-          whatHappened: merged.whatHappened,
-          observedRaw: merged.observedRaw,
-          interpretedRaw: merged.interpretedRaw,
-          hardestMomentFeeling: merged.hardestMomentFeeling,
-          whatYouDid: merged.whatYouDid,
-          observedInThem: merged.observedInThem,
-          theirExperience: merged.theirExperience,
-          whatYouAvoided: merged.whatYouAvoided,
-          askBeforeUnderstanding: merged.askBeforeUnderstanding,
-          needsToHappenNext: merged.needsToHappenNext,
-          repairBranchActive,
-          yourPart: repairBranchActive ? merged.yourPart : null,
-          personId: personId || null,
-          threadId: threadId || null,
-          idempotencyKey: idempotencyKeyRef.current,
-        }),
+        body: JSON.stringify(body),
       });
       if (res.status === 403) {
         router.push("/paywall");
@@ -368,9 +490,7 @@ export default function ReviewPage() {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
-      if (result.reviewEntryId) {
-        setReviewEntryId(result.reviewEntryId);
-      }
+      if (result.reviewEntryId) setReviewEntryId(result.reviewEntryId);
       if (result.aiOutput) {
         setAiOutput(result.aiOutput as AiOutput);
       } else {
@@ -391,43 +511,18 @@ export default function ReviewPage() {
   function retryCoaching() {
     setSavedMessage(null);
     setAiOutput(null);
-    handleSubmit({ repairBranchActive: submittedRepairBranchActive });
-  }
-
-  async function submitOutcome() {
-    if (!reviewEntryId) return;
-    setOutcomeError(false);
-    try {
-      const res = await fetch("/api/coach/review/outcome", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          reviewEntryId,
-          ...outcomeData,
-        }),
-      });
-      if (!res.ok) throw new Error(`status ${res.status}`);
-      setOutcomeSaved(true);
-    } catch {
-      setOutcomeError(true);
-    }
+    handleSubmit();
   }
 
   function handoffToBys() {
-    if (!openingLine.trim()) return;
+    const sentence = (data.firstRepairSentence as string | undefined) ?? "";
+    if (!sentence.trim() || !currentUserId) {
+      router.push("/coach/before-send");
+      return;
+    }
     try {
-      // Stamp userId + stashedAt so BYS can reject a stale prefill left
-      // over from a prior session on the same browser tab (sessionStorage
-      // is tab-scoped, not account-scoped). BYS requires both a fresh
-      // stash (<5 min) AND a userId match against the current Supabase
-      // session. If we didn't resolve a userId at mount, we skip the
-      // stash — drop the handoff rather than leak an unsigned draft.
-      if (!currentUserId) {
-        router.push("/coach/before-send");
-        return;
-      }
       const payload = {
-        draftText: openingLine,
+        draftText: sentence,
         messageType: "repair" as const,
         sourceReviewEntryId: reviewEntryId,
         userId: currentUserId,
@@ -435,30 +530,14 @@ export default function ReviewPage() {
       };
       sessionStorage.setItem(PREFILL_KEY, JSON.stringify(payload));
     } catch {
-      // sessionStorage write failure is non-fatal — BYS will just start
-      // empty. Don't block the navigation.
+      // sessionStorage failure is non-fatal.
     }
     router.push("/coach/before-send");
   }
 
-  const allOutcomeAnswered = OUTCOME_QUESTIONS.every(
-    (q) => outcomeData[q.key],
-  );
-
-  // ============================================================
-  // Result screen
-  // ============================================================
+  // --- Result screens ---
   if (aiOutput) {
     if (isRefusal(aiOutput)) {
-      return (
-        <RefusalCard
-          output={aiOutput}
-          onBack={() => router.push("/coach")}
-        />
-      );
-    }
-    if (aiOutput.mode !== "normal") {
-      // Unknown shape — show a saved-fallback so the user has a way out.
       return (
         <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
           <ReviewBackground />
@@ -466,205 +545,110 @@ export default function ReviewPage() {
             className="font-display text-[28px] leading-[1.15] text-ink"
             style={{ letterSpacing: "-0.6px" }}
           >
-            Reflection saved
+            A note before you go further.
           </h2>
-          <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Your reflection is saved, but coaching feedback isn't available
-            for this one.
-          </p>
-          <button
-            onClick={retryCoaching}
-            className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-          >
-            Try again for coaching feedback
-          </button>
+          <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+            <p className="text-[14px] font-medium leading-[1.55] text-ink">
+              {aiOutput.message_to_user}
+            </p>
+          </div>
           <button
             onClick={() => router.push("/coach")}
-            className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+            className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
           >
             Back to Coach
           </button>
         </div>
       );
     }
-
-    const baseVisible = BASE_RESULT_FIELDS.filter(({ key }) => {
-      const v = aiOutput[key];
-      return typeof v === "string" && v.trim().length > 0;
-    });
-    const repairVisible = submittedRepairBranchActive
-      ? REPAIR_RESULT_FIELDS.filter(({ key }) => {
-          const v = aiOutput[key];
-          return typeof v === "string" && v.trim().length > 0;
-        })
-      : [];
-    // User picked a repair-needs option but answered "no" to readiness —
-    // surface the gentle redirect copy at the top of the result screen.
-    const showNotReadyNotice =
-      needsRepair && !submittedRepairBranchActive;
-
-    return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <ReviewBackground />
-        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
-          Review
-        </span>
-        <h2
-          className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
-        >
-          Your <span className="italic">reflection</span>.
-        </h2>
-
-        {showNotReadyNotice && (
-          <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
-            <p className="text-[13px] font-bold uppercase tracking-[1px] text-ink-muted">
-              Repair takes readiness
-            </p>
-            <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-              You're not ready to repair yet. Name their hurt without
-              defending your intent first. Come back when you can.
-            </p>
+    if (aiOutput.mode === "normal") {
+      const baseVisible = BASE_RESULT_FIELDS.filter(({ key }) => {
+        const v = aiOutput[key];
+        return typeof v === "string" && v.trim().length > 0;
+      });
+      const repairVisible = submittedRepairBranchActive
+        ? REPAIR_RESULT_FIELDS.filter(({ key }) => {
+            const v = aiOutput[key];
+            return typeof v === "string" && v.trim().length > 0;
+          })
+        : [];
+      return (
+        <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+          <ReviewBackground />
+          <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+            Review
+          </span>
+          <h2
+            className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
+            style={{ letterSpacing: "-0.6px" }}
+          >
+            Your <span className="italic">reflection</span>.
+          </h2>
+          <div className="mt-5 space-y-3">
+            {baseVisible.map(({ label, key }) => (
+              <div
+                key={key}
+                className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
+              >
+                <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                  {label}
+                </p>
+                <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                  {aiOutput[key] as string}
+                </p>
+              </div>
+            ))}
           </div>
-        )}
-
-        <div className="mt-5 space-y-3">
-          {baseVisible.map(({ label, key }) => (
-            <div
-              key={key}
-              className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
-            >
-              <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                {label}
+          {repairVisible.length > 0 && (
+            <>
+              <p className="mt-7 text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+                For the repair
+              </p>
+              <div className="mt-2 space-y-3">
+                {repairVisible.map(({ label, key }) => {
+                  const isAction = ACTION_FIELDS.has(key);
+                  return (
+                    <div
+                      key={key}
+                      className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+                    >
+                      <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+                        {label}
+                      </p>
+                      <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
+                        {aiOutput[key] as string}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {submittedRepairBranchActive && data.firstRepairSentence ? (
+            <div className="mt-7 rounded-card-sm bg-surface p-4 shadow-soft">
+              <p className="text-[13px] font-bold text-ink">
+                Your repair sentence
               </p>
               <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                {aiOutput[key]}
+                {data.firstRepairSentence as string}
               </p>
-            </div>
-          ))}
-        </div>
-
-        {repairVisible.length > 0 && (
-          <>
-            <p className="mt-7 text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-              For the repair
-            </p>
-            <div className="mt-2 space-y-3">
-              {repairVisible.map(({ label, key }) => {
-                const isAction = ACTION_FIELDS.has(key);
-                return (
-                  <div
-                    key={key}
-                    className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
-                  >
-                    <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                      {label}
-                    </p>
-                    <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                      {aiOutput[key]}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {submittedRepairBranchActive && (
-          <div className="mt-7 rounded-card-sm bg-surface p-4 shadow-soft">
-            <p className="text-[13px] font-bold text-ink">
-              Now you write the opening line.
-            </p>
-            <p className="mt-1 text-[12px] font-medium leading-[1.45] text-ink-soft">
-              Write the first thing you would say. Then check it before you
-              send it.
-            </p>
-            <div className="mt-3">
-              <VoiceInput
-                key="review-opening-line"
-                value={openingLine}
-                onChange={setOpeningLine}
-                rows={5}
-                placeholder="The first thing you'd say to them…"
-              />
-            </div>
-            <button
-              onClick={handoffToBys}
-              disabled={!openingLine.trim()}
-              className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-brand text-[14px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-            >
-              Check this before I send it
-            </button>
-          </div>
-        )}
-
-        {reviewEntryId && !outcomeSaved && (
-          <div className="mt-6 rounded-card-sm bg-surface p-4 shadow-soft">
-            <p className="text-[13px] font-bold text-ink">
-              Rate this conversation
-            </p>
-            <p className="mt-1 text-[12px] font-medium text-ink-soft">
-              Optional — helps build your patterns over time.
-            </p>
-            <div className="mt-4 space-y-3">
-              {OUTCOME_QUESTIONS.map((q) => (
-                <div key={q.key}>
-                  <p className="text-[13px] font-semibold text-ink-soft">
-                    {q.title}
-                  </p>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {q.options.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() =>
-                          setOutcomeData((d) => ({
-                            ...d,
-                            [q.key]: opt.value,
-                          }))
-                        }
-                        className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition ${
-                          outcomeData[q.key] === opt.value
-                            ? "bg-brand text-white shadow-cta"
-                            : "bg-surface-tint text-ink"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {allOutcomeAnswered && (
               <button
-                onClick={submitOutcome}
-                className="mt-4 flex h-12 w-full items-center justify-center rounded-pill bg-brand-deep text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+                onClick={handoffToBys}
+                className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-brand text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
               >
-                Save outcome
+                Check this before I send it
               </button>
-            )}
-            {outcomeError && (
-              <p className="mt-2 text-[13px] font-medium text-danger">
-                Could not save outcome. Try again.
-              </p>
-            )}
-          </div>
-        )}
-
-        {outcomeSaved && (
-          <p className="mt-6 text-[13px] font-medium text-ink-soft">
-            Outcome saved.
-          </p>
-        )}
-
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
-          Done
-        </button>
-      </div>
-    );
+            </div>
+          ) : null}
+          <button
+            onClick={() => router.push("/coach")}
+            className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+          >
+            Done
+          </button>
+        </div>
+      );
+    }
   }
 
   if (savedMessage) {
@@ -703,216 +687,215 @@ export default function ReviewPage() {
         <div className="text-center">
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
-            Generating your review reflection…
+            Generating your reflection…
           </p>
         </div>
       </div>
     );
   }
 
-  // ============================================================
-  // Form
-  // ============================================================
-  return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <ReviewBackground />
-
-      <div className="flex items-center justify-between">
+  // --- Depth chooser ---
+  if (!reviewDepth) {
+    return (
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <ReviewBackground />
         <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
           Review
         </span>
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          {step + 1} / {STEPS.length}
-        </p>
-      </div>
-      <div className="mt-3">
-        <StepDots current={step} total={STEPS.length} />
-      </div>
-
-      <h2
-        className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
-        style={{ letterSpacing: "-0.5px" }}
-      >
-        {currentStep.title}
-      </h2>
-      {currentStep.prompt && (
+        <h2
+          className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          How <span className="italic">deep</span> do you want to go?
+        </h2>
         <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          {currentStep.prompt}
+          Quick if you just need a fast read. Full if it deserves the full
+          reflection.
         </p>
-      )}
 
-      <div className="mt-5">
-        {currentStep.kind === "person" ? (
-          <>
-            <PersonPicker
-              key={currentStep.key}
-              value={value}
-              onChange={(next) => setFieldValue(currentStep.key, next)}
-              onPersonSelect={(id) => {
-                setPersonId(id);
-                setThreadId(null);
-              }}
-              selectedPersonId={personId}
-            />
-            <ThreadPicker
-              personId={personId}
-              value={threadId}
-              onChange={setThreadId}
-            />
-          </>
-        ) : currentStep.kind === "select_ask" ? (
-          <div className="space-y-2">
-            {ASK_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  setFieldValue(currentStep.key, opt.value);
-                  setStep(step + 1);
-                }}
-                className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
-                  value === opt.value
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+        <button
+          onClick={() => setReviewDepth("quick")}
+          className="mt-6 block w-full rounded-card bg-surface p-5 text-left shadow-card transition active:scale-[0.99]"
+        >
+          <span className="inline-block rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
+            Recommended
+          </span>
+          <div
+            className="mt-2 font-display text-[22px] leading-[1.15] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Quick read.
           </div>
-        ) : currentStep.kind === "select_needs" ? (
-          <div className="space-y-2">
-            {NEEDS_NEXT_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  // Reset readiness if user changes needs-next, so a stale
-                  // pre-selection from a different path doesn't gate them
-                  // straight into the wrong branch.
-                  setData((d) => ({
-                    ...d,
-                    [currentStep.key]: opt.value,
-                    readiness: "",
-                  }));
-                  // Non-repair options terminate the flow here. Without
-                  // this branch the user would setStep(step+1) past the
-                  // end of STEPS (length stays at 9 when needsRepair is
-                  // false), and the currentStep fallback would re-render
-                  // this same screen with no submit path — a dead-end on
-                  // 4 of 8 options.
-                  if (REPAIR_TRIGGER_NEEDS.includes(opt.value)) {
-                    setStep(step + 1);
-                  } else {
-                    // setData above hasn't flushed yet — pass the picked
-                    // value through `override` so the POST body has it.
-                    handleSubmit({
-                      repairBranchActive: false,
-                      override: { needsToHappenNext: opt.value },
-                    });
-                  }
-                }}
-                className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
-                  value === opt.value
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.45] text-ink-soft">
+            ~2 min · 4 questions. No repair branch.
+          </p>
+        </button>
+
+        <button
+          onClick={() => setReviewDepth("full")}
+          className="mt-3 block w-full rounded-card bg-surface p-5 text-left shadow-card transition active:scale-[0.99]"
+        >
+          <div
+            className="font-display text-[22px] leading-[1.15] text-ink"
+            style={{ letterSpacing: "-0.5px" }}
+          >
+            Full reflection.
           </div>
-        ) : currentStep.kind === "select_readiness" ? (
-          <div className="space-y-2">
-            {READINESS_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  setFieldValue(currentStep.key, opt.value);
-                  if (opt.value === "no") {
-                    // Submit immediately without repair-branch fields.
-                    // Result screen will show the "come back when ready"
-                    // notice above the base 4 cards. `readiness` isn't on
-                    // the wire, but pass through `override` for symmetry
-                    // with select_needs in case the schema ever adds it.
-                    handleSubmit({
-                      repairBranchActive: false,
-                      override: { readiness: opt.value },
-                    });
-                    return;
-                  }
-                  // yes / somewhat: advance into repair sub-steps.
-                  setStep(step + 1);
-                }}
-                className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
-                  value === opt.value
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        ) : currentStep.kind === "textarea_two_column" ? (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <div>
-              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                What did you observe?
-              </p>
-              <VoiceInput
-                key="observedRaw"
-                value={data.observedRaw ?? ""}
-                onChange={(next) => setFieldValue("observedRaw", next)}
-                rows={4}
-                placeholder="Facts only — what was said, body, tone."
-              />
-            </div>
-            <div>
-              <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                What did you think it meant?
-              </p>
-              <VoiceInput
-                key="interpretedRaw"
-                value={data.interpretedRaw ?? ""}
-                onChange={(next) => setFieldValue("interpretedRaw", next)}
-                rows={4}
-                placeholder="Your interpretation — what you read into it."
-              />
-            </div>
-          </div>
-        ) : (
-          <VoiceInput
-            key={currentStep.key}
-            value={value}
-            onChange={(next) => setFieldValue(currentStep.key, next)}
-            rows={4}
-            placeholder="Type or tap the mic to speak..."
-          />
-        )}
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.45] text-ink-soft">
+            ~5 min · forecast calibration + optional repair branch.
+          </p>
+        </button>
       </div>
+    );
+  }
+
+  if (!currentPage) return null;
+
+  // --- Form ---
+  function renderStep(step: StepDef) {
+    if (step.kind === "person") {
+      return (
+        <PersonPicker
+          value={(data.personName as string | undefined) ?? ""}
+          onChange={(next) => setFieldValue("personName", next)}
+          onPersonSelect={(id) => {
+            setPersonId(id);
+            // New person → invalidate any pre-fetched linkage.
+            setLinkedPrepareEntryId(null);
+            setPrepareSnapshot(null);
+          }}
+          selectedPersonId={personId}
+        />
+      );
+    }
+    if (step.kind === "select" && step.key === "askBeforeUnderstanding") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <div className="space-y-2">
+          {ASK_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setFieldValue(step.key, opt.value)}
+              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
+                value === opt.value
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (step.kind === "textarea") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <VoiceInput
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          rows={4}
+          placeholder="Type or tap the mic to speak..."
+        />
+      );
+    }
+    if (step.kind === "textarea_two_column") {
+      const value = data[step.key] as TextareaTwoColumnValue | undefined;
+      return (
+        <TextareaTwoColumn
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          leftLabel="What did you observe?"
+          rightLabel="What did you think it meant?"
+          leftPlaceholder="Facts only — body, tone, exact words."
+          rightPlaceholder="Your interpretation."
+        />
+      );
+    }
+    if (step.kind === "select_needs_with_forecast") {
+      const value = data[step.key] as
+        | SelectNeedsWithForecastValue
+        | undefined;
+      return (
+        <SelectNeedsWithForecast
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+        />
+      );
+    }
+    if (step.kind === "select_protecting_with_optional_text") {
+      const value = data[step.key] as SelectProtectingValue | undefined;
+      return (
+        <SelectProtectingWithOptionalText
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+        />
+      );
+    }
+    if (step.kind === "select_calibration_chip") {
+      const value = data[step.key] as CalibrationBlockValue | undefined;
+      return (
+        <SelectCalibrationChip
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          chips={CALIBRATION_CHIPS}
+        />
+      );
+    }
+    if (step.kind === "select_repair_need") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <SelectRepairNeed
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+        />
+      );
+    }
+    if (step.kind === "timing_combo") {
+      const value = data[step.key] as TimingComboValue | undefined;
+      return (
+        <TimingCombo
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+        />
+      );
+    }
+    return null;
+  }
+
+  return (
+    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <ReviewBackground />
+      <CoachPage
+        eyebrow={reviewDepth === "quick" ? "Review · Quick" : "Review"}
+        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink"
+        pageIndex={pageIndex}
+        totalPages={totalPages}
+        page={currentPage}
+        state={data}
+        renderStep={renderStep}
+        pageTitle={null}
+      />
       {submitError && (
         <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
       )}
-
       <div className="mt-6 flex gap-3">
-        {step > 0 && (
+        {pageIndex > 0 && (
           <button
-            onClick={() => setStep(step - 1)}
+            onClick={handleBack}
             className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
           >
             Back
           </button>
         )}
-        {currentStep.kind !== "select_ask" &&
-          currentStep.kind !== "select_needs" &&
-          currentStep.kind !== "select_readiness" && (
-            <button
-              onClick={handleNext}
-              disabled={!canAdvance()}
-              className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-            >
-              {step === STEPS.length - 1 ? "Get Reflection" : "Next"}
-            </button>
-          )}
+        <button
+          onClick={handleNext}
+          disabled={!canAdvance()}
+          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+        >
+          {pageIndex === totalPages - 1 ? "Get Reflection" : "Next"}
+        </button>
       </div>
     </div>
   );
