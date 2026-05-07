@@ -63,8 +63,8 @@ export default async function CoachPage() {
         </p>
       </Link>
 
-      {/* Prepare + Review grid */}
-      <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+      {/* Prepare / Pulse Check / Review row */}
+      <div className="mt-3.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         <Link
           href="/coach/prepare"
           className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
@@ -83,6 +83,27 @@ export default async function CoachPage() {
           </h2>
           <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
             A conversation you need to plan.
+          </p>
+        </Link>
+
+        <Link
+          href="/coach/pulse-check"
+          className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
+          style={{
+            background: "linear-gradient(160deg, #34C8B0 0%, #128C7A 100%)",
+          }}
+        >
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
+            ~3 min · early read
+          </p>
+          <h2
+            className="mt-3 font-display text-[20px] leading-[1.1] text-white"
+            style={{ letterSpacing: "-0.4px" }}
+          >
+            Something <span className="italic">feels off</span>.
+          </h2>
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
+            Pulse Check before you act.
           </p>
         </Link>
 

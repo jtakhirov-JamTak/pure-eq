@@ -273,6 +273,32 @@ export async function runCoachModule<
     }
   }
 
+  // 8c. Optional pre-prompt enrichment hook. Lets a module augment its
+  // input with a server-side lookup (e.g. Review's linked_prepare_entry_id
+  // + Prepare snapshot prepend) before the prompt is built. Errors degrade
+  // to no-enrichment + cooldown-latched Sentry, NOT request failure. Same
+  // shape as the person-context fetch above.
+  let enrichedInput = input as TInput;
+  if (config.prePromptEnrich) {
+    try {
+      enrichedInput = await config.prePromptEnrich(
+        input as TInput,
+        supabase,
+        user.id,
+        effectivePersonId,
+      );
+    } catch (err) {
+      console.error(`${name}: prePromptEnrich failed`);
+      const now = Date.now();
+      if (now - lastPersonFetchCaptureAt >= PERSON_FETCH_CAPTURE_COOLDOWN_MS) {
+        lastPersonFetchCaptureAt = now;
+        Sentry.captureException(err, {
+          tags: { area: "coach", module: name, kind: "pre_prompt_enrich_failed" },
+        });
+      }
+    }
+  }
+
   // 9. Idempotency check.
   const { data: existingRaw, error: existingErr } = await supabase
     .from("raw_records")
@@ -289,7 +315,9 @@ export async function runCoachModule<
   // into payload_json) AND step 12 (the actual AI call). buildPrompt is
   // pure / cheap; building it before the idempotency branch keeps both
   // the new-row write path and the retry path on the same prompt object.
-  const prompt = config.buildPrompt(input as TInput, userProfile, {
+  // Passes `enrichedInput` (post-prePromptEnrich) so server-side lookups
+  // land in the prompt.
+  const prompt = config.buildPrompt(enrichedInput, userProfile, {
     personName,
     personRelationship,
   });
@@ -317,7 +345,7 @@ export async function runCoachModule<
     // Thread auto-create (write) stays inside idempotency guard.
     if (config.threadBehavior === "auto_create") {
       if (!effectiveThreadId && effectivePersonId && config.getThreadTitle) {
-        const title = config.getThreadTitle(input as TInput);
+        const title = config.getThreadTitle(enrichedInput);
         const { data: newThread, error: threadErr } = await supabase
           .from("conversation_threads")
           .insert({
@@ -349,7 +377,7 @@ export async function runCoachModule<
         module_type: name,
         source_session_id: idempotencyKey,
         payload_json: {
-          fields: config.buildPayloadFields(input as TInput),
+          fields: config.buildPayloadFields(enrichedInput),
           profile_used: userProfile,
           prompt_version: prompt.prompt_version ?? null,
         } as unknown as Json,
@@ -389,7 +417,7 @@ export async function runCoachModule<
     const derivedRow = {
       user_id: user.id,
       raw_record_id: rawRecordId,
-      ...config.buildDerivedInsert(input as TInput),
+      ...config.buildDerivedInsert(enrichedInput),
       [config.aiJsonColumn]: null,
       [config.aiVersionColumn]: null,
       is_complete: false,

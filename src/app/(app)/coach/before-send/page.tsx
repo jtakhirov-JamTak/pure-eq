@@ -41,6 +41,10 @@ type Prefill = {
   draftText?: string;
   messageType?: MessageType;
   sourceReviewEntryId?: string;
+  // Coach SOT 2026-05-06: Pulse Check `use_bys` chip stashes a check-in
+  // draft and tags the source so the banner copy can distinguish a
+  // pulse-check origin from a Review-repair origin.
+  sourcePulseCheckEntryId?: string;
   userId?: string;
   stashedAt?: number;
 };
@@ -123,6 +127,12 @@ export default function BeforeYouSendPage() {
   const [draftText, setDraftText] = useState("");
   const [messageType, setMessageType] = useState<MessageType>("conflict");
   const [intentOptional, setIntentOptional] = useState("");
+  const [riskContext, setRiskContext] = useState("");
+  // Banner copy variant — set when a fresh prefill loads. "repair" =
+  // Review handoff; "pulse_check" = Pulse Check use_bys chip; null = none.
+  const [prefillSource, setPrefillSource] = useState<
+    "repair" | "pulse_check" | null
+  >(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -168,6 +178,13 @@ export default function BeforeYouSendPage() {
       if (!data.user || data.user.id !== parsed.userId) return;
       if (parsed.draftText) setDraftText(parsed.draftText);
       if (parsed.messageType) setMessageType(parsed.messageType);
+      // Banner-source tagging — set after both the age + userId gates pass
+      // so a stale stash doesn't surface a banner with no payload.
+      if (parsed.sourcePulseCheckEntryId) {
+        setPrefillSource("pulse_check");
+      } else if (parsed.sourceReviewEntryId) {
+        setPrefillSource("repair");
+      }
     })();
     return () => {
       cancelled = true;
@@ -202,6 +219,7 @@ export default function BeforeYouSendPage() {
           draftText: textToCheck,
           messageType,
           intentOptional: intentOptional.trim() || null,
+          riskContext: riskContext.trim() || null,
           idempotencyKey,
         }),
       });
@@ -435,6 +453,32 @@ export default function BeforeYouSendPage() {
         This isn't a proofreader. It's a gut-check on how the other person
         will read it.
       </p>
+
+      {prefillSource && (
+        <div className="mt-5 rounded-card-sm bg-surface p-3 shadow-soft">
+          <p className="text-[12px] font-medium leading-[1.45] text-ink">
+            {prefillSource === "repair"
+              ? "From your Repair. Edit before checking."
+              : "From your Pulse Check. Edit before sending."}
+          </p>
+        </div>
+      )}
+
+      <div className="mt-5">
+        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+          What might make this land badly?{" "}
+          <span className="text-ink-muted">(optional)</span>
+        </p>
+        <div className="mt-2">
+          <VoiceInput
+            key="bys-risk-context"
+            value={riskContext}
+            onChange={setRiskContext}
+            rows={3}
+            placeholder="Pressure, blame, prior fight, their state today — anything you want the check to weigh."
+          />
+        </div>
+      </div>
 
       <div className="mt-5">
         <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
