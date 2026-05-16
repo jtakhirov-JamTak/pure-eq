@@ -481,6 +481,20 @@ export default function ReviewPage() {
           ]
         : [];
   const totalPages = PAGES.length;
+
+  // SOT 2026-05-08 fix2: clamp pageIndex when the user navigates back and
+  // changes the needs-to-happen-next chip in a way that drops the Repair
+  // pages out of PAGES. Without this clamp, pageIndex can point past
+  // totalPages-1 (e.g., user on repair_2 = index 5; chip flips from
+  // "apologize" to "nothing"; totalPages drops 8 → 5; currentPage becomes
+  // undefined; the form renders a blank page with no way forward). Runs
+  // synchronously inside render so the next paint already sees the clamp.
+  useEffect(() => {
+    if (totalPages > 0 && pageIndex > totalPages - 1) {
+      setPageIndex(totalPages - 1);
+    }
+  }, [totalPages, pageIndex]);
+
   const currentPage: PageDef | null = PAGES[pageIndex] ?? null;
 
   function setFieldValue(key: string, next: unknown) {

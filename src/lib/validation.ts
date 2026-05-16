@@ -120,6 +120,30 @@ export const THEIR_NEED_FIRST_VALUES = [
   "boundary",
 ] as const;
 
+/**
+ * Review calibration chip taxonomy (3 sub-enums). SOT 2026-05-08 — the
+ * Prepare → Review prediction loop. Each sub-enum scores one dimension
+ * of "did the forecast match reality?":
+ *   compare — was the conversation better/about_right/worse than predicted?
+ *   shift   — did the specific shift you asked for actually happen?
+ *   floor   — did you hit the good-enough outcome you set?
+ * Promoted from `SelectCalibrationChip` component (fix2). Schema now
+ * enforces the enums server-side so a direct API caller can't post
+ * arbitrary 40-char strings into `review_entries.calibration_block`.
+ */
+export const CALIBRATION_COMPARE_VALUES = [
+  "better",
+  "about_right",
+  "worse",
+] as const;
+export const CALIBRATION_SHIFT_VALUES = [
+  "yes",
+  "partial",
+  "no",
+  "too_soon",
+] as const;
+export const CALIBRATION_FLOOR_VALUES = ["yes", "mostly", "no"] as const;
+
 // ============================================================
 // Coach — Prepare (Coach SOT 2026-05-06)
 // ============================================================
@@ -275,9 +299,10 @@ export const createReviewSchema = z.object({
   linkedPrepareEntryId: z.string().uuid().nullable().optional(),
   calibrationBlock: z
     .object({
-      compare: z.string().min(1).max(40),
-      shift: z.string().min(1).max(40),
-      floor: z.string().min(1).max(40),
+      // SOT 2026-05-08 fix2: chip enums enforced server-side.
+      compare: z.enum(CALIBRATION_COMPARE_VALUES),
+      shift: z.enum(CALIBRATION_SHIFT_VALUES),
+      floor: z.enum(CALIBRATION_FLOOR_VALUES),
     })
     .nullable()
     .optional(),
@@ -375,15 +400,14 @@ export const createPulseCheckSchema = z
 
 /**
  * Review calibration block (3 chips, jsonb in DB). Stored as a structured
- * object; chip values are constrained to non-empty strings here. Specific
- * chip-id enums are page-side (Commit 5 — see review/page.tsx) so the
- * step component owns its label/value mapping; the schema layer only
- * guarantees the 3-field shape arrived intact.
+ * object; chip values are constrained to the SOT enums (fix2 — promoted
+ * from the component to enforce server-side). Each sub-enum scores a
+ * single forecast-vs-reality dimension.
  */
 export const calibrationBlockSchema = z.object({
-  compare: z.string().min(1).max(40),
-  shift: z.string().min(1).max(40),
-  floor: z.string().min(1).max(40),
+  compare: z.enum(CALIBRATION_COMPARE_VALUES),
+  shift: z.enum(CALIBRATION_SHIFT_VALUES),
+  floor: z.enum(CALIBRATION_FLOOR_VALUES),
 });
 
 // Tools after_feeling: must mirror the DB CHECK in

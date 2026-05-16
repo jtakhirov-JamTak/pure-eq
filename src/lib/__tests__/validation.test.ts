@@ -596,13 +596,46 @@ describe("calibrationBlockSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects an over-40-char value (shape-only guard)", () => {
+  it("rejects an off-enum value (fix2 — schema enforces server-side)", () => {
     const result = calibrationBlockSchema.safeParse({
-      compare: "x".repeat(41),
+      compare: "lolwut",
       shift: "yes",
       floor: "yes",
     });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts every SOT compare chip", () => {
+    for (const v of ["better", "about_right", "worse"] as const) {
+      const result = calibrationBlockSchema.safeParse({
+        compare: v,
+        shift: "yes",
+        floor: "yes",
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("accepts every SOT shift chip", () => {
+    for (const v of ["yes", "partial", "no", "too_soon"] as const) {
+      const result = calibrationBlockSchema.safeParse({
+        compare: "better",
+        shift: v,
+        floor: "yes",
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("accepts every SOT floor chip", () => {
+    for (const v of ["yes", "mostly", "no"] as const) {
+      const result = calibrationBlockSchema.safeParse({
+        compare: "better",
+        shift: "yes",
+        floor: v,
+      });
+      expect(result.success).toBe(true);
+    }
   });
 });
 

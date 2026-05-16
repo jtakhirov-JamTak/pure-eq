@@ -19,6 +19,11 @@
 "use client";
 
 import type { CalibrationChipSet } from "@/lib/coach/page-flow";
+import {
+  CALIBRATION_COMPARE_VALUES,
+  CALIBRATION_SHIFT_VALUES,
+  CALIBRATION_FLOOR_VALUES,
+} from "@/lib/validation";
 
 /**
  * Combined submit-time value. Constructed at the page level from three
@@ -31,32 +36,42 @@ export type CalibrationBlockValue = {
   floor: string;
 };
 
-const COMPARE_CHIPS = [
-  { value: "better", label: "Better than expected" },
-  { value: "about_right", label: "About right" },
-  { value: "worse", label: "Worse than expected" },
-] as const;
-
-const SHIFT_CHIPS = [
-  { value: "yes", label: "Yes" },
-  { value: "partial", label: "Partial" },
-  { value: "no", label: "No" },
-  { value: "too_soon", label: "Too soon to tell" },
-] as const;
-
-const FLOOR_CHIPS = [
-  { value: "yes", label: "Yes" },
-  { value: "mostly", label: "Mostly" },
-  { value: "no", label: "No" },
-] as const;
+// SOT 2026-05-08 fix2: chip VALUE enums live in validation.ts so the
+// server-side Zod schema and the client UI can't drift. Labels are
+// UI-only and stay here.
+const COMPARE_LABELS: Record<(typeof CALIBRATION_COMPARE_VALUES)[number], string> = {
+  better: "Better than expected",
+  about_right: "About right",
+  worse: "Worse than expected",
+};
+const SHIFT_LABELS: Record<(typeof CALIBRATION_SHIFT_VALUES)[number], string> = {
+  yes: "Yes",
+  partial: "Partial",
+  no: "No",
+  too_soon: "Too soon to tell",
+};
+const FLOOR_LABELS: Record<(typeof CALIBRATION_FLOOR_VALUES)[number], string> = {
+  yes: "Yes",
+  mostly: "Mostly",
+  no: "No",
+};
 
 const CHIPS_BY_SET: Record<
   CalibrationChipSet,
   readonly { value: string; label: string }[]
 > = {
-  compare: COMPARE_CHIPS,
-  shift: SHIFT_CHIPS,
-  floor: FLOOR_CHIPS,
+  compare: CALIBRATION_COMPARE_VALUES.map((v) => ({
+    value: v,
+    label: COMPARE_LABELS[v],
+  })),
+  shift: CALIBRATION_SHIFT_VALUES.map((v) => ({
+    value: v,
+    label: SHIFT_LABELS[v],
+  })),
+  floor: CALIBRATION_FLOOR_VALUES.map((v) => ({
+    value: v,
+    label: FLOOR_LABELS[v],
+  })),
 };
 
 type Props = {

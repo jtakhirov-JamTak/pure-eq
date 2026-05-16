@@ -4,7 +4,27 @@ import { reviewOutputSchema } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
 import { runCoachModule } from "@/lib/coach/run-module";
 import { findLinkedPrepareEntry } from "@/lib/coach/calibration";
+import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
 import type { CoachModuleConfig } from "@/lib/coach/types";
+
+/**
+ * Server-side authoritative derivation of repair-branch activation.
+ * The client posts `repairBranchActive` as a hint (the page's REPAIR_PAGES
+ * use the same predicate to render the 3 repair pages), but the server
+ * MUST NOT trust it — a malicious or buggy client could POST
+ * `{ repairBranchActive: true, needsToHappenNext: "set_boundary" }` and
+ * bypass REPAIR_TRIGGER_NEEDS otherwise. Computed once at the top of each
+ * buildX hook so all three (payload / insert / prompt) agree.
+ */
+function deriveRepairBranchActive(input: {
+  reviewDepth?: "quick" | "full";
+  needsToHappenNext?: (typeof REPAIR_TRIGGER_NEEDS)[number] | string | null;
+}): boolean {
+  if (input.reviewDepth !== "full") return false;
+  const chip = input.needsToHappenNext;
+  if (!chip) return false;
+  return (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(chip);
+}
 
 export const runtime = "nodejs";
 
@@ -77,7 +97,9 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     };
   },
 
-  buildPayloadFields: (input) => ({
+  buildPayloadFields: (input) => {
+    const repairBranchActive = deriveRepairBranchActive(input);
+    return ({
     reviewDepth: input.reviewDepth,
     whatHappened: input.whatHappened,
     observedRaw: input.observedRaw,
@@ -101,13 +123,18 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
     needsToHappenNext: input.needsToHappenNext ?? null,
     forecast: input.forecast ?? null,
-    repairBranchActive: input.repairBranchActive,
-    impactToName: input.impactToName ?? null,
-    theirNeedFirst: input.theirNeedFirst ?? null,
-    pressureVsCare: input.pressureVsCare ?? null,
-    timingWhen: input.timingWhen ?? null,
-    timingNow: input.timingNow ?? null,
-    firstRepairSentence: input.firstRepairSentence ?? null,
+    // SOT 2026-05-08 fix2: server-derived, ignores client value.
+    repairBranchActive,
+    // Null-out repair fields when not in the repair branch so a buggy/
+    // malicious client can't smuggle pre-canned repair content.
+    impactToName: repairBranchActive ? input.impactToName ?? null : null,
+    theirNeedFirst: repairBranchActive ? input.theirNeedFirst ?? null : null,
+    pressureVsCare: repairBranchActive ? input.pressureVsCare ?? null : null,
+    timingWhen: repairBranchActive ? input.timingWhen ?? null : null,
+    timingNow: repairBranchActive ? input.timingNow ?? null : null,
+    firstRepairSentence: repairBranchActive
+      ? input.firstRepairSentence ?? null
+      : null,
     yourPart: input.yourPart ?? null,
     linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
     calibrationBlock: input.calibrationBlock ?? null,
@@ -115,15 +142,15 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     lessonScreen: input.lessonScreen ?? null,
     whatElseExplains: input.whatElseExplains ?? null,
     whatReadMissed: input.whatReadMissed ?? null,
-  }),
+  });
+  },
 
   buildDerivedInsert: (input) => {
-    // SOT 2026-05-08 Commit 5: new SOT Qs land in their dedicated columns
-    // (most already added in 0036; felt_at_hardest_moment added in 0037).
-    // theirInMomentExperience writes to the existing `their_experience`
-    // column — 0037's comment revision documents the un-deprecation.
-    // lessonScreen.a/b/c split across lesson_about_them /
-    // lesson_about_self / lesson_differently (all in 0036).
+    // SOT 2026-05-08 fix2: repair_branch_active is server-derived, NOT
+    // taken from input.repairBranchActive. Repair-branch columns are
+    // forced null when the derived value is false so a client cannot
+    // smuggle repair content with a non-trigger chip.
+    const repairBranchActive = deriveRepairBranchActive(input);
     const insert: Record<string, unknown> = {
       review_depth: input.reviewDepth,
       what_happened: input.whatHappened,
@@ -147,17 +174,22 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       ask_before_understanding: input.askBeforeUnderstanding ?? null,
       needs_to_happen_next: input.needsToHappenNext ?? null,
       forecast: input.forecast ?? null,
-      repair_branch_active: input.repairBranchActive,
-      // SOT 2026-05-08 fix1: 5-Q repair swap (impactToName, theirNeedFirst,
-      // pressureVsCare, timingWhen, timingNow, firstRepairSentence). DB
-      // columns added in 0036; without this insert, every Repair submission
-      // landed only `repair_branch_active = true` and discarded the rest.
-      impact_to_name: input.impactToName ?? null,
-      their_need_first: input.theirNeedFirst ?? null,
-      pressure_vs_care: input.pressureVsCare ?? null,
-      timing_when: input.timingWhen ?? null,
-      timing_now: input.timingNow ?? null,
-      first_repair_sentence: input.firstRepairSentence ?? null,
+      repair_branch_active: repairBranchActive,
+      // SOT 2026-05-08 fix1+fix2: 5-Q repair swap, gated on the server-
+      // derived repairBranchActive so a client cannot persist repair
+      // content with a non-trigger chip.
+      impact_to_name: repairBranchActive ? input.impactToName ?? null : null,
+      their_need_first: repairBranchActive
+        ? input.theirNeedFirst ?? null
+        : null,
+      pressure_vs_care: repairBranchActive
+        ? input.pressureVsCare ?? null
+        : null,
+      timing_when: repairBranchActive ? input.timingWhen ?? null : null,
+      timing_now: repairBranchActive ? input.timingNow ?? null : null,
+      first_repair_sentence: repairBranchActive
+        ? input.firstRepairSentence ?? null
+        : null,
       your_part: input.yourPart ?? null,
       linked_prepare_entry_id: input.linkedPrepareEntryId ?? null,
       calibration_block: input.calibrationBlock ?? null,
@@ -172,8 +204,9 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     return insert;
   },
 
-  buildPrompt: (input, profile, context) =>
-    buildReviewPrompt({
+  buildPrompt: (input, profile, context) => {
+    const repairBranchActive = deriveRepairBranchActive(input);
+    return buildReviewPrompt({
       profile,
       personName: context.personName,
       personRelationship: context.personRelationship,
@@ -200,13 +233,14 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       whatYouAvoided: input.whatYouAvoided,
       askBeforeUnderstanding: input.askBeforeUnderstanding,
       needsToHappenNext: input.needsToHappenNext,
-      repairBranchActive: input.repairBranchActive,
+      repairBranchActive,
       yourPart: input.yourPart,
       linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
       prepareSnapshot: input.prepareSnapshotForPrompt ?? null,
       calibrationBlock: input.calibrationBlock ?? null,
       whatProtecting: input.whatProtecting ?? null,
-    }),
+    });
+  },
 
   buildResponseExtras: (derivedEntryId) => ({
     reviewEntryId: derivedEntryId,
