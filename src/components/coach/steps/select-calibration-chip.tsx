@@ -91,7 +91,7 @@ export function SelectCalibrationChip({ value, onChange, chipSet }: Props) {
             key={opt.value}
             type="button"
             onClick={() => onChange(opt.value)}
-            className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition active:scale-[0.99] ${
+            className={`flex min-h-11 items-center rounded-pill px-3.5 text-[13px] font-semibold transition active:scale-[0.99] ${
               isSelected
                 ? "bg-brand text-white shadow-cta"
                 : "bg-surface-tint text-ink"
