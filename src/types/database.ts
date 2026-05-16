@@ -852,6 +852,7 @@ export type Database = {
           signs_how_they_left: string | null
           something_that_helped: string | null
           their_experience: string | null
+          their_in_moment_experience: string | null
           their_need_first: string | null
           thread_id: string | null
           timing_now: boolean | null
@@ -910,6 +911,7 @@ export type Database = {
           signs_how_they_left?: string | null
           something_that_helped?: string | null
           their_experience?: string | null
+          their_in_moment_experience?: string | null
           their_need_first?: string | null
           thread_id?: string | null
           timing_now?: boolean | null
@@ -968,6 +970,7 @@ export type Database = {
           signs_how_they_left?: string | null
           something_that_helped?: string | null
           their_experience?: string | null
+          their_in_moment_experience?: string | null
           their_need_first?: string | null
           thread_id?: string | null
           timing_now?: boolean | null

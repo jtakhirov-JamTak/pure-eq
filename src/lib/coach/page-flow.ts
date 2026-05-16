@@ -72,6 +72,17 @@ export type StepDef = {
    */
   chipSet?: CalibrationChipSet;
   /**
+   * For object-valued steps (e.g. textarea_three_field_lesson), names the
+   * sub-fields that MUST be non-empty for advance. Other sub-fields are
+   * ignored (may be missing, null, or empty). If undefined, the default
+   * object check applies (every present sub-field must be non-empty —
+   * legacy behavior used by timing_combo and the text+body chip composite).
+   * SOT 2026-05-08 fix5 (#12) generalizes the hardcoded
+   * `kind === "textarea_three_field_lesson"` special-case previously in
+   * pageCanAdvance.
+   */
+  requiredSubFields?: readonly string[];
+  /**
    * Optional predicate: if returns false, the Q is hidden on the page.
    * The page renderer must also clear `state[q.key]` when this flips
    * from true → false to prevent stale data leaking into POST.
@@ -104,20 +115,27 @@ export function pageCanAdvance(
     if (typeof v === "string" && v.trim().length === 0) return false;
     if (Array.isArray(v) && v.length === 0) return false;
     if (typeof v === "object" && !Array.isArray(v)) {
-      // SOT 2026-05-08 Commit 5: lessonScreen uses textarea_three_field_lesson
-      // with the "first required, others optional" UX contract. Only `a`
-      // gates advance; `b` and `c` can be empty.
-      if (q.kind === "textarea_three_field_lesson") {
-        const obj = v as { a?: unknown; b?: unknown; c?: unknown };
-        const a = obj.a;
-        if (typeof a !== "string" || a.trim().length === 0) return false;
+      const obj = v as Record<string, unknown>;
+      // SOT 2026-05-08 fix5 (#12): when requiredSubFields is declared, ONLY
+      // those keys must be non-empty. Everything else is ignored. Used by
+      // lessonScreen ({ a: required, b: optional, c: optional }).
+      if (q.requiredSubFields !== undefined) {
+        for (const key of q.requiredSubFields) {
+          const child = obj[key];
+          if (typeof child === "string") {
+            if (child.trim().length === 0) return false;
+          } else if (typeof child === "boolean") {
+            // booleans count as present.
+          } else if (child == null) {
+            return false;
+          }
+        }
         continue;
       }
-      // Object kinds (timing_combo etc.) require all leaf string fields
-      // to be non-empty. Objects use a flat shape — { when: string,
-      // isNowThatMoment: boolean }; require `when` to be non-empty if
-      // present, ignore booleans.
-      const obj = v as Record<string, unknown>;
+      // Default: every present sub-field must be non-empty AND the object
+      // must have at least one non-empty value. Used by timing_combo
+      // ({ when: string, isNowThatMoment: boolean }) and the
+      // textarea_with_body_chip composite ({ text, bodyLocation }).
       let hasAny = false;
       for (const key of Object.keys(obj)) {
         const child = obj[key];

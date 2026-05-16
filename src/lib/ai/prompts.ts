@@ -210,6 +210,29 @@ PREPARE OPENER RULE:
   + relationship hint + emotion-as-data point at it).
 `;
 
+// REVIEW_FULL_CARD_DERIVATIONS — attached to the Review system prompt ONLY
+// when reviewDepth === "full" AND the relevant SOT inputs are present. Maps
+// the new SOT Full-Review Qs to the AI output cards they should feed. Named
+// const (vs inline-concat) so future card-mapping edits sit alongside the
+// other rule blocks (SHARED_RULES, ACTION_RULE, PREPARE_OPENER_RULE, etc.)
+// and stay grep-able. SOT 2026-05-08 fix5 (#16).
+const REVIEW_FULL_CARD_DERIVATIONS = `
+REVIEW FULL CARD DERIVATIONS (when these fields are present in the user block):
+- treat_as_data is the strongest input to alternative_explanation — name the
+  thing the user has been telling themselves wasn't really what the other
+  person meant.
+- easier_or_harder feeds impact_vs_intent — the user's specific move and its
+  likely effect on what the other person can do next.
+- signs_how_they_left feeds how_you_came_across — what the user's behavior
+  left in the other person's affective state.
+- something_that_helped is a secondary input to impact_vs_intent — when
+  populated, name what the user did that worked, even small.
+- turning_point feeds question_you_missed — the moment where the better-or-
+  worse pivot landed; the question that would have changed it.
+- Quick depth (reviewDepth = "quick") MUST NOT use these derivations — the
+  user only filled the 4 baseline Qs and is checking themselves quickly.
+`;
+
 // PULSE_CHECK_RULE — included only in the Pulse Check prompt. Pulse Check is
 // early-detection coaching, before the user has decided whether a
 // conversation is needed. The model must NOT recommend a major
@@ -660,6 +683,16 @@ Return 2–3 observations with verbatim quotes grounded in the entries above, OR
 // ============================================================
 // Review — discriminated union with optional repair-branch fields
 // ============================================================
+// SOT 2026-05-08 fix5 (#11) deferred: split this into buildReviewPromptQuick
+// + buildReviewPromptFull. Today the param surface is 35+ optional fields
+// and the body has 20+ `params.X ? `\nLine: ${X}` : ""` ternaries. Splitting
+// would let TypeScript enforce "Quick callers can't pass Full-only fields"
+// at compile time and would let each builder render only its own set of
+// lines. Kept deferred this PR because the SOT-compliance fix5 already
+// touches schema, route, validation, prompt, page-flow, page UI, migration,
+// component, and tests — a 200-line prompt refactor in the same commit
+// violates "no chaining refactors with bug fixes." Pick up in the next
+// AI-pipeline PR.
 export function buildReviewPrompt(params: {
   profile: ProfileType;
   whatHappened: string;
@@ -814,6 +847,7 @@ What part is yours to own: ${params.yourPart ?? ""}
 ${SHARED_RULES}
 ${ACTION_RULE}
 ${SAFETY_FLOOR}
+${isQuick ? "" : REVIEW_FULL_CARD_DERIVATIONS}
 ${repairBlock}
 
 OUTPUT SCHEMA (JSON object — one of two modes):
@@ -939,7 +973,7 @@ ${calibrationLine}${standaloneLine}${repairContext}"""
 Generate coaching feedback as the JSON object specified above.${
       isQuick
         ? " Quick depth — keep feedback tight; the user only filled the 4 baseline Qs and is checking themselves quickly. Do NOT speculate beyond what was provided."
-        : ` CARD DERIVATIONS for Full Review when these fields are present: treat_as_data is the strongest input to alternative_explanation (the thing they've been telling themselves wasn't really what the other person meant — name it). easier_or_harder feeds impact_vs_intent (their specific move and its likely effect on what the other person can do next). signs_how_they_left feeds how_you_came_across (what the user's behavior left in the other person's affective state). something_that_helped is a secondary input to impact_vs_intent (when populated, name what the user did that worked — even small). turning_point feeds question_you_missed (the moment where the better-or-worse pivot landed; the question that would have changed it).`
+        : " Apply the REVIEW FULL CARD DERIVATIONS guidance from the system instructions when the relevant fields are present."
     }`,
   };
 }

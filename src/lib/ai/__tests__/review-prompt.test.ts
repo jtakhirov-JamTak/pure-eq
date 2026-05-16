@@ -121,17 +121,20 @@ describe("buildReviewPrompt — SOT 2026-05-08 Full inputs", () => {
     expect(out.user).toContain("what they'd do differently:");
   });
 
-  it("attaches Full-Review card-derivation guidance to the trailing instruction", () => {
+  it("attaches REVIEW FULL CARD DERIVATIONS as a named system-prompt block on Full", () => {
     const out = buildReviewPrompt(sotFull);
-    expect(out.user).toContain("CARD DERIVATIONS");
-    expect(out.user).toContain("treat_as_data");
-    expect(out.user).toContain("alternative_explanation");
-    expect(out.user).toContain("easier_or_harder");
-    expect(out.user).toContain("impact_vs_intent");
-    expect(out.user).toContain("signs_how_they_left");
-    expect(out.user).toContain("how_you_came_across");
-    expect(out.user).toContain("turning_point");
-    expect(out.user).toContain("question_you_missed");
+    // SOT 2026-05-08 fix5 (#16): named system block, not inline user-tail.
+    expect(out.system).toContain("REVIEW FULL CARD DERIVATIONS");
+    expect(out.system).toContain("treat_as_data");
+    expect(out.system).toContain("alternative_explanation");
+    expect(out.system).toContain("easier_or_harder");
+    expect(out.system).toContain("impact_vs_intent");
+    expect(out.system).toContain("signs_how_they_left");
+    expect(out.system).toContain("how_you_came_across");
+    expect(out.system).toContain("turning_point");
+    expect(out.system).toContain("question_you_missed");
+    // User block references the system rule by name rather than re-listing it.
+    expect(out.user).toContain("REVIEW FULL CARD DERIVATIONS");
   });
 
   it("DOES NOT attach card-derivation guidance on Quick depth", () => {
@@ -139,7 +142,7 @@ describe("buildReviewPrompt — SOT 2026-05-08 Full inputs", () => {
       ...baseParams,
       reviewDepth: "quick",
     });
-    expect(out.user).not.toContain("CARD DERIVATIONS");
+    expect(out.system).not.toContain("REVIEW FULL CARD DERIVATIONS");
     expect(out.user).toContain("Quick depth");
   });
 });

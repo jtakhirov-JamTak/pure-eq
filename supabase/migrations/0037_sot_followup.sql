@@ -56,15 +56,33 @@ comment on column public.prepare_entries.trigger_plan is
 
 alter table public.review_entries
   add column if not exists felt_at_hardest_moment text;
+-- SOT 2026-05-08 fix5 (#13): dedicated column for theirInMomentExperience
+-- instead of re-purposing the 0036-deprecated their_experience column. The
+-- "un-deprecate" approach (writing new SOT semantics to a column whose
+-- 0036 comment said "deprecated") was a /history-readability bomb — readers
+-- in 6 months couldn't tell pre-0036 rows (real their_experience semantic)
+-- from post-fix5 rows (theirInMomentExperience semantic). Now they're
+-- distinct columns with unambiguous comments.
+alter table public.review_entries
+  add column if not exists their_in_moment_experience text;
 
 comment on column public.review_entries.felt_at_hardest_moment is
   'SOT 2026-05-08 follow-up. What the user felt at the hardest moment, paired with review_entries.body_location for the body chip. The legacy hardest_moment_feeling column stays nullable for /history reads; new posts write here.';
+comment on column public.review_entries.their_in_moment_experience is
+  'SOT 2026-05-08 follow-up fix5 (#13). What it might have felt like for the other person in that moment. SOT Page 4 Q. Distinct from the deprecated their_experience column (0036 had a wrong "replaced by lesson_about_them" mapping).';
 
 -- Revise the deprecation comment 0036 wrote on hardest_moment_feeling —
 -- the "replaced by feeling_tracking" mapping was wrong; SOT treats
 -- feeling_tracking as a separate Q.
 comment on column public.review_entries.hardest_moment_feeling is
   'DEPRECATED 2026-05-08 (Coach SOT follow-up). Replaced by felt_at_hardest_moment + body_location. 0036''s "replaced by feeling_tracking" mapping was a mis-read of the SOT — feeling_tracking is a separate Q ("Was the feeling tracking something real?"). Kept nullable for legacy /history reads.';
+
+-- their_experience: re-clarify it''s deprecated again. fix5 (#13) introduces
+-- a dedicated their_in_moment_experience column rather than re-purposing
+-- this one. This column predates the SOT entirely and historical rows have
+-- their own pre-SOT semantics.
+comment on column public.review_entries.their_experience is
+  'DEPRECATED 2026-05-08 (Coach SOT follow-up fix5). Pre-SOT semantic only — historical /history reads. New SOT writes go to their_in_moment_experience.';
 
 comment on column public.review_entries.feeling_tracking is
   'SOT 2026-05-08 follow-up. "Was the feeling tracking something real?" — was the felt experience signal pointing at something the user''s reasoning hadn''t surfaced yet, or noise. NOT a rename of hardest_moment_feeling (see felt_at_hardest_moment for that).';

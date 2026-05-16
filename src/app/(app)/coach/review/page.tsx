@@ -401,6 +401,10 @@ export default function ReviewPage() {
       title: "Lesson from this interaction",
       prompt: "Three fields. The first is required, the others are optional.",
       kind: "textarea_three_field_lesson",
+      // SOT 2026-05-08 fix5 (#12): generic required-sub-field declaration
+      // replaces a hardcoded `kind === "textarea_three_field_lesson"` branch
+      // in pageCanAdvance. Only `a` gates advance.
+      requiredSubFields: ["a"],
     },
   ];
   const sharedTail: StepDef[] = [

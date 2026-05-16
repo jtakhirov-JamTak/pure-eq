@@ -68,4 +68,39 @@ describe("pageCanAdvance", () => {
     expect(pageCanAdvance(page, { tags: [] })).toBe(false);
     expect(pageCanAdvance(page, { tags: ["x"] })).toBe(true);
   });
+
+  describe("requiredSubFields — SOT 2026-05-08 fix5 (#12)", () => {
+    const page: PageDef = {
+      pageKey: "p1",
+      qs: [
+        {
+          key: "lesson",
+          title: "",
+          prompt: null,
+          kind: "textarea_three_field_lesson",
+          requiredSubFields: ["a"],
+        },
+      ],
+    };
+
+    it("advances when the required sub-field is populated (any state of others)", () => {
+      expect(pageCanAdvance(page, { lesson: { a: "x" } })).toBe(true);
+      expect(pageCanAdvance(page, { lesson: { a: "x", b: "", c: "" } })).toBe(
+        true,
+      );
+      expect(
+        pageCanAdvance(page, { lesson: { a: "x", b: null, c: null } }),
+      ).toBe(true);
+      expect(
+        pageCanAdvance(page, { lesson: { a: "x", b: "y", c: "z" } }),
+      ).toBe(true);
+    });
+
+    it("blocks when the required sub-field is missing or empty", () => {
+      expect(pageCanAdvance(page, { lesson: {} })).toBe(false);
+      expect(pageCanAdvance(page, { lesson: { a: "" } })).toBe(false);
+      expect(pageCanAdvance(page, { lesson: { a: "  \n" } })).toBe(false);
+      expect(pageCanAdvance(page, { lesson: { b: "y", c: "z" } })).toBe(false);
+    });
+  });
 });

@@ -163,7 +163,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       easier_or_harder: input.easierOrHarder ?? null,
       treat_as_data: input.treatAsData ?? null,
       something_that_helped: input.somethingThatHelped ?? null,
-      their_experience: input.theirInMomentExperience ?? null,
+      their_in_moment_experience: input.theirInMomentExperience ?? null,
       signs_how_they_left: input.signsHowTheyLeft ?? null,
       turning_point: input.turningPoint ?? null,
       // Deprecated Full fields — historical rows keep their values; new
