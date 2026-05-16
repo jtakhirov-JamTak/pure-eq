@@ -49,7 +49,10 @@ type Input = z.infer<typeof createReviewSchema> & {
 };
 type AiOutput = z.infer<typeof reviewOutputSchema>;
 
-const config: CoachModuleConfig<Input, AiOutput> = {
+// Exported (SOT 2026-05-08 fix6, #14) so vitest round-trip tests can
+// directly call buildDerivedInsert / buildPayloadFields and catch column-
+// rename drift the schema-only tests miss.
+export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   moduleName: "review",
   requestSchema:
     requestSchema as unknown as CoachModuleConfig<Input, AiOutput>["requestSchema"],
@@ -248,5 +251,5 @@ const config: CoachModuleConfig<Input, AiOutput> = {
 };
 
 export async function POST(req: Request) {
-  return runCoachModule(req, config);
+  return runCoachModule(req, reviewModuleConfig);
 }
