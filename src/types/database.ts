@@ -823,6 +823,7 @@ export type Database = {
           deleted_at: string | null
           easier_or_harder: string | null
           feeling_tracking: string | null
+          felt_at_hardest_moment: string | null
           first_repair_sentence: string | null
           forecast: string | null
           hardest_moment_feeling: string | null
@@ -880,6 +881,7 @@ export type Database = {
           deleted_at?: string | null
           easier_or_harder?: string | null
           feeling_tracking?: string | null
+          felt_at_hardest_moment?: string | null
           first_repair_sentence?: string | null
           forecast?: string | null
           hardest_moment_feeling?: string | null
@@ -937,6 +939,7 @@ export type Database = {
           deleted_at?: string | null
           easier_or_harder?: string | null
           feeling_tracking?: string | null
+          felt_at_hardest_moment?: string | null
           first_repair_sentence?: string | null
           forecast?: string | null
           hardest_moment_feeling?: string | null

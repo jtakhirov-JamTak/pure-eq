@@ -13,6 +13,15 @@ import {
   type TextareaTwoColumnValue,
 } from "@/components/coach/steps/textarea-two-column";
 import {
+  TextareaWithBodyChip,
+  type TextareaWithBodyChipValue,
+} from "@/components/coach/steps/textarea-with-body-chip";
+import {
+  TextareaThreeFieldLesson,
+  type TextareaThreeFieldLessonValue,
+} from "@/components/coach/steps/textarea-three-field-lesson";
+import { BODY_LOCATION_VALUES } from "@/lib/validation";
+import {
   SelectNeedsWithForecast,
   type SelectNeedsWithForecastValue,
 } from "@/components/coach/steps/select-needs-with-forecast";
@@ -98,9 +107,17 @@ const REVIEW_QUICK_PAGES: PageDef[] = [
   },
 ];
 
+// SOT 2026-05-08 Commit 5: Full Review redesign — 4 base pages + dynamic
+// page 5 (calibration / standalone) + optional 3-page Repair branch.
+// Page 5 SHARES whatProtecting + lessonScreen + needsAndForecast across
+// both branches; only the middle 2-3 Qs vary (3 calibration chips when
+// linked, 2 alternative-explanation textareas when standalone).
+// Deprecated fields (observedInThem, whatYouAvoided, askBeforeUnderstanding,
+// hardestMomentFeeling) are no longer collected; legacy rows in /history
+// continue to read the columns nullable.
 const REVIEW_FULL_BASE_PAGES: PageDef[] = [
   {
-    pageKey: "full_1",
+    pageKey: "full_1_reality",
     qs: [
       {
         key: "personName",
@@ -108,89 +125,109 @@ const REVIEW_FULL_BASE_PAGES: PageDef[] = [
         prompt: "Start typing to see people you've mentioned before.",
         kind: "person",
       },
-    ],
-  },
-  {
-    pageKey: "full_2",
-    qs: [
       {
         key: "whatHappened",
-        title: "What actually happened?",
-        prompt: "Stick to facts.",
+        title: "What happened?",
+        prompt: "Stick to facts. What was said and done — not interpretations yet.",
         kind: "textarea",
       },
       {
         key: "observedInterpreted",
-        title: "Split what you saw from what you thought",
-        prompt: null,
+        title: "What did you observe vs. what did you think it meant?",
+        prompt: "Two columns. Left: what you saw or heard. Right: what you concluded.",
         kind: "textarea_two_column",
       },
-      {
-        key: "hardestMomentFeeling",
-        title: "What was the hardest moment, and what did you feel?",
-        prompt: null,
-        kind: "textarea",
-      },
     ],
   },
   {
-    pageKey: "full_3",
+    pageKey: "full_2_self",
     qs: [
+      {
+        key: "feltAtHardestMomentWithBody",
+        title: "What did you feel at the hardest moment, and where in your body?",
+        prompt: "Name the feeling, then point at where it sits.",
+        kind: "textarea_with_body_chip",
+      },
+      {
+        key: "feelingTracking",
+        title: "Was the feeling tracking something real?",
+        prompt:
+          "Sometimes the feeling is signal, sometimes noise. Was it tracking something your reasoning hadn't surfaced yet?",
+        kind: "textarea",
+      },
       {
         key: "whatYouDid",
-        title: "What did you do during the conversation?",
-        prompt: "Including the small moves you noticed yourself making.",
-        kind: "textarea",
-      },
-      {
-        key: "observedInThem",
-        title: "What did you observe in them — body, tone, words?",
-        prompt: null,
-        kind: "textarea",
-      },
-      {
-        key: "theirExperience",
-        title: "Looking back, what do you think their experience was?",
-        prompt: null,
-        kind: "textarea",
-      },
-      {
-        key: "whatYouAvoided",
-        title: "What did you avoid saying or doing?",
-        prompt: null,
+        title: "What did you do?",
+        prompt: "The actual move. Quote yourself if you can.",
         kind: "textarea",
       },
     ],
   },
   {
-    pageKey: "full_4",
+    pageKey: "full_3_impact",
     qs: [
       {
-        key: "askBeforeUnderstanding",
-        title: "Did you ask before assuming what was going on for them?",
-        prompt: null,
-        kind: "select",
+        key: "easierOrHarder",
+        title: "What did you make easier or harder for them to do next?",
+        prompt:
+          "Did you make it easier for them to be honest, repair, soften? Or harder? Be specific about which behavior of yours did it.",
+        kind: "textarea",
       },
       {
-        key: "needsAndForecast",
-        title: "What needs to happen next?",
-        prompt: "Pick the closest fit. Then forecast what you think will happen.",
-        kind: "select_needs_with_forecast",
+        key: "treatAsData",
+        title: "What did they tell you — directly or indirectly — that you need to treat as data?",
+        prompt:
+          "Words, tone, body, what they didn't say, what they kept coming back to. The thing you've been telling yourself wasn't really what they meant.",
+        kind: "textarea",
+      },
+      {
+        key: "somethingThatHelped",
+        title: "Was there any moment that helped, even slightly?",
+        prompt:
+          "Even small. A pause, a softening, a question they asked. Or: nothing helped — that's also data.",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "full_4_theirs",
+    qs: [
+      {
+        key: "theirInMomentExperience",
+        title: "What might it have felt like for them in that moment?",
+        prompt:
+          "Best guess at the felt experience for them. One emotion if you can.",
+        kind: "textarea",
+      },
+      {
+        key: "signsHowTheyLeft",
+        title: "What signs suggest how they may have felt leaving the interaction?",
+        prompt:
+          "Best guess grounded in what you observed — tone, what they said or didn't say, body, pace of leaving. Not pure speculation.",
+        kind: "textarea",
+      },
+      {
+        key: "turningPoint",
+        title: "What was the turning point — a specific sentence, pause, or tone shift where things got better or worse?",
+        prompt: "One moment. Could be when it improved, could be when it slipped.",
+        kind: "textarea",
       },
     ],
   },
   // Page 5 shape derives from linkedPrepareEntryId — see PAGES build below.
 ];
 
+// SOT 2026-05-08 Commit 5: Repair wording sharpened on Q1, Q3, Q4, Q5.
+// Q2 (theirNeedFirst) wording was correct — left alone.
 const REPAIR_PAGES: PageDef[] = [
   {
     pageKey: "repair_1",
     qs: [
       {
         key: "impactToName",
-        title: "Name the impact you can see now",
+        title: "What specific impact should you name before explaining intent?",
         prompt:
-          "What did this likely feel like for them? Specific, not generic.",
+          "Not 'I hurt them.' Specific: 'they probably felt dismissed and stopped trying to explain.'",
         kind: "textarea",
       },
       {
@@ -206,14 +243,14 @@ const REPAIR_PAGES: PageDef[] = [
     qs: [
       {
         key: "pressureVsCare",
-        title: "Where on the pressure / care line is your repair?",
+        title: "What would make this repair feel like pressure instead of care?",
         prompt:
-          "Honest — pressure leaks into repair more than people think. Name where this lands.",
+          "Be honest. The thing that, if you did it, would make them feel managed instead of met.",
         kind: "textarea",
       },
       {
         key: "timing",
-        title: "When could this land best?",
+        title: "When are they most likely to hear this — and is now that moment?",
         prompt: null,
         kind: "timing_combo",
       },
@@ -224,9 +261,9 @@ const REPAIR_PAGES: PageDef[] = [
     qs: [
       {
         key: "firstRepairSentence",
-        title: "Write the first sentence of the repair",
+        title: "What's the first repair sentence you'll actually use?",
         prompt:
-          "Just the opening line. The Before-Send check will catch what to cut.",
+          "The actual words. Say it out loud now. The Before-Send check will flag common repair-killers.",
         kind: "textarea",
       },
     ],
@@ -347,57 +384,81 @@ export default function ReviewPage() {
     };
   }, [personId, reviewDepth]);
 
-  // Build page-5 dynamically based on linked status.
-  // SOT 2026-05-08 Commit 3: calibration variant renders 3 separate Qs
-  // (compare/shift/floor) so each prediction-vs-outcome dimension lands
-  // as a full-size titled step. Submit logic combines the three string
-  // state keys into calibration_block: { compare, shift, floor } jsonb.
-  // Full Page 5 widening to share whatProtecting/lessonScreen/needsAndForecast
-  // across both branches lands in Commit 5.
-  const page5: PageDef = linkedPrepareEntryId
-    ? {
-        pageKey: "full_5_calibration",
-        qs: [
-          {
-            key: "calibrationCompare",
-            title: "How did this compare to what you predicted in Prepare?",
-            prompt: null,
-            kind: "select_calibration_chip",
-            chipSet: "compare",
-          },
-          {
-            key: "calibrationShift",
-            title: "Did the specific shift you asked for actually happen?",
-            prompt: null,
-            kind: "select_calibration_chip",
-            chipSet: "shift",
-          },
-          {
-            key: "calibrationFloor",
-            title: "Did you hit the good-enough outcome you set?",
-            prompt: null,
-            kind: "select_calibration_chip",
-            chipSet: "floor",
-          },
-        ],
-      }
-    : {
-        pageKey: "full_5_standalone",
-        qs: [
-          {
-            key: "whatProtecting",
-            title: "What were you protecting?",
-            prompt: null,
-            kind: "select_protecting_with_optional_text",
-          },
-          {
-            key: "whatYouLearned",
-            title: "What did you learn that you'll carry forward?",
-            prompt: "One specific takeaway, in your own words.",
-            kind: "textarea",
-          },
-        ],
-      };
+  // SOT 2026-05-08 Commit 5: Page 5 shares whatProtecting + lessonScreen +
+  // needsAndForecast across both branches. Only the middle 2-3 Qs vary —
+  // 3 calibration chips when a linked Prepare exists; 2 "what else could
+  // explain / what might my read have missed" textareas otherwise. Both
+  // branches close with the next-move + 5-7 day forecast Q.
+  const sharedHead: StepDef[] = [
+    {
+      key: "whatProtecting",
+      title: "What were you wanting or protecting that you didn't say out loud?",
+      prompt: "Pick the closest. Optional one-line after.",
+      kind: "select_protecting_with_optional_text",
+    },
+    {
+      key: "lessonScreen",
+      title: "Lesson from this interaction",
+      prompt: "Three fields. The first is required, the others are optional.",
+      kind: "textarea_three_field_lesson",
+    },
+  ];
+  const sharedTail: StepDef[] = [
+    {
+      key: "needsAndForecast",
+      title: "Next move + 5–7 day forecast",
+      prompt:
+        "Pick the closest, then say what you expect to be true 5–7 days from now.",
+      kind: "select_needs_with_forecast",
+    },
+  ];
+  const middleCalibration: StepDef[] = [
+    {
+      key: "calibrationCompare",
+      title: "How did this compare to what you predicted in Prepare?",
+      prompt: null,
+      kind: "select_calibration_chip",
+      chipSet: "compare",
+    },
+    {
+      key: "calibrationShift",
+      title: "Did the specific shift you asked for actually happen?",
+      prompt: null,
+      kind: "select_calibration_chip",
+      chipSet: "shift",
+    },
+    {
+      key: "calibrationFloor",
+      title: "Did you hit the good-enough outcome you set?",
+      prompt: null,
+      kind: "select_calibration_chip",
+      chipSet: "floor",
+    },
+  ];
+  const middleStandalone: StepDef[] = [
+    {
+      key: "whatElseExplains",
+      title: "What else could explain what happened?",
+      prompt:
+        "An explanation for their behavior or the outcome that you didn't consider in the moment. Not the optimistic one — the equally plausible one.",
+      kind: "textarea",
+    },
+    {
+      key: "whatReadMissed",
+      title: "What might your read of this have been missing?",
+      prompt:
+        "If a friend who knew both of you well watched this, what would they say you got wrong or under-weighted?",
+      kind: "textarea",
+    },
+  ];
+  const page5: PageDef = {
+    pageKey: linkedPrepareEntryId ? "full_5_calibration" : "full_5_standalone",
+    qs: [
+      ...sharedHead,
+      ...(linkedPrepareEntryId ? middleCalibration : middleStandalone),
+      ...sharedTail,
+    ],
+  };
 
   // Repair branch active when needsAndForecast.chip ∈ REPAIR_TRIGGER_NEEDS
   // AND we're on Full path. Quick path NEVER triggers repair.
@@ -471,30 +532,65 @@ export default function ReviewPage() {
       const timing = data.timing as TimingComboValue | undefined;
       const repairBranchActive = repairActive;
       setSubmittedRepairBranchActive(repairBranchActive);
+
+      // SOT 2026-05-08 Commit 5: Full Page 2 felt-at-hardest-moment step
+      // uses textarea_with_body_chip. Flatten into text + body chip at
+      // POST time. Quick never sets this — flatten safely to ""/undefined.
+      const feltAtHardest =
+        (data.feltAtHardestMomentWithBody as TextareaWithBodyChipValue | undefined) ??
+        { text: "", bodyLocation: "" };
+      const feltAtHardestText = feltAtHardest.text?.trim()
+        ? feltAtHardest.text
+        : undefined;
+      const reviewBodyLocation = feltAtHardest.bodyLocation
+        ? (feltAtHardest.bodyLocation as (typeof BODY_LOCATION_VALUES)[number])
+        : undefined;
+
+      // lessonScreen: 3-field block with first-required-others-optional
+      // contract. Empty optional sub-fields land as null in the schema
+      // shape so the DB columns stay nullable on the legacy path. Quick
+      // never sets this.
+      const lessonScreenRaw = data.lessonScreen as
+        | { a?: string; b?: string; c?: string }
+        | undefined;
+      const lessonScreenForBody =
+        lessonScreenRaw && lessonScreenRaw.a?.trim()
+          ? {
+              a: lessonScreenRaw.a,
+              b: lessonScreenRaw.b?.trim() ? lessonScreenRaw.b : null,
+              c: lessonScreenRaw.c?.trim() ? lessonScreenRaw.c : null,
+            }
+          : undefined;
+
       const body = {
         reviewDepth,
         personName: data.personName,
         whatHappened: data.whatHappened,
         observedRaw: observedInterpreted.left,
         interpretedRaw: observedInterpreted.right,
-        // hardestMomentFeeling: Quick no longer collects it (SOT 2026-05-08
-        // Commit 2). Full still does until Commit 5 replaces with
-        // feltAtHardestMoment. Omit when undefined so Zod .optional() passes.
-        hardestMomentFeeling: data.hardestMomentFeeling ?? undefined,
+        // Legacy hardestMomentFeeling: not collected post-SOT. Always omit;
+        // historical rows still render via /history.
+        // SOT 2026-05-08 Commit 5 — Full self-state + impact + theirs Qs.
+        feltAtHardestMoment: feltAtHardestText,
+        bodyLocation: reviewBodyLocation,
+        feelingTracking: (data.feelingTracking as string | undefined) ?? undefined,
         whatYouDid: data.whatYouDid ?? undefined,
-        observedInThem: data.observedInThem ?? undefined,
-        theirExperience: data.theirExperience ?? undefined,
-        whatYouAvoided: data.whatYouAvoided ?? undefined,
-        askBeforeUnderstanding: data.askBeforeUnderstanding ?? undefined,
+        easierOrHarder:
+          (data.easierOrHarder as string | undefined) ?? undefined,
+        treatAsData: (data.treatAsData as string | undefined) ?? undefined,
+        somethingThatHelped:
+          (data.somethingThatHelped as string | undefined) ?? undefined,
+        theirInMomentExperience:
+          (data.theirInMomentExperience as string | undefined) ?? undefined,
+        signsHowTheyLeft:
+          (data.signsHowTheyLeft as string | undefined) ?? undefined,
+        turningPoint: (data.turningPoint as string | undefined) ?? undefined,
         needsToHappenNext: needsForecast?.chip ?? undefined,
-        // Forecast text (5-7 day prediction companion to the chip). Stored
-        // in review_entries.forecast so a future Review can calibrate
-        // against it via linked_prepare_entry_id / calibration_block.
         forecast: needsForecast?.forecast?.trim()
           ? needsForecast.forecast
           : undefined,
         repairBranchActive,
-        // Repair-swap fields (Commit 6).
+        // Repair branch fields.
         impactToName: repairBranchActive ? data.impactToName : null,
         theirNeedFirst: repairBranchActive ? data.theirNeedFirst : null,
         pressureVsCare: repairBranchActive ? data.pressureVsCare : null,
@@ -503,11 +599,15 @@ export default function ReviewPage() {
         firstRepairSentence: repairBranchActive
           ? data.firstRepairSentence
           : null,
-        // Page 5
+        // Page 5 — shared head + variant middle + shared tail.
         linkedPrepareEntryId: linkedPrepareEntryId,
         calibrationBlock: calibration ?? null,
         whatProtecting: protectingValue ?? null,
-        whatYouLearned: data.whatYouLearned ?? null,
+        lessonScreen: lessonScreenForBody ?? null,
+        whatElseExplains:
+          (data.whatElseExplains as string | undefined) ?? undefined,
+        whatReadMissed:
+          (data.whatReadMissed as string | undefined) ?? undefined,
         personId: personId || null,
         idempotencyKey: idempotencyKeyRef.current,
       };
@@ -821,6 +921,31 @@ export default function ReviewPage() {
             </button>
           ))}
         </div>
+      );
+    }
+    if (step.kind === "textarea_with_body_chip") {
+      const value = data[step.key] as TextareaWithBodyChipValue | undefined;
+      return (
+        <TextareaWithBodyChip
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          chipValues={BODY_LOCATION_VALUES}
+        />
+      );
+    }
+    if (step.kind === "textarea_three_field_lesson") {
+      const value = data[step.key] as TextareaThreeFieldLessonValue | undefined;
+      return (
+        <TextareaThreeFieldLesson
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          labelA="The lesson — required"
+          labelB="What you'd do differently next time — optional"
+          labelC="What you'd carry forward — optional"
+          placeholderA="One specific takeaway, in your own words."
+          placeholderB="The behavior swap, named concretely."
+          placeholderC="A principle, framing, or move worth keeping."
+        />
       );
     }
     if (step.kind === "textarea") {

@@ -224,9 +224,42 @@ export const createReviewSchema = z.object({
   observedRaw: z.string().min(1).max(2000),
   interpretedRaw: z.string().min(1).max(2000),
   // SOT 2026-05-08: Quick no longer collects hardestMomentFeeling; Full
-  // replaces it with feltAtHardestMoment (Commit 5). Made optional here so
-  // Quick can omit. Historical rows continue to read the legacy column.
+  // replaces it with feltAtHardestMoment + body chip + a separate
+  // feelingTracking Q ("Was the feeling tracking something real?").
+  // Legacy column kept nullable for /history reads.
   hardestMomentFeeling: z.string().min(1).max(5000).optional(),
+  // SOT 2026-05-08 Commit 5: 8 new Full-Review Qs (felt-at-hardest-moment
+  // text + body, feeling-tracking, easier-or-harder, treat-as-data,
+  // something-that-helped, their-in-moment-experience, signs-how-they-
+  // left, turning-point). Schema fields are optional + nullable so Quick
+  // can omit them entirely; Full posts populate. Empty strings rejected
+  // (`.min(1)`) so the page-canAdvance contract holds at the API boundary.
+  feltAtHardestMoment: z.string().min(1).max(5000).nullable().optional(),
+  feelingTracking: z.string().min(1).max(5000).nullable().optional(),
+  easierOrHarder: z.string().min(1).max(5000).nullable().optional(),
+  treatAsData: z.string().min(1).max(5000).nullable().optional(),
+  somethingThatHelped: z.string().min(1).max(5000).nullable().optional(),
+  theirInMomentExperience: z.string().min(1).max(5000).nullable().optional(),
+  signsHowTheyLeft: z.string().min(1).max(5000).nullable().optional(),
+  turningPoint: z.string().min(1).max(5000).nullable().optional(),
+  // SOT 2026-05-08 Commit 5: Page 5 standalone branch (renders when no
+  // linkedPrepareEntryId). 2 textarea Qs that replace whatYouLearned.
+  whatElseExplains: z.string().min(1).max(5000).nullable().optional(),
+  whatReadMissed: z.string().min(1).max(5000).nullable().optional(),
+  // Body chip paired with feltAtHardestMoment. Same 8-chip enum as
+  // Prepare (no fuzzy_cant_tell — that's Pulse Check only).
+  bodyLocation: z.enum(BODY_LOCATION_VALUES).nullable().optional(),
+  // Page-5 shared fields (both calibration and standalone branches).
+  // lessonScreen is a 3-field block; first sub-field required, others
+  // optional (pageCanAdvance special-cases textarea_three_field_lesson).
+  lessonScreen: z
+    .object({
+      a: z.string().min(1).max(2000),
+      b: z.string().max(2000).nullable().optional(),
+      c: z.string().max(2000).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
   // Both depths now collect needsAndForecast: Quick needs it for the
   // calibration loop to have a forecast to score against later; Full
   // already had it. `forecast` carries the free-text prediction companion

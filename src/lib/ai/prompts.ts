@@ -706,6 +706,30 @@ export function buildReviewPrompt(params: {
   } | null;
   calibrationBlock?: { compare: string; shift: string; floor: string } | null;
   whatProtecting?: { chip: string; text?: string | null } | null;
+  // SOT 2026-05-08 Commit 5 — new Full Review inputs. All nullable so Quick
+  // can omit and legacy callers (tests / pre-SOT routes) stay compatible.
+  // Card derivations (system prompt instruction at the bottom):
+  //   treat_as_data         → strongest input to alternative_explanation
+  //   easier_or_harder      → input to impact_vs_intent
+  //   signs_how_they_left   → input to how_you_came_across
+  //   something_that_helped → secondary input to impact_vs_intent
+  //   turning_point         → input to question_you_missed
+  feltAtHardestMoment?: string | null;
+  bodyLocation?: string | null;
+  feelingTracking?: string | null;
+  easierOrHarder?: string | null;
+  treatAsData?: string | null;
+  somethingThatHelped?: string | null;
+  theirInMomentExperience?: string | null;
+  signsHowTheyLeft?: string | null;
+  turningPoint?: string | null;
+  whatElseExplains?: string | null;
+  whatReadMissed?: string | null;
+  lessonScreen?: {
+    a: string;
+    b?: string | null;
+    c?: string | null;
+  } | null;
 }) {
   // run-module's persons fetch always selects both columns from the same
   // row — they're either both populated or both null. No name-only or
@@ -866,13 +890,61 @@ What they thought it meant (their interpretation): ${params.interpretedRaw}${
       params.needsToHappenNext
         ? `\nWhat needs to happen next: ${params.needsToHappenNext}`
         : ""
+    }${
+      params.feltAtHardestMoment
+        ? `\nWhat they felt at the hardest moment (body: ${params.bodyLocation ?? "(not specified)"}): ${params.feltAtHardestMoment}`
+        : ""
+    }${
+      params.feelingTracking
+        ? `\nWas the feeling tracking something real (signal vs noise): ${params.feelingTracking}`
+        : ""
+    }${
+      params.easierOrHarder
+        ? `\nWhat they made easier or harder for the other person to do next: ${params.easierOrHarder}`
+        : ""
+    }${
+      params.treatAsData
+        ? `\nWhat the other person told them directly or indirectly that should be treated as data: ${params.treatAsData}`
+        : ""
+    }${
+      params.somethingThatHelped
+        ? `\nMoment that helped, even slightly (or "nothing helped" as data): ${params.somethingThatHelped}`
+        : ""
+    }${
+      params.theirInMomentExperience
+        ? `\nWhat it might have felt like for the other person in that moment: ${params.theirInMomentExperience}`
+        : ""
+    }${
+      params.signsHowTheyLeft
+        ? `\nSigns suggesting how they may have felt leaving the interaction: ${params.signsHowTheyLeft}`
+        : ""
+    }${
+      params.turningPoint
+        ? `\nTurning point — specific sentence/pause/tone shift where things got better or worse: ${params.turningPoint}`
+        : ""
+    }${
+      params.whatElseExplains
+        ? `\nWhat else could explain what happened (equally plausible, not optimistic): ${params.whatElseExplains}`
+        : ""
+    }${
+      params.whatReadMissed
+        ? `\nWhat their read might have been missing: ${params.whatReadMissed}`
+        : ""
+    }${
+      params.lessonScreen
+        ? `\nLesson from this interaction: ${params.lessonScreen.a}${
+            params.lessonScreen.b ? ` | what they'd do differently: ${params.lessonScreen.b}` : ""
+          }${
+            params.lessonScreen.c ? ` | what they'll carry forward: ${params.lessonScreen.c}` : ""
+          }`
+        : ""
     }
 ${calibrationLine}${standaloneLine}${repairContext}"""
 
 Generate coaching feedback as the JSON object specified above.${
       isQuick
         ? " Quick depth — keep feedback tight; the user only filled the 4 baseline Qs and is checking themselves quickly. Do NOT speculate beyond what was provided."
-        : ""
+        : ` CARD DERIVATIONS for Full Review when these fields are present: treat_as_data is the strongest input to alternative_explanation (the thing they've been telling themselves wasn't really what the other person meant — name it). easier_or_harder feeds impact_vs_intent (their specific move and its likely effect on what the other person can do next). signs_how_they_left feeds how_you_came_across (what the user's behavior left in the other person's affective state). something_that_helped is a secondary input to impact_vs_intent (when populated, name what the user did that worked — even small). turning_point feeds question_you_missed (the moment where the better-or-worse pivot landed; the question that would have changed it).`
     }`,
   };
 }

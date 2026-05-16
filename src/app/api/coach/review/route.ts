@@ -43,10 +43,16 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "review_entry_id",
   aiJsonColumn: "ai_reflection_json",
   aiVersionColumn: "ai_reflection_version",
-  // 2026-05-07: bump 7 → 8 alongside PROMPT_VERSION 4.5.0 → 5.0.0 and the
-  // SOT migration. Distinguishes Quick/Full split + calibration prepend +
-  // standalone branch + repair-swap (Commit 6) from pre-SOT 7-rows.
-  aiVersionValue: 8,
+  // 2026-05-08 Commit 5: bump 8 → 9 alongside PROMPT_VERSION 5.0.0 → 5.1.0
+  // and the Review Full SOT overhaul (8 new Qs on Full, lessonScreen 3-
+  // field, shared Page-5 head/tail, deprecated-Q removal, repair-branch
+  // wording fix). Distinguishes Commit-5 rows from 0036-shape rows
+  // (aiVersionValue 8). felt_at_hardest_moment + body_location +
+  // feeling_tracking + easier_or_harder + treat_as_data +
+  // something_that_helped + signs_how_they_left + turning_point +
+  // what_else_explains + what_read_missed + lesson_about_them /
+  // lesson_about_self / lesson_differently now persist on Full.
+  aiVersionValue: 9,
 
   // Server-side authoritative lookup for the Prepare → Review link. Runs
   // for Full reviews only (Quick path skips calibration entirely). Failure
@@ -76,10 +82,21 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     whatHappened: input.whatHappened,
     observedRaw: input.observedRaw,
     interpretedRaw: input.interpretedRaw,
-    hardestMomentFeeling: input.hardestMomentFeeling ?? null,
+    // SOT 2026-05-08 Commit 5: Full self-state + impact + theirs Qs.
+    feltAtHardestMoment: input.feltAtHardestMoment ?? null,
+    bodyLocation: input.bodyLocation ?? null,
+    feelingTracking: input.feelingTracking ?? null,
     whatYouDid: input.whatYouDid ?? null,
+    easierOrHarder: input.easierOrHarder ?? null,
+    treatAsData: input.treatAsData ?? null,
+    somethingThatHelped: input.somethingThatHelped ?? null,
+    theirInMomentExperience: input.theirInMomentExperience ?? null,
+    signsHowTheyLeft: input.signsHowTheyLeft ?? null,
+    turningPoint: input.turningPoint ?? null,
+    // Deprecated Full fields no longer collected — historical rows keep
+    // these populated. New posts write null.
+    hardestMomentFeeling: input.hardestMomentFeeling ?? null,
     observedInThem: input.observedInThem ?? null,
-    theirExperience: input.theirExperience ?? null,
     whatYouAvoided: input.whatYouAvoided ?? null,
     askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
     needsToHappenNext: input.needsToHappenNext ?? null,
@@ -89,23 +106,37 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
     calibrationBlock: input.calibrationBlock ?? null,
     whatProtecting: input.whatProtecting ?? null,
-    whatYouLearned: input.whatYouLearned ?? null,
+    lessonScreen: input.lessonScreen ?? null,
+    whatElseExplains: input.whatElseExplains ?? null,
+    whatReadMissed: input.whatReadMissed ?? null,
   }),
 
   buildDerivedInsert: (input) => {
-    // forecast lives on whatProtecting? No — forecast = optional companion
-    // on needsToHappenNext (select_needs_with_forecast). The schema models
-    // it as `forecast` future-field; here we pass through whatever the
-    // client sent. Old field names retained for back-compat.
+    // SOT 2026-05-08 Commit 5: new SOT Qs land in their dedicated columns
+    // (most already added in 0036; felt_at_hardest_moment added in 0037).
+    // theirInMomentExperience writes to the existing `their_experience`
+    // column — 0037's comment revision documents the un-deprecation.
+    // lessonScreen.a/b/c split across lesson_about_them /
+    // lesson_about_self / lesson_differently (all in 0036).
     const insert: Record<string, unknown> = {
       review_depth: input.reviewDepth,
       what_happened: input.whatHappened,
       observed_raw: input.observedRaw,
       interpreted_raw: input.interpretedRaw,
-      hardest_moment_feeling: input.hardestMomentFeeling ?? null,
+      felt_at_hardest_moment: input.feltAtHardestMoment ?? null,
+      body_location: input.bodyLocation ?? null,
+      feeling_tracking: input.feelingTracking ?? null,
       what_you_did: input.whatYouDid ?? null,
+      easier_or_harder: input.easierOrHarder ?? null,
+      treat_as_data: input.treatAsData ?? null,
+      something_that_helped: input.somethingThatHelped ?? null,
+      their_experience: input.theirInMomentExperience ?? null,
+      signs_how_they_left: input.signsHowTheyLeft ?? null,
+      turning_point: input.turningPoint ?? null,
+      // Deprecated Full fields — historical rows keep their values; new
+      // posts write null. Columns stay for /history reads on legacy rows.
+      hardest_moment_feeling: input.hardestMomentFeeling ?? null,
       observed_in_them: input.observedInThem ?? null,
-      their_experience: input.theirExperience ?? null,
       what_you_avoided: input.whatYouAvoided ?? null,
       ask_before_understanding: input.askBeforeUnderstanding ?? null,
       needs_to_happen_next: input.needsToHappenNext ?? null,
@@ -116,6 +147,11 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       calibration_block: input.calibrationBlock ?? null,
       what_protecting: input.whatProtecting?.chip ?? null,
       what_protecting_text: input.whatProtecting?.text ?? null,
+      lesson_about_them: input.lessonScreen?.a ?? null,
+      lesson_about_self: input.lessonScreen?.b ?? null,
+      lesson_differently: input.lessonScreen?.c ?? null,
+      what_else_explains: input.whatElseExplains ?? null,
+      what_read_missed: input.whatReadMissed ?? null,
     };
     return insert;
   },
@@ -130,6 +166,19 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       observedRaw: input.observedRaw,
       interpretedRaw: input.interpretedRaw,
       hardestMomentFeeling: input.hardestMomentFeeling,
+      // SOT 2026-05-08 Commit 5 — new SOT inputs.
+      feltAtHardestMoment: input.feltAtHardestMoment ?? null,
+      bodyLocation: input.bodyLocation ?? null,
+      feelingTracking: input.feelingTracking ?? null,
+      easierOrHarder: input.easierOrHarder ?? null,
+      treatAsData: input.treatAsData ?? null,
+      somethingThatHelped: input.somethingThatHelped ?? null,
+      theirInMomentExperience: input.theirInMomentExperience ?? null,
+      signsHowTheyLeft: input.signsHowTheyLeft ?? null,
+      turningPoint: input.turningPoint ?? null,
+      whatElseExplains: input.whatElseExplains ?? null,
+      whatReadMissed: input.whatReadMissed ?? null,
+      lessonScreen: input.lessonScreen ?? null,
       whatYouDid: input.whatYouDid,
       observedInThem: input.observedInThem,
       theirExperience: input.theirExperience,

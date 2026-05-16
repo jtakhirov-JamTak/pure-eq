@@ -104,6 +104,15 @@ export function pageCanAdvance(
     if (typeof v === "string" && v.trim().length === 0) return false;
     if (Array.isArray(v) && v.length === 0) return false;
     if (typeof v === "object" && !Array.isArray(v)) {
+      // SOT 2026-05-08 Commit 5: lessonScreen uses textarea_three_field_lesson
+      // with the "first required, others optional" UX contract. Only `a`
+      // gates advance; `b` and `c` can be empty.
+      if (q.kind === "textarea_three_field_lesson") {
+        const obj = v as { a?: unknown; b?: unknown; c?: unknown };
+        const a = obj.a;
+        if (typeof a !== "string" || a.trim().length === 0) return false;
+        continue;
+      }
       // Object kinds (timing_combo etc.) require all leaf string fields
       // to be non-empty. Objects use a flat shape — { when: string,
       // isNowThatMoment: boolean }; require `when` to be non-empty if

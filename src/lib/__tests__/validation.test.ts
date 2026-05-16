@@ -381,6 +381,103 @@ describe("createPulseCheckSchema", () => {
 });
 
 // ============================================================
+// Review Full shape — SOT 2026-05-08 Commit 5
+// ============================================================
+describe("createReviewSchema — Full SOT shape", () => {
+  const validFullBase = {
+    reviewDepth: "full" as const,
+    whatHappened: "We argued about how the weekend got planned.",
+    observedRaw: "They paused for a long time, then looked at the floor.",
+    interpretedRaw: "I read that as them giving up on me explaining.",
+    feltAtHardestMoment: "Pinned. Like the floor moved.",
+    bodyLocation: "chest" as const,
+    feelingTracking: "Yes — they'd already been pulling away.",
+    whatYouDid: "Kept arguing my point instead of pausing.",
+    easierOrHarder: "Made it harder for them to bring this up later.",
+    treatAsData: "The pause after 'I don't know what you want' was real.",
+    somethingThatHelped: "When I asked what they actually needed.",
+    theirInMomentExperience: "Cornered. Trying not to escalate.",
+    signsHowTheyLeft: "Closed laptop, no eye contact.",
+    turningPoint: "When I said 'fine, forget it' — tone hardened then.",
+    lessonScreen: {
+      a: "Push doesn't surface info, it freezes it.",
+      b: "Ask what they need before naming what I see.",
+      c: null,
+    },
+    needsToHappenNext: "clarify" as const,
+    forecast: "If we don't revisit by Wednesday, they'll bring it up sharper.",
+    whatProtecting: { chip: "image" as const, text: null },
+    repairBranchActive: false,
+  };
+
+  it("accepts a Full payload with all 9 new SOT fields", () => {
+    const result = createReviewSchema.safeParse(validFullBase);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a lessonScreen with all 3 sub-fields populated", () => {
+    const result = createReviewSchema.safeParse({
+      ...validFullBase,
+      lessonScreen: {
+        a: "Push freezes info.",
+        b: "Ask first.",
+        c: "Carry: pause before naming.",
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a lessonScreen missing required `a`", () => {
+    const result = createReviewSchema.safeParse({
+      ...validFullBase,
+      lessonScreen: { b: "Optional.", c: "Optional." } as unknown as {
+        a: string;
+      },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty lessonScreen.a", () => {
+    const result = createReviewSchema.safeParse({
+      ...validFullBase,
+      lessonScreen: { a: "", b: null, c: null },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a Full payload with the standalone-branch fields (no calibration)", () => {
+    const { lessonScreen: _ls, ...minus } = validFullBase;
+    const result = createReviewSchema.safeParse({
+      ...minus,
+      lessonScreen: validFullBase.lessonScreen,
+      whatElseExplains: "They may have just had a long day at work.",
+      whatReadMissed: "I assumed their quiet was about me — could be exhaustion.",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown Review bodyLocation chip", () => {
+    const result = createReviewSchema.safeParse({
+      ...validFullBase,
+      bodyLocation: "fuzzy_cant_tell",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a Full payload that still carries deprecated fields (historical-row compat)", () => {
+    const result = createReviewSchema.safeParse({
+      ...validFullBase,
+      hardestMomentFeeling: "shut down",
+      observedInThem: "raised voice",
+      theirExperience: "felt unheard",
+      whatYouAvoided: "naming I needed a break",
+      askBeforeUnderstanding: "no",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+// ============================================================
 // Calibration block — SOT 2026-05-08 Commit 3
 // ============================================================
 // Storage shape is { compare, shift, floor } jsonb. Schema validates
