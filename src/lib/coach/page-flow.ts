@@ -52,11 +52,25 @@ export type StepKind =
   | "timing_combo"
   | "select_calibration_chip";
 
+/**
+ * Calibration chip set selector — picks which of the 3 SOT chip groups
+ * a `select_calibration_chip` step renders. Each instance renders ONE
+ * chip row + the SOT enums for that row. Page-5-calibration on Full
+ * Review uses three separate StepDefs (compare/shift/floor) so each Q
+ * gets its own title + prompt, and the submit handler combines the three
+ * string state values into `calibration_block: { compare, shift, floor }`.
+ */
+export type CalibrationChipSet = "compare" | "shift" | "floor";
+
 export type StepDef = {
   key: string;
   title: string;
   prompt: string | null;
   kind: StepKind;
+  /**
+   * Required when `kind === "select_calibration_chip"`; ignored otherwise.
+   */
+  chipSet?: CalibrationChipSet;
   /**
    * Optional predicate: if returns false, the Q is hidden on the page.
    * The page renderer must also clear `state[q.key]` when this flips

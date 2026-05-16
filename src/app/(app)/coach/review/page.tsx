@@ -39,30 +39,14 @@ import { safeUUID } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { PrepareSnapshot } from "@/lib/coach/calibration";
 
-// Coach SOT 2026-05-06: calibration chip enums live page-side (the schema
-// only validates non-empty 3-field shape). Future iterations may swap the
-// chip labels/values; refactor into a constants module if a second page
-// consumes them.
-const CALIBRATION_CHIPS = {
-  compare: [
-    { value: "matched", label: "Matched my forecast" },
-    { value: "off_softer", label: "Softer than I forecast" },
-    { value: "off_harder", label: "Harder than I forecast" },
-    { value: "different_topic", label: "Different topic surfaced" },
-  ],
-  shift: [
-    { value: "i_softened", label: "I softened first" },
-    { value: "they_opened", label: "They opened first" },
-    { value: "we_pivoted", label: "We pivoted to a new frame" },
-    { value: "stuck", label: "We stayed stuck" },
-  ],
-  floor: [
-    { value: "named_it", label: "I named it" },
-    { value: "stayed_present", label: "I stayed present" },
-    { value: "didnt_make_worse", label: "I didn't make it worse" },
-    { value: "no_floor", label: "No floor held" },
-  ],
-} as const;
+// Coach SOT 2026-05-08 Commit 3: calibration chip taxonomy moved into the
+// SelectCalibrationChip component (per-chipSet enums there). Old 3-in-1
+// taxonomy ("matched/off_softer/off_harder", "i_softened/they_opened/...",
+// "named_it/...") measured conversation flow, which doesn't close the
+// Prepare → Review calibration loop. SOT chips score the user's pre-
+// conversation prediction directly: better/about_right/worse vs forecast,
+// yes/partial/no/too_soon on the specific shift, yes/mostly/no on the
+// good-enough outcome floor.
 
 // SOT 2026-05-08 Commit 2: Quick = 5 Qs across 2 pages with the calibration
 // loop intact (needsAndForecast carries the forward forecast so a future
@@ -364,16 +348,36 @@ export default function ReviewPage() {
   }, [personId, reviewDepth]);
 
   // Build page-5 dynamically based on linked status.
+  // SOT 2026-05-08 Commit 3: calibration variant renders 3 separate Qs
+  // (compare/shift/floor) so each prediction-vs-outcome dimension lands
+  // as a full-size titled step. Submit logic combines the three string
+  // state keys into calibration_block: { compare, shift, floor } jsonb.
+  // Full Page 5 widening to share whatProtecting/lessonScreen/needsAndForecast
+  // across both branches lands in Commit 5.
   const page5: PageDef = linkedPrepareEntryId
     ? {
         pageKey: "full_5_calibration",
         qs: [
           {
-            key: "calibrationBlock",
-            title: "Calibrate against your forecast",
-            prompt:
-              "We pulled your most recent Prepare for this person — pick how it actually compared.",
+            key: "calibrationCompare",
+            title: "How did this compare to what you predicted in Prepare?",
+            prompt: null,
             kind: "select_calibration_chip",
+            chipSet: "compare",
+          },
+          {
+            key: "calibrationShift",
+            title: "Did the specific shift you asked for actually happen?",
+            prompt: null,
+            kind: "select_calibration_chip",
+            chipSet: "shift",
+          },
+          {
+            key: "calibrationFloor",
+            title: "Did you hit the good-enough outcome you set?",
+            prompt: null,
+            kind: "select_calibration_chip",
+            chipSet: "floor",
           },
         ],
       }
@@ -449,9 +453,18 @@ export default function ReviewPage() {
       const observedInterpreted =
         (data.observedInterpreted as TextareaTwoColumnValue | undefined) ??
         { left: "", right: "" };
-      const calibration = data.calibrationBlock as
-        | CalibrationBlockValue
-        | undefined;
+      // SOT 2026-05-08 Commit 3: calibration is captured as 3 separate
+      // string state keys (one per chipSet). Combine them at submit time
+      // into the { compare, shift, floor } jsonb shape the schema expects.
+      // Only emit calibrationBlock when all 3 are populated (matches the
+      // linked-Prepare branch — page-canAdvance enforces this on the form).
+      const calCompare = (data.calibrationCompare as string | undefined) ?? "";
+      const calShift = (data.calibrationShift as string | undefined) ?? "";
+      const calFloor = (data.calibrationFloor as string | undefined) ?? "";
+      const calibration: CalibrationBlockValue | null =
+        calCompare && calShift && calFloor
+          ? { compare: calCompare, shift: calShift, floor: calFloor }
+          : null;
       const protectingValue = data.whatProtecting as
         | SelectProtectingValue
         | undefined;
@@ -855,12 +868,16 @@ export default function ReviewPage() {
       );
     }
     if (step.kind === "select_calibration_chip") {
-      const value = data[step.key] as CalibrationBlockValue | undefined;
+      const value = (data[step.key] as string | undefined) ?? "";
+      // chipSet is required for this kind — coerce undefined to "compare"
+      // as a safe default; the StepDef builder always supplies one for
+      // calibration steps.
+      const chipSet = step.chipSet ?? "compare";
       return (
         <SelectCalibrationChip
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          chips={CALIBRATION_CHIPS}
+          chipSet={chipSet}
         />
       );
     }

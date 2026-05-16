@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
+  calibrationBlockSchema,
   createBeforeYouSendSchema,
   createPrepareSchema,
   createPulseCheckSchema,
   createReviewSchema,
 } from "@/lib/validation";
+import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
 
 // ============================================================
 // Helpers — minimal valid payloads. Tests override individual
@@ -336,6 +338,78 @@ describe("createPulseCheckSchema", () => {
       whatFeelsOff: "",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================
+// Calibration block — SOT 2026-05-08 Commit 3
+// ============================================================
+// Storage shape is { compare, shift, floor } jsonb. Schema validates
+// non-empty 3-field shape with each value <= 40 chars (chip values are
+// short tokens like "about_right", "too_soon"). Chip-id enums live in
+// SelectCalibrationChip — schema layer only guarantees shape integrity.
+
+describe("calibrationBlockSchema", () => {
+  it("accepts a fully populated 3-field block with SOT chip values", () => {
+    const result = calibrationBlockSchema.safeParse({
+      compare: "about_right",
+      shift: "partial",
+      floor: "mostly",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects missing compare", () => {
+    const result = calibrationBlockSchema.safeParse({
+      shift: "partial",
+      floor: "yes",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects empty shift", () => {
+    const result = calibrationBlockSchema.safeParse({
+      compare: "better",
+      shift: "",
+      floor: "no",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an over-40-char value (shape-only guard)", () => {
+    const result = calibrationBlockSchema.safeParse({
+      compare: "x".repeat(41),
+      shift: "yes",
+      floor: "yes",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================
+// Repair trigger — SOT 2026-05-08 Commit 3 (Change 3.4 verified no-op)
+// ============================================================
+// The shipped REPAIR_TRIGGER_NEEDS already matches the SOT exactly. This
+// test locks that in so a future regression that adds set_boundary or
+// drops clarify fails the build instead of changing behavior silently.
+
+describe("REPAIR_TRIGGER_NEEDS — SOT 4-chip set", () => {
+  it("contains clarify (a misunderstanding-repair op)", () => {
+    expect(REPAIR_TRIGGER_NEEDS).toContain("clarify");
+  });
+
+  it("contains apologize, reassure, ask_for_repair", () => {
+    expect(REPAIR_TRIGGER_NEEDS).toContain("apologize");
+    expect(REPAIR_TRIGGER_NEEDS).toContain("reassure");
+    expect(REPAIR_TRIGGER_NEEDS).toContain("ask_for_repair");
+  });
+
+  it("does NOT contain set_boundary (different cognitive op: self-protection, not relationship-repair)", () => {
+    expect((REPAIR_TRIGGER_NEEDS as readonly string[])).not.toContain("set_boundary");
+  });
+
+  it("has exactly 4 chips", () => {
+    expect(REPAIR_TRIGGER_NEEDS.length).toBe(4);
   });
 });
 
