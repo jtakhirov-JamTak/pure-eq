@@ -25,7 +25,11 @@ type Props = {
   placeholderA?: string;
   placeholderB?: string;
   placeholderC?: string;
+  /** Rows for the REQUIRED first field. Default 3. */
   rows?: number;
+  /** Rows for the OPTIONAL b/c fields. Default 2 — keeps the page short
+   *  on dense pages like Review Full Page 5. */
+  rowsOptional?: number;
 };
 
 export function TextareaThreeFieldLesson({
@@ -38,12 +42,17 @@ export function TextareaThreeFieldLesson({
   placeholderB = "",
   placeholderC = "",
   rows = 3,
+  rowsOptional = 2,
 }: Props) {
   const a = value?.a ?? "";
   const b = value?.b ?? "";
   const c = value?.c ?? "";
+  // SOT 2026-05-08 fix4: space-y-3 (was -4) + rowsOptional 2 (was 3 across
+  // all 3) drops ~140px on Review Full Page 5 where this component renders
+  // between whatProtecting + the calibration/standalone middle. Required
+  // field a stays at rows=3.
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div>
         <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
           {labelA}
@@ -62,7 +71,7 @@ export function TextareaThreeFieldLesson({
         <VoiceInput
           value={b}
           onChange={(next) => onChange({ a, b: next, c })}
-          rows={rows}
+          rows={rowsOptional}
           placeholder={placeholderB}
         />
       </div>
@@ -73,7 +82,7 @@ export function TextareaThreeFieldLesson({
         <VoiceInput
           value={c}
           onChange={(next) => onChange({ a, b, c: next })}
-          rows={rows}
+          rows={rowsOptional}
           placeholder={placeholderC}
         />
       </div>
