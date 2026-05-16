@@ -211,16 +211,21 @@ export const createReviewSchema = z.object({
   // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
   observedRaw: z.string().min(1).max(2000),
   interpretedRaw: z.string().min(1).max(2000),
-  hardestMomentFeeling: z.string().min(1).max(5000),
-  // Full-only fields (optional on Quick — page never collects them, post
-  // either omits or sends an empty string which Zod rejects, so consumers
-  // must omit on Quick).
+  // SOT 2026-05-08: Quick no longer collects hardestMomentFeeling; Full
+  // replaces it with feltAtHardestMoment (Commit 5). Made optional here so
+  // Quick can omit. Historical rows continue to read the legacy column.
+  hardestMomentFeeling: z.string().min(1).max(5000).optional(),
+  // Both depths now collect needsAndForecast: Quick needs it for the
+  // calibration loop to have a forecast to score against later; Full
+  // already had it. `forecast` carries the free-text prediction companion
+  // to the chip (stored in review_entries.forecast, added in 0036).
   whatYouDid: z.string().min(1).max(5000).optional(),
   observedInThem: z.string().min(1).max(5000).optional(),
   theirExperience: z.string().min(1).max(5000).optional(),
   whatYouAvoided: z.string().min(1).max(5000).optional(),
   askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]).optional(),
   needsToHappenNext: z.enum(REVIEW_NEEDS_NEXT_VALUES).optional(),
+  forecast: z.string().min(1).max(2000).optional(),
   // Page-5 calibration block: populated when linkedPrepareEntryId exists.
   linkedPrepareEntryId: z.string().uuid().nullable().optional(),
   calibrationBlock: z

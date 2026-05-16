@@ -64,6 +64,12 @@ const CALIBRATION_CHIPS = {
   ],
 } as const;
 
+// SOT 2026-05-08 Commit 2: Quick = 5 Qs across 2 pages with the calibration
+// loop intact (needsAndForecast carries the forward forecast so a future
+// Review can score against it). hardestMomentFeeling NOT collected on Quick —
+// that field is being deprecated; Full replaces it with feltAtHardestMoment
+// in Commit 5. Quick path NEVER triggers the repair branch (enforced by
+// `repairActive` requiring `reviewDepth === "full"` further down).
 const REVIEW_QUICK_PAGES: PageDef[] = [
   {
     pageKey: "quick_1",
@@ -76,9 +82,16 @@ const REVIEW_QUICK_PAGES: PageDef[] = [
       },
       {
         key: "whatHappened",
-        title: "What actually happened?",
-        prompt: "Stick to facts — what was said and done.",
+        title: "What happened?",
+        prompt: "Stick to facts. What was said and done — not interpretations yet.",
         kind: "textarea",
+      },
+      {
+        key: "observedInterpreted",
+        title: "What did you observe vs. what did you think it meant?",
+        prompt:
+          "Two columns. Left: what you saw or heard. Right: what you concluded.",
+        kind: "textarea_two_column",
       },
     ],
   },
@@ -86,17 +99,16 @@ const REVIEW_QUICK_PAGES: PageDef[] = [
     pageKey: "quick_2",
     qs: [
       {
-        key: "observedInterpreted",
-        title: "Split what you saw from what you thought",
-        prompt:
-          "Two boxes. Facts on the left (body, tone, exact words). Interpretation on the right.",
-        kind: "textarea_two_column",
+        key: "whatYouDid",
+        title: "What did you do?",
+        prompt: "The actual move. Quote yourself if you can.",
+        kind: "textarea",
       },
       {
-        key: "hardestMomentFeeling",
-        title: "What was the hardest moment, and what did you feel in it?",
-        prompt: null,
-        kind: "textarea",
+        key: "needsAndForecast",
+        title: "Next move + 5–7 day forecast",
+        prompt: "Pick the closest, then say what you expect to be true 5–7 days from now.",
+        kind: "select_needs_with_forecast",
       },
     ],
   },
@@ -452,13 +464,22 @@ export default function ReviewPage() {
         whatHappened: data.whatHappened,
         observedRaw: observedInterpreted.left,
         interpretedRaw: observedInterpreted.right,
-        hardestMomentFeeling: data.hardestMomentFeeling,
+        // hardestMomentFeeling: Quick no longer collects it (SOT 2026-05-08
+        // Commit 2). Full still does until Commit 5 replaces with
+        // feltAtHardestMoment. Omit when undefined so Zod .optional() passes.
+        hardestMomentFeeling: data.hardestMomentFeeling ?? undefined,
         whatYouDid: data.whatYouDid ?? undefined,
         observedInThem: data.observedInThem ?? undefined,
         theirExperience: data.theirExperience ?? undefined,
         whatYouAvoided: data.whatYouAvoided ?? undefined,
         askBeforeUnderstanding: data.askBeforeUnderstanding ?? undefined,
         needsToHappenNext: needsForecast?.chip ?? undefined,
+        // Forecast text (5-7 day prediction companion to the chip). Stored
+        // in review_entries.forecast so a future Review can calibrate
+        // against it via linked_prepare_entry_id / calibration_block.
+        forecast: needsForecast?.forecast?.trim()
+          ? needsForecast.forecast
+          : undefined,
         repairBranchActive,
         // Repair-swap fields (Commit 6).
         impactToName: repairBranchActive ? data.impactToName : null,

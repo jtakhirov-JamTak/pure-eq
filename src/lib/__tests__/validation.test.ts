@@ -174,6 +174,54 @@ describe("createPrepareSchema — SOT shape", () => {
 });
 
 // ============================================================
+// Review Quick shape — SOT 2026-05-08 Commit 2
+// ============================================================
+// Quick = 5 Qs across 2 pages: personName + whatHappened + observedInterpreted
+// on Page 1; whatYouDid + needsAndForecast on Page 2. hardestMomentFeeling
+// is NOT collected on Quick. Forecast text persists via the optional
+// `forecast` field for the calibration loop.
+
+describe("createReviewSchema — Quick shape (SOT 2026-05-08)", () => {
+  const validQuickBase = {
+    reviewDepth: "quick" as const,
+    whatHappened: "We disagreed about whose turn it was to handle the email.",
+    observedRaw: "They paused, then said 'fine, I'll just do it.'",
+    interpretedRaw: "I read that as resentment building up again.",
+    whatYouDid: "I let it drop instead of asking what they actually meant.",
+    needsToHappenNext: "clarify" as const,
+    forecast: "If I don't bring it back up by Friday, they'll bring it up sharper.",
+    repairBranchActive: false,
+  };
+
+  it("accepts a Quick payload with no hardestMomentFeeling", () => {
+    const result = createReviewSchema.safeParse(validQuickBase);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a Quick payload with a forecast text", () => {
+    const result = createReviewSchema.safeParse(validQuickBase);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.forecast).toBe(validQuickBase.forecast);
+    }
+  });
+
+  it("accepts a Quick payload without forecast (legacy compat)", () => {
+    const { forecast: _, ...minus } = validQuickBase;
+    const result = createReviewSchema.safeParse(minus);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty forecast string when provided", () => {
+    const result = createReviewSchema.safeParse({
+      ...validQuickBase,
+      forecast: "",
+    });
+    expect(result.success).toBe(false);
+  });
+});
+
+// ============================================================
 // Review repair branch — secretWant / couldMakeThemFeel deprecation
 // (cross-eval batch #1, 2026-05-03)
 // ============================================================
