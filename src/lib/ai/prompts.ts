@@ -323,7 +323,7 @@ When it shifted: ${params.whenItShifted}
 What they're feeling and where they feel it: ${params.feelingText} (body: ${params.bodyLocation})
 Why this might not be about them: ${params.theirsNotAboutYou}
 The story they're telling themselves: ${params.story}
-A more generous alternative: ${params.alternative}
+An equally plausible alternative they named (not the optimistic one): ${params.alternative}
 What they'd need to observe over the next 3–7 days to know this is signal, not noise: ${params.signalNoiseObservation}
 What they think their next move should be: ${params.nextMoveChip}
 ${lightCheckLine}"""
