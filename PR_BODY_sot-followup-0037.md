@@ -63,10 +63,30 @@ Founder applies via Supabase SQL Editor after merge.
 
 ## Verification
 
-- `npm test`: 200/200 (was 170/170; +30 new tests across schema, calibration, repair-trigger, Pulse / Prepare / Review prompts, Review Full SOT shape, lessonScreen optional sub-fields).
+- `npm test`: 216/216 (was 170/170 on `main`; +46 new tests across schema, calibration, repair-trigger, Pulse / Prepare / Review prompts, Review Full SOT shape, optional-sub-field hook, route-mapping round-trips).
 - `npx tsc --noEmit`: clean.
 - `npm run build`: clean across 38+ routes.
 - Per-commit checks ran at every commit boundary; no chained refactors.
+
+## `/full-review` follow-up — 6 fix commits
+
+After the initial 5 SOT-compliance commits landed, `/full-review`
+surfaced 16 issues. All are addressed in 6 follow-up commits on this
+branch:
+
+| sha | Title | Fixes |
+|-----|-------|-------|
+| `5dc5cb9` | fix1: data-path bugs | #1 repair-fields-data-loss (BLOCKER), #2 trigger_plan never persisted, #3 theirExperience dead arg, #6 Prepare placeholder copy, #15 PROMPT_VERSION literal pin |
+| `741d695` | fix2: server-side derivation + clamp + chip enums | #4 server derives repair_branch_active (ignores client), #5 pageIndex clamp on Repair flip, #10 calibration chip enums promoted to server-side Zod |
+| `a34caa8` | fix3: mobile UX one-liners | #7 calibration chip min-h-11, #8 --color-ink-muted AA contrast bump |
+| `d8cb852` | fix4: Page 5 visual density | #9 lessonScreen rowsOptional + tighter spacing (no SOT structural change) |
+| `c3eceae` | fix5: architecture refactors | #12 StepDef.requiredSubFields hook, #13 their_in_moment_experience dedicated column, #16 REVIEW_FULL_CARD_DERIVATIONS named const block, #11 deferred with documented comment |
+| `1447234` | fix6: round-trip test | #14 direct buildDerivedInsert + buildPayloadFields column-mapping tests |
+
+Migration 0037 now adds **5 columns** (was 4 before fix1+fix5):
+prepare.primary_emotion, prepare.default_pattern,
+prepare.neutral_check_question, prepare.trigger_plan,
+review.felt_at_hardest_moment, review.their_in_moment_experience.
 
 ## Phone QA after Vercel deploy
 
