@@ -86,7 +86,13 @@ const validPrepareBase = {
   personName: "Alex",
   relationship: "partner" as const,
   situation: "Need to talk about how chores are getting split.",
+  // SOT 2026-05-08 Commit 4: primary_emotion + default_pattern +
+  // neutral_check_question added; body chip moves off opener onto
+  // primary_emotion semantically (column stays body_location).
+  primaryEmotion: "Resentment, with a knot of dread under it.",
+  bodyLocation: "chest" as const,
   emotionAsData: "Resentment — pointing at unfairness over the last month.",
+  defaultPattern: "I go quiet, then come out swinging the third time it comes up.",
   observedFromThem:
     "They sigh when I bring it up and change the subject within a minute.",
   theirStateHedged:
@@ -101,8 +107,9 @@ const validPrepareBase = {
     "A standing rotation we both put on the calendar for two specific tasks.",
   outcomeFloor:
     "If we don't agree on a rotation tonight, at least name that this keeps coming back.",
+  neutralCheckQuestion:
+    "What's been eating most of your bandwidth lately — the work crunch or something else?",
   opener: "Hey, can we talk about how we split things up at home?",
-  bodyLocation: "chest" as const,
   triggerPlan: "If I feel chest-tightening, I'll pause and ask one question.",
 };
 
@@ -164,14 +171,46 @@ describe("createPrepareSchema — SOT shape", () => {
     expect(result.success).toBe(false);
   });
 
-  it("does NOT accept legacy Path A primaryEmotion field as required", () => {
-    // Legacy Path A had primaryEmotion + defaultPattern + theirNeed +
-    // howToMakeThemFeel + otherPersonHypothesis. New schema doesn't list
-    // them — passing them shouldn't error (Zod object passthrough), but
-    // omitting them should NOT fail.
-    const { ...minus } = validPrepareBase;
+  it("rejects an empty primaryEmotion", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      primaryEmotion: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty defaultPattern", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      defaultPattern: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty neutralCheckQuestion", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      neutralCheckQuestion: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects omitted primaryEmotion (now required)", () => {
+    const { primaryEmotion: _, ...minus } = validPrepareBase;
     const result = createPrepareSchema.safeParse(minus);
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects omitted defaultPattern (now required)", () => {
+    const { defaultPattern: _, ...minus } = validPrepareBase;
+    const result = createPrepareSchema.safeParse(minus);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects omitted neutralCheckQuestion (now required)", () => {
+    const { neutralCheckQuestion: _, ...minus } = validPrepareBase;
+    const result = createPrepareSchema.safeParse(minus);
+    expect(result.success).toBe(false);
   });
 });
 

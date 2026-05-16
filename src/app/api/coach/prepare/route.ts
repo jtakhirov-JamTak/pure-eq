@@ -34,16 +34,26 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  // 2026-05-07: bump 6 → 7 alongside PROMPT_VERSION 4.5.0 → 5.0.0 and
-  // the Prepare SOT migration (10 new columns, Path A/B collapse, opener
-  // self-check rule). Distinguishes post-SOT rows from legacy 6-rows.
-  aiVersionValue: 7,
+  // 2026-05-08 Commit 4: bump 7 → 8 alongside PROMPT_VERSION 5.0.0 → 5.1.0
+  // and the SOT follow-up migration 0037 (primary_emotion + default_pattern
+  // + neutral_check_question, body chip moves off opener onto primary
+  // emotion semantically). Distinguishes SOT-follow-up rows from
+  // 0036-shape rows (aiVersionValue 7, path = "sot").
+  aiVersionValue: 8,
 
+  // SOT 2026-05-08 Commit 4: aiVersionValue 7 → 8 alongside the SOT
+  // follow-up. New fields (primary_emotion, default_pattern,
+  // neutral_check_question) enter buildPreparePrompt; the body chip moves
+  // off the opener onto primary_emotion semantically (column stays as
+  // body_location — re-purposed consumer per 0037).
   buildPayloadFields: (input) => ({
     personName: input.personName,
     relationship: input.relationship,
     situation: input.situation,
+    primaryEmotion: input.primaryEmotion,
+    bodyLocation: input.bodyLocation,
     emotionAsData: input.emotionAsData,
+    defaultPattern: input.defaultPattern,
     observedFromThem: input.observedFromThem,
     theirStateHedged: input.theirStateHedged,
     fairestVersion: input.fairestVersion,
@@ -51,18 +61,22 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     hiddenExpectation: input.hiddenExpectation,
     specificShift: input.specificShift,
     outcomeFloor: input.outcomeFloor,
+    neutralCheckQuestion: input.neutralCheckQuestion,
     opener: input.opener,
-    bodyLocation: input.bodyLocation,
     triggerPlan: input.triggerPlan,
   }),
 
   buildDerivedInsert: (input) => ({
     // Keep `path` set to a non-null sentinel so legacy /history readers
-    // that filter by path don't drop new rows. New rows write
-    // path = "sot" so they're distinguishable from legacy path_a/path_b.
-    path: "sot",
+    // that filter by path don't drop new rows. SOT-follow-up rows write
+    // path = "sot_v2" to distinguish from path = "sot" (0036 shape, pre-
+    // primary_emotion / default_pattern / neutral_check_question).
+    path: "sot_v2",
     situation_text: input.situation,
+    primary_emotion: input.primaryEmotion,
+    body_location: input.bodyLocation,
     emotion_as_data: input.emotionAsData,
+    default_pattern: input.defaultPattern,
     observed_from_them: input.observedFromThem,
     their_state_hedged: input.theirStateHedged,
     fairest_version: input.fairestVersion,
@@ -70,8 +84,8 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     hidden_expectation: input.hiddenExpectation,
     specific_shift: input.specificShift,
     outcome_floor: input.outcomeFloor,
+    neutral_check_question: input.neutralCheckQuestion,
     opener: input.opener,
-    body_location: input.bodyLocation,
   }),
 
   buildPrompt: (input, profile) =>
@@ -80,7 +94,10 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       personName: input.personName,
       relationship: input.relationship,
       situation: input.situation,
+      primaryEmotion: input.primaryEmotion,
+      bodyLocation: input.bodyLocation,
       emotionAsData: input.emotionAsData,
+      defaultPattern: input.defaultPattern,
       observedFromThem: input.observedFromThem,
       theirStateHedged: input.theirStateHedged,
       fairestVersion: input.fairestVersion,
@@ -88,8 +105,8 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       hiddenExpectation: input.hiddenExpectation,
       specificShift: input.specificShift,
       outcomeFloor: input.outcomeFloor,
+      neutralCheckQuestion: input.neutralCheckQuestion,
       opener: input.opener,
-      bodyLocation: input.bodyLocation,
       triggerPlan: input.triggerPlan,
     }),
 

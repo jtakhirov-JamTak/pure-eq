@@ -138,14 +138,26 @@ export const THEIR_NEED_FIRST_VALUES = [
 // Old fields (situation_text/primary_value/their_need/etc.) stay nullable
 // in the DB for /history reads on legacy rows; new posts do not send them.
 
+// SOT 2026-05-08 Commit 4: 16-step / 16-field schema. Pages now read:
+//   1. personName, relationship, situation
+//   2. primaryEmotion (text+body), emotionAsData, defaultPattern
+//   3. observedFromThem, theirStateHedged, fairestVersion
+//   4. predictedReaction, hiddenExpectation, specificShift, outcomeFloor
+//   5. neutralCheckQuestion, opener (text only), triggerPlan
+// bodyLocation is the body chip paired with primaryEmotion (the felt sense
+// going in). 0036 originally attached body_location to opener; 0037 leaves
+// the column as-is and re-purposes the consumer — same column, new pairing.
 export const createPrepareSchema = z.object({
-  // Page 1 — person + relationship
+  // Page 1 — person + relationship + situation
   personName: z.string().trim().min(1).max(200),
   relationship: RELATIONSHIP_ENUM,
-  // Page 2 — situation + emotion-as-data
   situation: z.string().min(1).max(5000),
+  // Page 2 — primary emotion (+ body) + emotion-as-data + default pattern
+  primaryEmotion: z.string().min(1).max(2000),
+  bodyLocation: z.enum(BODY_LOCATION_VALUES),
   emotionAsData: z.string().min(1).max(2000),
-  // Page 3 — observed/state-hedged/fairest (three-field lesson)
+  defaultPattern: z.string().min(1).max(2000),
+  // Page 3 — observed/state-hedged/fairest
   observedFromThem: z.string().min(1).max(2000),
   theirStateHedged: z.string().min(1).max(2000),
   fairestVersion: z.string().min(1).max(2000),
@@ -154,9 +166,9 @@ export const createPrepareSchema = z.object({
   hiddenExpectation: z.string().min(1).max(2000),
   specificShift: z.string().min(1).max(2000),
   outcomeFloor: z.string().min(1).max(2000),
-  // Page 5 — opener + body location, then trigger plan
+  // Page 5 — neutral check question + opener (text only) + trigger plan
+  neutralCheckQuestion: z.string().min(1).max(2000),
   opener: z.string().min(1).max(1000),
-  bodyLocation: z.enum(BODY_LOCATION_VALUES),
   triggerPlan: z.string().min(1).max(2000),
   // Person/thread + idempotency. idempotencyKey is injected by route layer.
   personId: z.string().uuid().nullable().optional(),
