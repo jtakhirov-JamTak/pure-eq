@@ -291,12 +291,22 @@ export const createReviewSchema = z.object({
     .nullable()
     .optional(),
   whatYouLearned: z.string().max(2000).nullable().optional(),
-  // Repair-branch fields. Old yourPart kept for back-compat; Commit 6 adds
-  // impactToName / theirNeedFirst / pressureVsCare / timing /
-  // firstRepairSentence as the new SOT shape.
+  // Repair-branch fields.
+  // SOT 2026-05-08 fix1: the 5-Q repair swap (impactToName / theirNeedFirst /
+  // pressureVsCare / timing combo / firstRepairSentence) MUST be declared
+  // here — without these, the page POSTed the fields and Zod silently
+  // stripped them, losing every Repair submission. DB columns added in 0036.
+  // repairBranchActive is provided by the client but the route MUST re-derive
+  // it server-side from needsToHappenNext + reviewDepth (see route.ts).
   repairBranchActive: z.boolean().default(false),
+  impactToName: z.string().min(1).max(5000).nullable().optional(),
+  theirNeedFirst: z.enum(THEIR_NEED_FIRST_VALUES).nullable().optional(),
+  pressureVsCare: z.string().min(1).max(5000).nullable().optional(),
+  timingWhen: z.string().min(1).max(2000).nullable().optional(),
+  timingNow: z.boolean().nullable().optional(),
+  firstRepairSentence: z.string().min(1).max(2000).nullable().optional(),
+  // Legacy back-compat. New posts do not write these.
   yourPart: z.string().min(1).max(5000).nullable().optional(),
-  // Deprecated 2026-05-03 per cross-eval batch #1.
   secretWant: z.string().min(1).max(5000).nullable().optional(),
   couldMakeThemFeel: z.string().min(1).max(5000).nullable().optional(),
   // Person/thread.

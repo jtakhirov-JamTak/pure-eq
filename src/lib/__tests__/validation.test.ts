@@ -478,6 +478,90 @@ describe("createReviewSchema — Full SOT shape", () => {
 });
 
 // ============================================================
+// Repair-branch round-trip — SOT 2026-05-08 fix1
+// ============================================================
+// Regression test for the data-loss bug: page POSTed 6 repair fields,
+// schema didn't declare them, Zod stripped, route never persisted. All
+// 6 fields must now parse cleanly through createReviewSchema so the
+// route's buildDerivedInsert can map them to DB columns.
+
+describe("createReviewSchema — repair-branch 5-Q swap (data-loss regression)", () => {
+  const validRepairBase = {
+    reviewDepth: "full" as const,
+    whatHappened: "We argued about how I phrased the budget meeting note.",
+    observedRaw: "They said 'never mind' and turned away.",
+    interpretedRaw: "I read that as them shutting down.",
+    feltAtHardestMoment: "Pinned. Like the floor moved.",
+    bodyLocation: "chest" as const,
+    feelingTracking: "Yes — I'd already cut them off twice that week.",
+    whatYouDid: "Kept pushing my point.",
+    easierOrHarder: "Made it harder for them to circle back.",
+    treatAsData: "The 'never mind' was the answer to a different question.",
+    somethingThatHelped: "Nothing in the moment.",
+    theirInMomentExperience: "Cornered. Done.",
+    signsHowTheyLeft: "Closed laptop, no eye contact.",
+    turningPoint: "When I said 'fine, forget it.'",
+    lessonScreen: { a: "Pushing freezes info.", b: null, c: null },
+    needsToHappenNext: "apologize" as const,
+    forecast: "If I don't repair tonight, they'll go quiet for the rest of the week.",
+    whatProtecting: { chip: "image" as const, text: null },
+    repairBranchActive: true,
+    // The 6 repair fields the page actually sends:
+    impactToName: "they probably felt dismissed and stopped trying to explain",
+    theirNeedFirst: "acknowledgment" as const,
+    pressureVsCare: "Sending a 'sorry I'm not sorry' DM would tip into pressure.",
+    timingWhen: "Tomorrow morning in person, not over text tonight.",
+    timingNow: false,
+    firstRepairSentence: "I think I cut you off twice on Tuesday and didn't notice — I'm sorry.",
+  };
+
+  it("accepts all 6 SOT repair-branch fields", () => {
+    const result = createReviewSchema.safeParse(validRepairBase);
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown theirNeedFirst value", () => {
+    const result = createReviewSchema.safeParse({
+      ...validRepairBase,
+      theirNeedFirst: "nonsense",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts all 5 SOT theirNeedFirst chip values", () => {
+    const chips = [
+      "acknowledgment",
+      "clarity",
+      "safety",
+      "space",
+      "boundary",
+    ] as const;
+    for (const chip of chips) {
+      const result = createReviewSchema.safeParse({
+        ...validRepairBase,
+        theirNeedFirst: chip,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("preserves the 6 repair fields on parse (data does not get stripped)", () => {
+    const result = createReviewSchema.safeParse(validRepairBase);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.impactToName).toBe(validRepairBase.impactToName);
+      expect(result.data.theirNeedFirst).toBe("acknowledgment");
+      expect(result.data.pressureVsCare).toBe(validRepairBase.pressureVsCare);
+      expect(result.data.timingWhen).toBe(validRepairBase.timingWhen);
+      expect(result.data.timingNow).toBe(false);
+      expect(result.data.firstRepairSentence).toBe(
+        validRepairBase.firstRepairSentence,
+      );
+    }
+  });
+});
+
+// ============================================================
 // Calibration block — SOT 2026-05-08 Commit 3
 // ============================================================
 // Storage shape is { compare, shift, floor } jsonb. Schema validates

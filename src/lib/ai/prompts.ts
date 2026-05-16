@@ -676,7 +676,6 @@ export function buildReviewPrompt(params: {
   // interpreted + hardestMomentFeeling. Full path adds the rest.
   whatYouDid?: string | null;
   observedInThem?: string | null;
-  theirExperience?: string | null;
   whatYouAvoided?: string | null;
   askBeforeUnderstanding?: AskBeforeUnderstanding | null;
   needsToHappenNext?: ReviewNeedsToHappenNext | null;
@@ -873,10 +872,6 @@ What they thought it meant (their interpretation): ${params.interpretedRaw}${
     }${
       params.observedInThem
         ? `\nWhat they observed in the other person (body, tone, words): ${params.observedInThem}`
-        : ""
-    }${
-      params.theirExperience
-        ? `\nTheir best guess, looking back, at what the conversation was like for the other person: ${params.theirExperience}`
         : ""
     }${
       params.whatYouAvoided

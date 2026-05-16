@@ -86,6 +86,7 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     outcome_floor: input.outcomeFloor,
     neutral_check_question: input.neutralCheckQuestion,
     opener: input.opener,
+    trigger_plan: input.triggerPlan,
   }),
 
   buildPrompt: (input, profile) =>

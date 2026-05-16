@@ -27,6 +27,8 @@ alter table public.prepare_entries
   add column if not exists default_pattern text;
 alter table public.prepare_entries
   add column if not exists neutral_check_question text;
+alter table public.prepare_entries
+  add column if not exists trigger_plan text;
 
 comment on column public.prepare_entries.primary_emotion is
   'SOT 2026-05-08 follow-up. The emotion the user is carrying into the conversation. Paired with body_location which stores where it sits in the body. Replaces opener-attached body chip semantic from 0036.';
@@ -34,6 +36,8 @@ comment on column public.prepare_entries.default_pattern is
   'SOT 2026-05-08 follow-up. The user''s default behavior under that emotion (the move that usually gets in the way). Feeds buildPreparePrompt + triggerPlan if-then template.';
 comment on column public.prepare_entries.neutral_check_question is
   'SOT 2026-05-08 follow-up. One neutral question the user can ask to check their read instead of assuming. Not "are we okay" — something specific that would actually surface info.';
+comment on column public.prepare_entries.trigger_plan is
+  'SOT 2026-05-08 follow-up fix1. If-then implementation intention the user authored ("If I notice myself feeling X, then I will Y"). Surfaces in AI prompt + /history. Previously kept only in raw_records.payload_json, which made the field invisible to /history readers.';
 
 -- ============================================================
 -- 2. review_entries: felt_at_hardest_moment (Commit 5)

@@ -30,9 +30,9 @@ const baseParams = {
 };
 
 describe("buildPreparePrompt — Coach SOT shape", () => {
-  it("stamps PROMPT_VERSION = 5.1.0", () => {
+  it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
-    expect(out.prompt_version).toBe("5.1.0");
+    expect(out.prompt_version).toBe(PROMPT_VERSION);
     expect(PROMPT_VERSION).toBe("5.1.0");
   });
 
@@ -135,9 +135,9 @@ describe("buildPulseCheckPrompt", () => {
     expect(out.user).toContain("anything I should know?");
   });
 
-  it("stamps PROMPT_VERSION = 5.1.0", () => {
+  it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPulseCheckPrompt(pulseBase);
-    expect(out.prompt_version).toBe("5.1.0");
+    expect(out.prompt_version).toBe(PROMPT_VERSION);
   });
 
   it("uses the SOT 'equally plausible' framing (not 'more generous')", () => {

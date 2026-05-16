@@ -410,6 +410,7 @@ export type Database = {
           their_need: string | null
           their_state_hedged: string | null
           thread_id: string | null
+          trigger_plan: string | null
           user_id: string
           what_changed: string | null
           what_feels_off: string | null
@@ -453,6 +454,7 @@ export type Database = {
           their_need?: string | null
           their_state_hedged?: string | null
           thread_id?: string | null
+          trigger_plan?: string | null
           user_id: string
           what_changed?: string | null
           what_feels_off?: string | null
@@ -496,6 +498,7 @@ export type Database = {
           their_need?: string | null
           their_state_hedged?: string | null
           thread_id?: string | null
+          trigger_plan?: string | null
           user_id?: string
           what_changed?: string | null
           what_feels_off?: string | null

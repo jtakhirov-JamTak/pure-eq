@@ -171,7 +171,7 @@ const PREPARE_PAGES: PageDef[] = [
       {
         key: "triggerPlan",
         title: "If you get triggered, what will you do instead?",
-        prompt: "Complete: 'If I notice myself feeling [from defaultPattern], then I will ___.'",
+        prompt: "Complete: 'If I notice myself feeling [your primary emotion], then I will ___ instead of ___.' The second blank is your default move from the previous page.",
         kind: "textarea_if_then",
       },
     ],
