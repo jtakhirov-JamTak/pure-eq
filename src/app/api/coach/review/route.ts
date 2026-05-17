@@ -33,6 +33,9 @@ type Input = z.infer<typeof createReviewSchema> & {
     specificShift: string | null;
     outcomeFloor: string | null;
     opener: string | null;
+    primaryEmotion: string | null;
+    defaultPattern: string | null;
+    neutralCheckQuestion: string | null;
   };
 };
 type AiOutput = z.infer<typeof reviewOutputSchema>;
@@ -93,56 +96,60 @@ export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
         specificShift: snapshot.specificShift,
         outcomeFloor: snapshot.outcomeFloor,
         opener: snapshot.opener,
+        // 2026-05-17 fix3 (#20): forward the 3 new SOT fields into the prompt.
+        primaryEmotion: snapshot.primaryEmotion,
+        defaultPattern: snapshot.defaultPattern,
+        neutralCheckQuestion: snapshot.neutralCheckQuestion,
       },
     };
   },
 
   buildPayloadFields: (input) => {
     const repairBranchActive = deriveRepairBranchActive(input);
-    return ({
-    reviewDepth: input.reviewDepth,
-    whatHappened: input.whatHappened,
-    observedRaw: input.observedRaw,
-    interpretedRaw: input.interpretedRaw,
-    // SOT 2026-05-08 Commit 5: Full self-state + impact + theirs Qs.
-    feltAtHardestMoment: input.feltAtHardestMoment ?? null,
-    bodyLocation: input.bodyLocation ?? null,
-    feelingTracking: input.feelingTracking ?? null,
-    whatYouDid: input.whatYouDid ?? null,
-    easierOrHarder: input.easierOrHarder ?? null,
-    treatAsData: input.treatAsData ?? null,
-    somethingThatHelped: input.somethingThatHelped ?? null,
-    theirInMomentExperience: input.theirInMomentExperience ?? null,
-    signsHowTheyLeft: input.signsHowTheyLeft ?? null,
-    turningPoint: input.turningPoint ?? null,
-    // Deprecated Full fields no longer collected — historical rows keep
-    // these populated. New posts write null.
-    hardestMomentFeeling: input.hardestMomentFeeling ?? null,
-    observedInThem: input.observedInThem ?? null,
-    whatYouAvoided: input.whatYouAvoided ?? null,
-    askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
-    needsToHappenNext: input.needsToHappenNext ?? null,
-    forecast: input.forecast ?? null,
-    // SOT 2026-05-08 fix2: server-derived, ignores client value.
-    repairBranchActive,
-    // Null-out repair fields when not in the repair branch so a buggy/
-    // malicious client can't smuggle pre-canned repair content.
-    impactToName: repairBranchActive ? input.impactToName ?? null : null,
-    theirNeedFirst: repairBranchActive ? input.theirNeedFirst ?? null : null,
-    pressureVsCare: repairBranchActive ? input.pressureVsCare ?? null : null,
-    timingWhen: repairBranchActive ? input.timingWhen ?? null : null,
-    timingNow: repairBranchActive ? input.timingNow ?? null : null,
-    firstRepairSentence: repairBranchActive
-      ? input.firstRepairSentence ?? null
-      : null,
-    yourPart: input.yourPart ?? null,
-    linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
-    calibrationBlock: input.calibrationBlock ?? null,
-    whatProtecting: input.whatProtecting ?? null,
-    lessonScreen: input.lessonScreen ?? null,
-    whatElseExplains: input.whatElseExplains ?? null,
-    whatReadMissed: input.whatReadMissed ?? null,
-  });
+    return {
+      reviewDepth: input.reviewDepth,
+      whatHappened: input.whatHappened,
+      observedRaw: input.observedRaw,
+      interpretedRaw: input.interpretedRaw,
+      // SOT 2026-05-08 Commit 5: Full self-state + impact + theirs Qs.
+      feltAtHardestMoment: input.feltAtHardestMoment ?? null,
+      bodyLocation: input.bodyLocation ?? null,
+      feelingTracking: input.feelingTracking ?? null,
+      whatYouDid: input.whatYouDid ?? null,
+      easierOrHarder: input.easierOrHarder ?? null,
+      treatAsData: input.treatAsData ?? null,
+      somethingThatHelped: input.somethingThatHelped ?? null,
+      theirInMomentExperience: input.theirInMomentExperience ?? null,
+      signsHowTheyLeft: input.signsHowTheyLeft ?? null,
+      turningPoint: input.turningPoint ?? null,
+      // Deprecated Full fields no longer collected — historical rows keep
+      // these populated. New posts write null.
+      hardestMomentFeeling: input.hardestMomentFeeling ?? null,
+      observedInThem: input.observedInThem ?? null,
+      whatYouAvoided: input.whatYouAvoided ?? null,
+      askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
+      needsToHappenNext: input.needsToHappenNext ?? null,
+      forecast: input.forecast ?? null,
+      // SOT 2026-05-08 fix2: server-derived, ignores client value.
+      repairBranchActive,
+      // Null-out repair fields when not in the repair branch so a buggy/
+      // malicious client can't smuggle pre-canned repair content.
+      impactToName: repairBranchActive ? input.impactToName ?? null : null,
+      theirNeedFirst: repairBranchActive ? input.theirNeedFirst ?? null : null,
+      pressureVsCare: repairBranchActive ? input.pressureVsCare ?? null : null,
+      timingWhen: repairBranchActive ? input.timingWhen ?? null : null,
+      timingNow: repairBranchActive ? input.timingNow ?? null : null,
+      firstRepairSentence: repairBranchActive
+        ? input.firstRepairSentence ?? null
+        : null,
+      yourPart: input.yourPart ?? null,
+      linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
+      calibrationBlock: input.calibrationBlock ?? null,
+      whatProtecting: input.whatProtecting ?? null,
+      lessonScreen: input.lessonScreen ?? null,
+      whatElseExplains: input.whatElseExplains ?? null,
+      whatReadMissed: input.whatReadMissed ?? null,
+    };
   },
 
   buildDerivedInsert: (input) => {

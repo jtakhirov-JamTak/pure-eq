@@ -735,6 +735,13 @@ export function buildReviewPrompt(params: {
     specificShift: string | null;
     outcomeFloor: string | null;
     opener: string | null;
+    // 2026-05-17 fix3 (#20): three new Prepare SOT fields surfaced into
+    // the Review calibration prepend. Lets the model cite "what they
+    // predicted their default move would be" in alternative_explanation
+    // and "what they planned as a neutral question" in question_you_missed.
+    primaryEmotion?: string | null;
+    defaultPattern?: string | null;
+    neutralCheckQuestion?: string | null;
   } | null;
   calibrationBlock?: { compare: string; shift: string; floor: string } | null;
   whatProtecting?: { chip: string; text?: string | null } | null;
@@ -785,15 +792,18 @@ export function buildReviewPrompt(params: {
       ? `\nYOUR FORECAST (from your pre-conversation Prepare):
 """
 Conversation about: ${params.prepareSnapshot.situation ?? "(not recorded)"}
+Primary emotion going in: ${params.prepareSnapshot.primaryEmotion ?? "(not recorded)"}
+Default pattern under that emotion: ${params.prepareSnapshot.defaultPattern ?? "(not recorded)"}
 Emotion as data going in: ${params.prepareSnapshot.emotionAsData ?? "(not recorded)"}
 Predicted reaction: ${params.prepareSnapshot.predictedReaction ?? "(not recorded)"}
 Hidden expectation: ${params.prepareSnapshot.hiddenExpectation ?? "(not recorded)"}
+Neutral question they planned to ask: ${params.prepareSnapshot.neutralCheckQuestion ?? "(not recorded)"}
 Specific shift wanted: ${params.prepareSnapshot.specificShift ?? "(not recorded)"}
 Outcome floor: ${params.prepareSnapshot.outcomeFloor ?? "(not recorded)"}
 Opening line they planned: ${params.prepareSnapshot.opener ?? "(not recorded)"}
 """
 
-When generating coaching feedback, compare the actual conversation against this forecast. impact_vs_intent should reference the gap. alternative_explanation should account for what shifted between forecast and reality.\n`
+When generating coaching feedback, compare the actual conversation against this forecast. impact_vs_intent should reference the gap. alternative_explanation should account for what shifted between forecast and reality. question_you_missed should reference whether they actually asked the neutral question they planned.\n`
       : "";
 
   const calibrationLine =

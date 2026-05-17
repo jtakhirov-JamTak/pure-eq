@@ -315,7 +315,6 @@ export const createReviewSchema = z.object({
     })
     .nullable()
     .optional(),
-  whatYouLearned: z.string().max(2000).nullable().optional(),
   // Repair-branch fields.
   // SOT 2026-05-08 fix1: the 5-Q repair swap (impactToName / theirNeedFirst /
   // pressureVsCare / timing combo / firstRepairSentence) MUST be declared

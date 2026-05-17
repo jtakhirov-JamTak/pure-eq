@@ -737,7 +737,7 @@ export default function ReviewPage() {
       return (
         <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
           <ReviewBackground />
-          <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+          <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
             Review
           </span>
           <h2
@@ -861,7 +861,7 @@ export default function ReviewPage() {
     return (
       <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <ReviewBackground />
-        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
           Review
         </span>
         <h2
@@ -879,7 +879,7 @@ export default function ReviewPage() {
           onClick={() => setReviewDepth("quick")}
           className="mt-6 block w-full rounded-card bg-surface p-5 text-left shadow-card transition active:scale-[0.99]"
         >
-          <span className="inline-block rounded-pill bg-brand px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
+          <span className="inline-block rounded-pill bg-brand px-2 py-0.5 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
             Recommended
           </span>
           <div
@@ -1067,7 +1067,7 @@ export default function ReviewPage() {
       <ReviewBackground />
       <CoachPage
         eyebrow={reviewDepth === "quick" ? "Review · Quick" : "Review"}
-        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink"
+        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"
         pageIndex={safePageIndex}
         totalPages={totalPages}
         page={currentPage}
