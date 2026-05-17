@@ -188,6 +188,85 @@ describe("prepareModuleConfig.buildDerivedInsert — SOT column mapping", () => 
   });
 });
 
+// 2026-05-17 fix3 (#23): buildPayloadFields round-trip. The PR-body claimed
+// fix6 covered buildPayloadFields too, but the original tests only asserted
+// on buildDerivedInsert. The raw_records payload is what /history reads on
+// raw rows AND what the AI prompt builder receives — a column-name drift
+// here lands the user's content in an unread payload field and renders
+// blank coaching even when the derived row is correct.
+describe("reviewModuleConfig.buildPayloadFields — SOT field passthrough", () => {
+  it("passes through every SOT input to the raw payload (Full happy path)", () => {
+    const payload = reviewModuleConfig.buildPayloadFields(baseReviewInput) as Record<
+      string,
+      unknown
+    >;
+    expect(payload.reviewDepth).toBe("full");
+    expect(payload.whatHappened).toBe(baseReviewInput.whatHappened);
+    expect(payload.feltAtHardestMoment).toBe(baseReviewInput.feltAtHardestMoment);
+    expect(payload.bodyLocation).toBe("chest");
+    expect(payload.feelingTracking).toBe(baseReviewInput.feelingTracking);
+    expect(payload.easierOrHarder).toBe(baseReviewInput.easierOrHarder);
+    expect(payload.treatAsData).toBe(baseReviewInput.treatAsData);
+    expect(payload.somethingThatHelped).toBe(baseReviewInput.somethingThatHelped);
+    expect(payload.theirInMomentExperience).toBe(
+      baseReviewInput.theirInMomentExperience,
+    );
+    expect(payload.signsHowTheyLeft).toBe(baseReviewInput.signsHowTheyLeft);
+    expect(payload.turningPoint).toBe(baseReviewInput.turningPoint);
+    expect(payload.needsToHappenNext).toBe("apologize");
+    expect(payload.forecast).toBe(baseReviewInput.forecast);
+    expect(payload.whatProtecting).toEqual(baseReviewInput.whatProtecting);
+    expect(payload.lessonScreen).toEqual(baseReviewInput.lessonScreen);
+  });
+
+  it("strips repair-branch payload fields when server-derivation says inactive", () => {
+    // Mirrors the buildDerivedInsert smuggle test (#4). The payload column
+    // is the second smuggle surface — if it still carries content while the
+    // derived row stamps null, /history reads on raw rows would show repair
+    // content for a row whose DB columns show none.
+    const smuggled = {
+      ...baseReviewInput,
+      needsToHappenNext: "set_boundary" as const,
+      repairBranchActive: true,
+    } as ReviewInput;
+    const payload = reviewModuleConfig.buildPayloadFields(smuggled) as Record<
+      string,
+      unknown
+    >;
+    expect(payload.repairBranchActive).toBe(false);
+    expect(payload.impactToName).toBe(null);
+    expect(payload.theirNeedFirst).toBe(null);
+    expect(payload.pressureVsCare).toBe(null);
+    expect(payload.timingWhen).toBe(null);
+    expect(payload.timingNow).toBe(null);
+    expect(payload.firstRepairSentence).toBe(null);
+  });
+});
+
+describe("prepareModuleConfig.buildPayloadFields — SOT field passthrough", () => {
+  it("passes through every SOT input to the raw payload", () => {
+    const payload = prepareModuleConfig.buildPayloadFields(basePrepareInput) as Record<
+      string,
+      unknown
+    >;
+    expect(payload.situation).toBe(basePrepareInput.situation);
+    expect(payload.primaryEmotion).toBe(basePrepareInput.primaryEmotion);
+    expect(payload.bodyLocation).toBe("chest");
+    expect(payload.emotionAsData).toBe(basePrepareInput.emotionAsData);
+    expect(payload.defaultPattern).toBe(basePrepareInput.defaultPattern);
+    expect(payload.observedFromThem).toBe(basePrepareInput.observedFromThem);
+    expect(payload.theirStateHedged).toBe(basePrepareInput.theirStateHedged);
+    expect(payload.fairestVersion).toBe(basePrepareInput.fairestVersion);
+    expect(payload.predictedReaction).toBe(basePrepareInput.predictedReaction);
+    expect(payload.hiddenExpectation).toBe(basePrepareInput.hiddenExpectation);
+    expect(payload.specificShift).toBe(basePrepareInput.specificShift);
+    expect(payload.outcomeFloor).toBe(basePrepareInput.outcomeFloor);
+    expect(payload.neutralCheckQuestion).toBe(basePrepareInput.neutralCheckQuestion);
+    expect(payload.opener).toBe(basePrepareInput.opener);
+    expect(payload.triggerPlan).toBe(basePrepareInput.triggerPlan);
+  });
+});
+
 // Sanity: aiVersionValue and module names are pinned to the documented
 // SOT-follow-up values. A drift here lands legacy rows under the new
 // version, breaking generator_version reads downstream.

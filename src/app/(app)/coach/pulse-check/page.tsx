@@ -75,11 +75,16 @@ const PULSE_CHECK_PAGES: PageDef[] = [
         kind: "textarea",
       },
       {
+        // 2026-05-17 fix3 (#16): use a compact textarea (rows=2) for this
+        // "moment estimate" Q so Page 1 doesn't scroll ~1000px on 375px
+        // viewports. The Q expects a short answer ("Sunday afternoon",
+        // "after dinner") — full 4-row textarea inflates the page wall.
         key: "whenItShifted",
         title: "When did it shift?",
         prompt:
           "A moment, a day, a stretch — your best estimate of when something changed.",
         kind: "textarea",
+        rows: 2,
       },
     ],
   },
@@ -408,7 +413,7 @@ export default function PulseCheckPage() {
     return (
       <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <PulseBackground />
-        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
           Pulse Check
         </span>
         <h2
@@ -534,7 +539,7 @@ export default function PulseCheckPage() {
               key={rel.value}
               type="button"
               onClick={() => setFieldValue(step.key, rel.value)}
-              className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
+              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-[14px] font-semibold transition active:scale-[0.99] ${
                 value === rel.value
                   ? "bg-brand text-white shadow-cta"
                   : "bg-surface text-ink shadow-soft"
@@ -552,7 +557,7 @@ export default function PulseCheckPage() {
         <VoiceInput
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          rows={4}
+          rows={step.rows ?? 4}
           placeholder="Type or tap the mic to speak..."
         />
       );
@@ -592,7 +597,7 @@ export default function PulseCheckPage() {
       <PulseBackground />
       <CoachPage
         eyebrow="Pulse Check"
-        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink"
+        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"
         pageIndex={pageIndex}
         totalPages={totalPages}
         page={currentPage}

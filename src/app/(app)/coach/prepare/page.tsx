@@ -221,7 +221,7 @@ function NormalResultCard({
   return (
     <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
-      <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
+      <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
         Prepare
       </span>
       <h2
@@ -522,7 +522,7 @@ export default function PreparePage() {
               key={rel.value}
               type="button"
               onClick={() => setFieldValue(step.key, rel.value)}
-              className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
+              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-[14px] font-semibold transition active:scale-[0.99] ${
                 value === rel.value
                   ? "bg-brand text-white shadow-cta"
                   : "bg-surface text-ink shadow-soft"

@@ -25,13 +25,14 @@
   --color-brand-deep: #2a86e3;
   --color-ink: #0e2748;
   --color-ink-soft: #4a5e82;
-  /* SOT 2026-05-08 fix3: #8aa0c2 (~3.0:1 on white) failed WCAG AA at
-     text-[11px], where this token is used heavily for step labels,
-     page count, and result-card eyebrows across 19 files. Bumped to
-     #6a7da3 (~4.6:1) — passes AA at small sizes, still distinctly
-     lighter than ink-soft for the visual-hierarchy intent. CLAUDE.md
-     rule: zinc-500 minimum for body/label, zinc-600 minimum for text-xs. */
-  --color-ink-muted: #6a7da3;
+  /* SOT 2026-05-08 fix3 → 2026-05-17 followup: #6a7da3 cleared AA on
+     white (~4.6:1) but the page indicator + step labels sit at the top of
+     pages where the sky-hi gradient (#d6eeff) is brightest — contrast
+     dropped to ~3.4:1 there, still failing AA. Darkened to #4f6390 which
+     measures ~4.9:1 on sky-hi and ~5.8:1 on white. Stays distinctly
+     lighter than ink-soft (#4a5e82) so the visual hierarchy is preserved.
+     CLAUDE.md rule: zinc-500 minimum for body/label, zinc-600 for xs. */
+  --color-ink-muted: #4f6390;
   --color-surface: #ffffff;
   --color-surface-tint: #eef8ff;
   --color-warm: #ffd166;

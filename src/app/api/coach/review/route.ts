@@ -4,27 +4,15 @@ import { reviewOutputSchema } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
 import { runCoachModule } from "@/lib/coach/run-module";
 import { findLinkedPrepareEntry } from "@/lib/coach/calibration";
-import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
+import { deriveRepairBranchActive } from "@/lib/coach/page-flow";
 import type { CoachModuleConfig } from "@/lib/coach/types";
 
-/**
- * Server-side authoritative derivation of repair-branch activation.
- * The client posts `repairBranchActive` as a hint (the page's REPAIR_PAGES
- * use the same predicate to render the 3 repair pages), but the server
- * MUST NOT trust it — a malicious or buggy client could POST
- * `{ repairBranchActive: true, needsToHappenNext: "set_boundary" }` and
- * bypass REPAIR_TRIGGER_NEEDS otherwise. Computed once at the top of each
- * buildX hook so all three (payload / insert / prompt) agree.
- */
-function deriveRepairBranchActive(input: {
-  reviewDepth?: "quick" | "full";
-  needsToHappenNext?: (typeof REPAIR_TRIGGER_NEEDS)[number] | string | null;
-}): boolean {
-  if (input.reviewDepth !== "full") return false;
-  const chip = input.needsToHappenNext;
-  if (!chip) return false;
-  return (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(chip);
-}
+// 2026-05-17 fix3 (#14): deriveRepairBranchActive lifted to page-flow.ts
+// so client (review/page.tsx) and server (this file) share the predicate.
+// The client uses it to decide whether to render the 3 Repair pages; the
+// server re-runs it over the parsed payload to authoritative-stamp the
+// `repair_branch_active` column and null repair fields if the derived
+// value is false — never trusts the client-posted boolean.
 
 export const runtime = "nodejs";
 
@@ -45,6 +33,9 @@ type Input = z.infer<typeof createReviewSchema> & {
     specificShift: string | null;
     outcomeFloor: string | null;
     opener: string | null;
+    primaryEmotion: string | null;
+    defaultPattern: string | null;
+    neutralCheckQuestion: string | null;
   };
 };
 type AiOutput = z.infer<typeof reviewOutputSchema>;
@@ -80,11 +71,20 @@ export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   // Server-side authoritative lookup for the Prepare → Review link. Runs
   // for Full reviews only (Quick path skips calibration entirely). Failure
   // degrades to no-link → standalone branch shape; never fails the request.
+  //
+  // 2026-05-17 fix3 (#10): force linkedPrepareEntryId to null whenever the
+  // server-side lookup finds no snapshot. Without this, a client posting a
+  // smuggled UUID (e.g. another user's Prepare row) would land that foreign
+  // key in the DB FK column. RLS prevents reads of the foreign row, but the
+  // FK reference itself leaks. We only ever trust UUIDs that came from
+  // findLinkedPrepareEntry (which scopes by userId).
   prePromptEnrich: async (input, supabase, userId, personId) => {
-    if (input.reviewDepth !== "full") return input;
-    if (!personId) return input;
+    if (input.reviewDepth !== "full") {
+      return { ...input, linkedPrepareEntryId: null };
+    }
+    if (!personId) return { ...input, linkedPrepareEntryId: null };
     const snapshot = await findLinkedPrepareEntry(supabase, userId, personId);
-    if (!snapshot) return input;
+    if (!snapshot) return { ...input, linkedPrepareEntryId: null };
     return {
       ...input,
       linkedPrepareEntryId: snapshot.prepareEntryId,
@@ -96,56 +96,60 @@ export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
         specificShift: snapshot.specificShift,
         outcomeFloor: snapshot.outcomeFloor,
         opener: snapshot.opener,
+        // 2026-05-17 fix3 (#20): forward the 3 new SOT fields into the prompt.
+        primaryEmotion: snapshot.primaryEmotion,
+        defaultPattern: snapshot.defaultPattern,
+        neutralCheckQuestion: snapshot.neutralCheckQuestion,
       },
     };
   },
 
   buildPayloadFields: (input) => {
     const repairBranchActive = deriveRepairBranchActive(input);
-    return ({
-    reviewDepth: input.reviewDepth,
-    whatHappened: input.whatHappened,
-    observedRaw: input.observedRaw,
-    interpretedRaw: input.interpretedRaw,
-    // SOT 2026-05-08 Commit 5: Full self-state + impact + theirs Qs.
-    feltAtHardestMoment: input.feltAtHardestMoment ?? null,
-    bodyLocation: input.bodyLocation ?? null,
-    feelingTracking: input.feelingTracking ?? null,
-    whatYouDid: input.whatYouDid ?? null,
-    easierOrHarder: input.easierOrHarder ?? null,
-    treatAsData: input.treatAsData ?? null,
-    somethingThatHelped: input.somethingThatHelped ?? null,
-    theirInMomentExperience: input.theirInMomentExperience ?? null,
-    signsHowTheyLeft: input.signsHowTheyLeft ?? null,
-    turningPoint: input.turningPoint ?? null,
-    // Deprecated Full fields no longer collected — historical rows keep
-    // these populated. New posts write null.
-    hardestMomentFeeling: input.hardestMomentFeeling ?? null,
-    observedInThem: input.observedInThem ?? null,
-    whatYouAvoided: input.whatYouAvoided ?? null,
-    askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
-    needsToHappenNext: input.needsToHappenNext ?? null,
-    forecast: input.forecast ?? null,
-    // SOT 2026-05-08 fix2: server-derived, ignores client value.
-    repairBranchActive,
-    // Null-out repair fields when not in the repair branch so a buggy/
-    // malicious client can't smuggle pre-canned repair content.
-    impactToName: repairBranchActive ? input.impactToName ?? null : null,
-    theirNeedFirst: repairBranchActive ? input.theirNeedFirst ?? null : null,
-    pressureVsCare: repairBranchActive ? input.pressureVsCare ?? null : null,
-    timingWhen: repairBranchActive ? input.timingWhen ?? null : null,
-    timingNow: repairBranchActive ? input.timingNow ?? null : null,
-    firstRepairSentence: repairBranchActive
-      ? input.firstRepairSentence ?? null
-      : null,
-    yourPart: input.yourPart ?? null,
-    linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
-    calibrationBlock: input.calibrationBlock ?? null,
-    whatProtecting: input.whatProtecting ?? null,
-    lessonScreen: input.lessonScreen ?? null,
-    whatElseExplains: input.whatElseExplains ?? null,
-    whatReadMissed: input.whatReadMissed ?? null,
-  });
+    return {
+      reviewDepth: input.reviewDepth,
+      whatHappened: input.whatHappened,
+      observedRaw: input.observedRaw,
+      interpretedRaw: input.interpretedRaw,
+      // SOT 2026-05-08 Commit 5: Full self-state + impact + theirs Qs.
+      feltAtHardestMoment: input.feltAtHardestMoment ?? null,
+      bodyLocation: input.bodyLocation ?? null,
+      feelingTracking: input.feelingTracking ?? null,
+      whatYouDid: input.whatYouDid ?? null,
+      easierOrHarder: input.easierOrHarder ?? null,
+      treatAsData: input.treatAsData ?? null,
+      somethingThatHelped: input.somethingThatHelped ?? null,
+      theirInMomentExperience: input.theirInMomentExperience ?? null,
+      signsHowTheyLeft: input.signsHowTheyLeft ?? null,
+      turningPoint: input.turningPoint ?? null,
+      // Deprecated Full fields no longer collected — historical rows keep
+      // these populated. New posts write null.
+      hardestMomentFeeling: input.hardestMomentFeeling ?? null,
+      observedInThem: input.observedInThem ?? null,
+      whatYouAvoided: input.whatYouAvoided ?? null,
+      askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
+      needsToHappenNext: input.needsToHappenNext ?? null,
+      forecast: input.forecast ?? null,
+      // SOT 2026-05-08 fix2: server-derived, ignores client value.
+      repairBranchActive,
+      // Null-out repair fields when not in the repair branch so a buggy/
+      // malicious client can't smuggle pre-canned repair content.
+      impactToName: repairBranchActive ? input.impactToName ?? null : null,
+      theirNeedFirst: repairBranchActive ? input.theirNeedFirst ?? null : null,
+      pressureVsCare: repairBranchActive ? input.pressureVsCare ?? null : null,
+      timingWhen: repairBranchActive ? input.timingWhen ?? null : null,
+      timingNow: repairBranchActive ? input.timingNow ?? null : null,
+      firstRepairSentence: repairBranchActive
+        ? input.firstRepairSentence ?? null
+        : null,
+      yourPart: input.yourPart ?? null,
+      linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
+      calibrationBlock: input.calibrationBlock ?? null,
+      whatProtecting: input.whatProtecting ?? null,
+      lessonScreen: input.lessonScreen ?? null,
+      whatElseExplains: input.whatElseExplains ?? null,
+      whatReadMissed: input.whatReadMissed ?? null,
+    };
   },
 
   buildDerivedInsert: (input) => {

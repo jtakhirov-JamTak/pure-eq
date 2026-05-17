@@ -27,8 +27,14 @@ type Props = {
   placeholderC?: string;
   /** Rows for the REQUIRED first field. Default 3. */
   rows?: number;
-  /** Rows for the OPTIONAL b/c fields. Default 2 — keeps the page short
-   *  on dense pages like Review Full Page 5. */
+  /** Rows for the OPTIONAL b/c fields. Default 3.
+   *
+   *  2026-05-17 fix3 (#18) revisited fix4's choice of 2: after the mic
+   *  button reserves `pb-14` inside the textarea, rows=2 collapsed the
+   *  typing area to ~24px before scrolling. Voice-only users were fine
+   *  but typists got a cramped box. Reverted to 3 (~56px added back to
+   *  Page 5). The wall problem is better solved by splitting Page 5
+   *  into 5a/5b if QA flags it — not by bricking the typing UX. */
   rowsOptional?: number;
 };
 
@@ -42,7 +48,7 @@ export function TextareaThreeFieldLesson({
   placeholderB = "",
   placeholderC = "",
   rows = 3,
-  rowsOptional = 2,
+  rowsOptional = 3,
 }: Props) {
   const a = value?.a ?? "";
   const b = value?.b ?? "";

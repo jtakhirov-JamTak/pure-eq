@@ -14,7 +14,13 @@ import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
 // makes failure messages legible at a glance.
 // ============================================================
 
+// 2026-05-17 fix3 (#13): added the cross-field requirement guard, which
+// makes the Full-by-default schema reject payloads without forecast / Full
+// anchor fields. validReviewBase is now Quick + forecast so legacy tests
+// (which only assert on observedRaw / interpretedRaw + repair branch shape)
+// keep passing without needing every Full field stubbed in.
 const validReviewBase = {
+  reviewDepth: "quick" as const,
   whatHappened: "We argued about the timeline for the Q3 plan.",
   observedRaw: "Their voice got quieter, they stopped making eye contact.",
   interpretedRaw: "I thought they were shutting down because I'd pushed too hard.",
@@ -25,6 +31,7 @@ const validReviewBase = {
   whatYouAvoided: "I avoided asking what they actually needed.",
   askBeforeUnderstanding: "no" as const,
   needsToHappenNext: "clarify" as const,
+  forecast: "If I don't bring it up by Friday, they'll bring it up sharper.",
   repairBranchActive: false,
 };
 
@@ -247,10 +254,15 @@ describe("createReviewSchema — Quick shape (SOT 2026-05-08)", () => {
     }
   });
 
-  it("accepts a Quick payload without forecast (legacy compat)", () => {
+  // 2026-05-17 fix3 (#13): the cross-field requirement guard makes forecast
+  // required on both depths. Pre-fix this was "accepts a Quick without
+  // forecast (legacy compat)" — but SOT 2026-05-08 added forecast to the
+  // Quick page and the API must enforce that. Legacy rows already on disk
+  // are reads, not writes, so this doesn't affect /history rendering.
+  it("rejects a Quick payload without forecast (SOT requires the calibration anchor)", () => {
     const { forecast: _, ...minus } = validQuickBase;
     const result = createReviewSchema.safeParse(minus);
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
   it("rejects an empty forecast string when provided", () => {
@@ -407,6 +419,12 @@ describe("createReviewSchema — Full SOT shape", () => {
     needsToHappenNext: "clarify" as const,
     forecast: "If we don't revisit by Wednesday, they'll bring it up sharper.",
     whatProtecting: { chip: "image" as const, text: null },
+    // 2026-05-17 fix3 (#13): standalone Full Page 5 (no calibrationBlock)
+    // requires whatElseExplains + whatReadMissed per the cross-field guard.
+    // Tests that exercise the calibration branch override these by adding
+    // calibrationBlock alongside.
+    whatElseExplains: "They had a rough morning before we talked.",
+    whatReadMissed: "I read the long pause as resentment, but it was processing.",
     repairBranchActive: false,
   };
 
@@ -505,6 +523,9 @@ describe("createReviewSchema — repair-branch 5-Q swap (data-loss regression)",
     needsToHappenNext: "apologize" as const,
     forecast: "If I don't repair tonight, they'll go quiet for the rest of the week.",
     whatProtecting: { chip: "image" as const, text: null },
+    // 2026-05-17 fix3 (#13): standalone Full Page 5 requires these.
+    whatElseExplains: "They were already tense from the morning meeting.",
+    whatReadMissed: "I read 'never mind' as resentment but it might have been resignation.",
     repairBranchActive: true,
     // The 6 repair fields the page actually sends:
     impactToName: "they probably felt dismissed and stopped trying to explain",

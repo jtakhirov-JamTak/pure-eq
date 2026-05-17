@@ -54,7 +54,7 @@ export function SelectProtectingWithOptionalText({ value, onChange }: Props) {
                 onChange({ chip: c, text });
                 setShowText(true);
               }}
-              className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition active:scale-[0.99] ${
+              className={`flex min-h-11 items-center rounded-pill px-3.5 py-2 text-[13px] font-semibold transition active:scale-[0.99] ${
                 selected
                   ? "bg-brand text-white shadow-cta"
                   : "bg-surface-tint text-ink"
@@ -75,7 +75,7 @@ export function SelectProtectingWithOptionalText({ value, onChange }: Props) {
             value={text}
             onChange={(e) => onChange({ chip, text: e.target.value })}
             placeholder="A specific phrase or moment, if you want."
-            className="block w-full rounded-lg border border-zinc-300 p-3 text-base text-zinc-900 placeholder:text-zinc-400 focus:border-zinc-500 focus:outline-none focus:ring-1 focus:ring-zinc-500"
+            className="block w-full rounded-card-sm border border-hair p-3 text-base text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
           />
         </div>
       )}

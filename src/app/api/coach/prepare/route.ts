@@ -70,10 +70,12 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   }),
 
   buildDerivedInsert: (input) => ({
-    // Keep `path` set to a non-null sentinel so legacy /history readers
-    // that filter by path don't drop new rows. SOT-follow-up rows write
-    // path = "sot_v2" to distinguish from path = "sot" (0036 shape, pre-
-    // primary_emotion / default_pattern / neutral_check_question).
+    // `path` is the legacy discriminator (path_a / path_b / sot / sot_v2)
+    // kept for /history readers and export.ts row labels. After 2026-05-17
+    // fix3 (#15), `ai_plan_version` (aiVersionValue) is the authoritative
+    // shape selector — readers MUST gate on ai_plan_version when distinguishing
+    // shape, not on `path`. We still write a non-null `path` value so legacy
+    // filter-by-path queries don't drop new rows.
     path: "sot_v2",
     situation_text: input.situation,
     primary_emotion: input.primaryEmotion,

@@ -175,25 +175,25 @@ export const createPrepareSchema = z.object({
   // Page 1 — person + relationship + situation
   personName: z.string().trim().min(1).max(200),
   relationship: RELATIONSHIP_ENUM,
-  situation: z.string().min(1).max(5000),
+  situation: z.string().trim().min(1).max(5000),
   // Page 2 — primary emotion (+ body) + emotion-as-data + default pattern
-  primaryEmotion: z.string().min(1).max(2000),
+  primaryEmotion: z.string().trim().min(1).max(2000),
   bodyLocation: z.enum(BODY_LOCATION_VALUES),
-  emotionAsData: z.string().min(1).max(2000),
-  defaultPattern: z.string().min(1).max(2000),
+  emotionAsData: z.string().trim().min(1).max(2000),
+  defaultPattern: z.string().trim().min(1).max(2000),
   // Page 3 — observed/state-hedged/fairest
-  observedFromThem: z.string().min(1).max(2000),
-  theirStateHedged: z.string().min(1).max(2000),
-  fairestVersion: z.string().min(1).max(2000),
+  observedFromThem: z.string().trim().min(1).max(2000),
+  theirStateHedged: z.string().trim().min(1).max(2000),
+  fairestVersion: z.string().trim().min(1).max(2000),
   // Page 4 — predicted reaction + hidden expectation + specific shift + outcome floor
-  predictedReaction: z.string().min(1).max(2000),
-  hiddenExpectation: z.string().min(1).max(2000),
-  specificShift: z.string().min(1).max(2000),
-  outcomeFloor: z.string().min(1).max(2000),
+  predictedReaction: z.string().trim().min(1).max(2000),
+  hiddenExpectation: z.string().trim().min(1).max(2000),
+  specificShift: z.string().trim().min(1).max(2000),
+  outcomeFloor: z.string().trim().min(1).max(2000),
   // Page 5 — neutral check question + opener (text only) + trigger plan
-  neutralCheckQuestion: z.string().min(1).max(2000),
-  opener: z.string().min(1).max(1000),
-  triggerPlan: z.string().min(1).max(2000),
+  neutralCheckQuestion: z.string().trim().min(1).max(2000),
+  opener: z.string().trim().min(1).max(1000),
+  triggerPlan: z.string().trim().min(1).max(2000),
   // Person/thread + idempotency. idempotencyKey is injected by route layer.
   personId: z.string().uuid().nullable().optional(),
   threadId: z.string().uuid().nullable().optional(),
@@ -243,33 +243,33 @@ export const createReviewSchema = z.object({
   // 5 pages with conditional repair branch.
   reviewDepth: z.enum(["quick", "full"]).default("full"),
   // Base fields (always required by both depths).
-  whatHappened: z.string().min(1).max(5000),
+  whatHappened: z.string().trim().min(1).max(5000),
   // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
-  observedRaw: z.string().min(1).max(2000),
-  interpretedRaw: z.string().min(1).max(2000),
+  observedRaw: z.string().trim().min(1).max(2000),
+  interpretedRaw: z.string().trim().min(1).max(2000),
   // SOT 2026-05-08: Quick no longer collects hardestMomentFeeling; Full
   // replaces it with feltAtHardestMoment + body chip + a separate
   // feelingTracking Q ("Was the feeling tracking something real?").
   // Legacy column kept nullable for /history reads.
-  hardestMomentFeeling: z.string().min(1).max(5000).optional(),
+  hardestMomentFeeling: z.string().trim().min(1).max(5000).optional(),
   // SOT 2026-05-08 Commit 5: 8 new Full-Review Qs (felt-at-hardest-moment
   // text + body, feeling-tracking, easier-or-harder, treat-as-data,
   // something-that-helped, their-in-moment-experience, signs-how-they-
   // left, turning-point). Schema fields are optional + nullable so Quick
   // can omit them entirely; Full posts populate. Empty strings rejected
   // (`.min(1)`) so the page-canAdvance contract holds at the API boundary.
-  feltAtHardestMoment: z.string().min(1).max(5000).nullable().optional(),
-  feelingTracking: z.string().min(1).max(5000).nullable().optional(),
-  easierOrHarder: z.string().min(1).max(5000).nullable().optional(),
-  treatAsData: z.string().min(1).max(5000).nullable().optional(),
-  somethingThatHelped: z.string().min(1).max(5000).nullable().optional(),
-  theirInMomentExperience: z.string().min(1).max(5000).nullable().optional(),
-  signsHowTheyLeft: z.string().min(1).max(5000).nullable().optional(),
-  turningPoint: z.string().min(1).max(5000).nullable().optional(),
+  feltAtHardestMoment: z.string().trim().min(1).max(5000).nullable().optional(),
+  feelingTracking: z.string().trim().min(1).max(5000).nullable().optional(),
+  easierOrHarder: z.string().trim().min(1).max(5000).nullable().optional(),
+  treatAsData: z.string().trim().min(1).max(5000).nullable().optional(),
+  somethingThatHelped: z.string().trim().min(1).max(5000).nullable().optional(),
+  theirInMomentExperience: z.string().trim().min(1).max(5000).nullable().optional(),
+  signsHowTheyLeft: z.string().trim().min(1).max(5000).nullable().optional(),
+  turningPoint: z.string().trim().min(1).max(5000).nullable().optional(),
   // SOT 2026-05-08 Commit 5: Page 5 standalone branch (renders when no
   // linkedPrepareEntryId). 2 textarea Qs that replace whatYouLearned.
-  whatElseExplains: z.string().min(1).max(5000).nullable().optional(),
-  whatReadMissed: z.string().min(1).max(5000).nullable().optional(),
+  whatElseExplains: z.string().trim().min(1).max(5000).nullable().optional(),
+  whatReadMissed: z.string().trim().min(1).max(5000).nullable().optional(),
   // Body chip paired with feltAtHardestMoment. Same 8-chip enum as
   // Prepare (no fuzzy_cant_tell — that's Pulse Check only).
   bodyLocation: z.enum(BODY_LOCATION_VALUES).nullable().optional(),
@@ -278,7 +278,7 @@ export const createReviewSchema = z.object({
   // optional (pageCanAdvance special-cases textarea_three_field_lesson).
   lessonScreen: z
     .object({
-      a: z.string().min(1).max(2000),
+      a: z.string().trim().min(1).max(2000),
       b: z.string().max(2000).nullable().optional(),
       c: z.string().max(2000).nullable().optional(),
     })
@@ -288,13 +288,13 @@ export const createReviewSchema = z.object({
   // calibration loop to have a forecast to score against later; Full
   // already had it. `forecast` carries the free-text prediction companion
   // to the chip (stored in review_entries.forecast, added in 0036).
-  whatYouDid: z.string().min(1).max(5000).optional(),
-  observedInThem: z.string().min(1).max(5000).optional(),
-  theirExperience: z.string().min(1).max(5000).optional(),
-  whatYouAvoided: z.string().min(1).max(5000).optional(),
+  whatYouDid: z.string().trim().min(1).max(5000).optional(),
+  observedInThem: z.string().trim().min(1).max(5000).optional(),
+  theirExperience: z.string().trim().min(1).max(5000).optional(),
+  whatYouAvoided: z.string().trim().min(1).max(5000).optional(),
   askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]).optional(),
   needsToHappenNext: z.enum(REVIEW_NEEDS_NEXT_VALUES).optional(),
-  forecast: z.string().min(1).max(2000).optional(),
+  forecast: z.string().trim().min(1).max(2000).optional(),
   // Page-5 calibration block: populated when linkedPrepareEntryId exists.
   linkedPrepareEntryId: z.string().uuid().nullable().optional(),
   calibrationBlock: z
@@ -315,7 +315,6 @@ export const createReviewSchema = z.object({
     })
     .nullable()
     .optional(),
-  whatYouLearned: z.string().max(2000).nullable().optional(),
   // Repair-branch fields.
   // SOT 2026-05-08 fix1: the 5-Q repair swap (impactToName / theirNeedFirst /
   // pressureVsCare / timing combo / firstRepairSentence) MUST be declared
@@ -324,20 +323,83 @@ export const createReviewSchema = z.object({
   // repairBranchActive is provided by the client but the route MUST re-derive
   // it server-side from needsToHappenNext + reviewDepth (see route.ts).
   repairBranchActive: z.boolean().default(false),
-  impactToName: z.string().min(1).max(5000).nullable().optional(),
+  impactToName: z.string().trim().min(1).max(5000).nullable().optional(),
   theirNeedFirst: z.enum(THEIR_NEED_FIRST_VALUES).nullable().optional(),
-  pressureVsCare: z.string().min(1).max(5000).nullable().optional(),
-  timingWhen: z.string().min(1).max(2000).nullable().optional(),
+  pressureVsCare: z.string().trim().min(1).max(5000).nullable().optional(),
+  timingWhen: z.string().trim().min(1).max(2000).nullable().optional(),
   timingNow: z.boolean().nullable().optional(),
-  firstRepairSentence: z.string().min(1).max(2000).nullable().optional(),
+  firstRepairSentence: z.string().trim().min(1).max(2000).nullable().optional(),
   // Legacy back-compat. New posts do not write these.
-  yourPart: z.string().min(1).max(5000).nullable().optional(),
-  secretWant: z.string().min(1).max(5000).nullable().optional(),
-  couldMakeThemFeel: z.string().min(1).max(5000).nullable().optional(),
+  yourPart: z.string().trim().min(1).max(5000).nullable().optional(),
+  secretWant: z.string().trim().min(1).max(5000).nullable().optional(),
+  couldMakeThemFeel: z.string().trim().min(1).max(5000).nullable().optional(),
   // Person/thread.
   personId: z.string().uuid().nullable().optional(),
   threadId: z.string().uuid().nullable().optional(),
-});
+})
+  // 2026-05-17 fix3 (#13): cross-field requirement guard. Without these,
+  // a direct API POST with reviewDepth: "full" and every Full-only field
+  // omitted passed Zod, persisted a near-empty row, and fed an emaciated
+  // AI prompt. The UI page-flow gates these via pageCanAdvance, but the
+  // API boundary stayed silent — a real risk for any client (the iOS app
+  // shell, a Postman replay, future App #2 sharing this schema). Errors
+  // here mirror the SOT page-grouping so server-rejected payloads point
+  // at the page the user skipped.
+  .superRefine((v, ctx) => {
+    function requireField(field: keyof typeof v, label: string) {
+      const value = v[field];
+      if (value === null || value === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field as string],
+          message: `${label} is required`,
+        });
+        return false;
+      }
+      if (typeof value === "string" && value.trim().length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [field as string],
+          message: `${label} is required`,
+        });
+        return false;
+      }
+      return true;
+    }
+    // Both depths share these terminal Qs. Quick Page 2 (whatYouDid +
+    // needsAndForecast) and Full Page 5 both rely on these landing.
+    requireField("whatYouDid", "What you did");
+    requireField("needsToHappenNext", "What needs to happen next");
+    requireField("forecast", "Forecast");
+    // Full-only: Page 2 (felt-at-hardest-moment + body) + Page 3 feeling
+    // tracking + Page 5 lesson screen + Page 5 page-specific Qs.
+    if (v.reviewDepth === "full") {
+      requireField("feltAtHardestMoment", "What you felt at the hardest moment");
+      requireField("bodyLocation", "Where you felt it in your body");
+      requireField("feelingTracking", "Whether the feeling tracked something real");
+      requireField("whatProtecting", "What you were wanting or protecting");
+      requireField("lessonScreen", "Lesson from this interaction");
+      // Standalone Page 5 (no linked Prepare) replaces the calibration trio
+      // with two Qs about alternative reads.
+      const hasCalibration =
+        v.calibrationBlock !== null && v.calibrationBlock !== undefined;
+      if (!hasCalibration) {
+        requireField("whatElseExplains", "What else could explain it");
+        requireField("whatReadMissed", "What your read might have missed");
+      }
+      // Repair branch: when activated by the client, all 5 core fields land.
+      // (repairBranchActive is server-re-derived in route.ts — this is just
+      // a soft check that the client passed coherent data; the server
+      // strips the fields if its own derivation says repair is inactive.)
+      if (v.repairBranchActive) {
+        requireField("impactToName", "Impact to name");
+        requireField("theirNeedFirst", "Their need to address first");
+        requireField("pressureVsCare", "Pressure-vs-care framing");
+        requireField("timingWhen", "Repair timing");
+        requireField("firstRepairSentence", "First repair sentence");
+      }
+    }
+  });
 
 // ============================================================
 // Coach — Before You Send (NEW Coach redesign 2026-04-23)
@@ -368,19 +430,19 @@ export const createPulseCheckSchema = z
   .object({
     personName: z.string().trim().min(1).max(200),
     relationship: RELATIONSHIP_ENUM,
-    whatFeelsOff: z.string().min(1).max(2000),
-    whatChangedAndBefore: z.string().min(1).max(2000),
-    whenItShifted: z.string().min(1).max(2000),
+    whatFeelsOff: z.string().trim().min(1).max(2000),
+    whatChangedAndBefore: z.string().trim().min(1).max(2000),
+    whenItShifted: z.string().trim().min(1).max(2000),
     feelingAndBody: z.object({
-      text: z.string().min(1).max(2000),
+      text: z.string().trim().min(1).max(2000),
       bodyLocation: z.enum(BODY_LOCATION_PULSE_VALUES),
     }),
-    theirsNotAboutYou: z.string().min(1).max(2000),
+    theirsNotAboutYou: z.string().trim().min(1).max(2000),
     storyAndAlternative: z.object({
-      story: z.string().min(1).max(2000),
-      alternative: z.string().min(1).max(2000),
+      story: z.string().trim().min(1).max(2000),
+      alternative: z.string().trim().min(1).max(2000),
     }),
-    signalNoiseObservation: z.string().min(1).max(1000),
+    signalNoiseObservation: z.string().trim().min(1).max(1000),
     nextMoveChip: z.enum(PULSE_NEXT_MOVE_VALUES),
     lightCheckQuestion: z.string().max(2000).nullable().optional(),
     personId: z.string().uuid().nullable().optional(),
@@ -428,22 +490,22 @@ export const TOOLS_AFTER_FEELING_VALUES = [
 export const createOverwhelmedSchema = z.object({
   beforeRating: z.number().int().min(1).max(5),
   bodyLocation: z.string().max(200).nullable().optional(),
-  feelingLabel: z.string().min(1).max(5000),
+  feelingLabel: z.string().trim().min(1).max(5000),
   afterRating: z.number().int().min(1).max(5),
   afterFeeling: z.enum(TOOLS_AFTER_FEELING_VALUES),
 });
 
 // Tools — Trigger Log
 export const createTriggerSchema = z.object({
-  trigger: z.string().min(1).max(5000),
-  interpretation: z.string().min(1).max(5000),
-  emotion: z.string().min(1).max(1000),
+  trigger: z.string().trim().min(1).max(5000),
+  interpretation: z.string().trim().min(1).max(5000),
+  emotion: z.string().trim().min(1).max(1000),
   emotionIntensity: z.number().int().min(1).max(10),
-  urge: z.string().min(1).max(1000),
+  urge: z.string().trim().min(1).max(1000),
   urgeIntensity: z.number().int().min(1).max(10),
-  behavior: z.string().min(1).max(5000),
-  outcome: z.string().min(1).max(5000),
-  reflection: z.string().min(1).max(5000),
+  behavior: z.string().trim().min(1).max(5000),
+  outcome: z.string().trim().min(1).max(5000),
+  reflection: z.string().trim().min(1).max(5000),
   afterFeeling: z.enum(TOOLS_AFTER_FEELING_VALUES),
 });
 

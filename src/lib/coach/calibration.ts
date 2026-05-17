@@ -33,6 +33,13 @@ export type PrepareSnapshot = {
   specificShift: string | null;
   outcomeFloor: string | null;
   opener: string | null;
+  // 2026-05-17 fix3 (#20): three new Prepare SOT fields fed into the
+  // Review calibration prepend so the model can compare the user's
+  // pre-conversation primary emotion / default pattern / planned neutral
+  // question against what actually happened.
+  primaryEmotion: string | null;
+  defaultPattern: string | null;
+  neutralCheckQuestion: string | null;
 };
 
 /**
@@ -54,7 +61,7 @@ export async function findLinkedPrepareEntry(
   const { data, error } = await supabase
     .from("prepare_entries")
     .select(
-      "prepare_entry_id, created_at, situation_text, emotion_as_data, predicted_reaction, hidden_expectation, specific_shift, outcome_floor, opener",
+      "prepare_entry_id, created_at, situation_text, emotion_as_data, predicted_reaction, hidden_expectation, specific_shift, outcome_floor, opener, primary_emotion, default_pattern, neutral_check_question",
     )
     .eq("user_id", userId)
     .eq("person_id", personId)
@@ -76,5 +83,8 @@ export async function findLinkedPrepareEntry(
     specificShift: data.specific_shift,
     outcomeFloor: data.outcome_floor,
     opener: data.opener,
+    primaryEmotion: data.primary_emotion,
+    defaultPattern: data.default_pattern,
+    neutralCheckQuestion: data.neutral_check_question,
   };
 }

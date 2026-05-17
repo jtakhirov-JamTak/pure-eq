@@ -81,7 +81,7 @@ export function TextareaWithBodyChip({
                 key={chip}
                 type="button"
                 onClick={() => onChange({ text, bodyLocation: chip })}
-                className={`rounded-pill px-3.5 py-2 text-[13px] font-semibold transition active:scale-[0.99] ${
+                className={`flex min-h-11 items-center rounded-pill px-3.5 py-2 text-[13px] font-semibold transition active:scale-[0.99] ${
                   selected
                     ? "bg-brand text-white shadow-cta"
                     : "bg-surface-tint text-ink"
