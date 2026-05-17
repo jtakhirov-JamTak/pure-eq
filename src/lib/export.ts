@@ -146,28 +146,52 @@ function entryHeader(
   return parts.join(" — ");
 }
 
-// Prepare rows span two shapes after the 2026-04-23 redesign:
-// - Path A (pre-conversation): situation_text, primary_value (legacy),
-//   plus new their_need + how_to_make_them_feel.
+// Prepare rows span three shape eras after the 2026-04-23 redesign:
+// - Path A (pre-conversation, pre-SOT): situation_text, primary_value
+//   (legacy), their_need, how_to_make_them_feel.
 // - Path B ("something feels off"): what_feels_off, what_changed,
 //   story_telling_yourself, afraid_it_means.
-// The `path` column is NULL on rows written before migration 0026 and
-// 'path_a'/'path_b' on everything after. The formatter handles all
-// three cases by field-presence: if a field is non-empty it renders.
+// - SOT (2026-05-08 + 2026-05-17 followup, path='sot'/'sot_v2'): the
+//   structured "Coach Source Of Truth" flow with primary_emotion +
+//   body chip, default_pattern, neutral_check_question, the empathy
+//   ladder (observed_from_them → their_state_hedged → fairest_version
+//   → predicted_reaction → hidden_expectation), outcome (specific_shift
+//   / outcome_floor), opener, trigger_plan.
+// The `path` column is NULL on rows written before migration 0026,
+// 'path_a'/'path_b' for the 2026-04-23 era, and 'sot'/'sot_v2' for the
+// SOT era. The formatter handles all eras by field-presence: if a field
+// is non-empty it renders.
 type PrepareRow = Pick<
   Tables["prepare_entries"]["Row"],
   | "created_at"
   | "path"
+  // Path A / legacy
   | "situation_text"
   | "desired_outcome"
   | "primary_value"
   | "their_need"
   | "how_to_make_them_feel"
+  // Path B
   | "what_feels_off"
   | "what_changed"
   | "story_telling_yourself"
   | "afraid_it_means"
   | "signal_noise_observation"
+  // SOT 2026-05-08 (migration 0036) + 2026-05-17 followup (0037)
+  | "primary_emotion"
+  | "body_location"
+  | "emotion_as_data"
+  | "default_pattern"
+  | "observed_from_them"
+  | "their_state_hedged"
+  | "fairest_version"
+  | "predicted_reaction"
+  | "hidden_expectation"
+  | "neutral_check_question"
+  | "specific_shift"
+  | "outcome_floor"
+  | "opener"
+  | "trigger_plan"
   | "person_id"
   | "thread_id"
 >;
@@ -188,7 +212,9 @@ export function formatPrepareSection(
         ? " — Conversation coming up"
         : r.path === "path_b"
           ? " — Something feels off"
-          : "";
+          : r.path === "sot" || r.path === "sot_v2"
+            ? " — Coach SOT"
+            : "";
     lines.push(
       entryHeader(r.created_at, r.person_id, personMap, r.thread_id, threadMap) +
         pathLabel,
@@ -210,6 +236,21 @@ export function formatPrepareSection(
       "What would tell me this is real (3–7 day signal/noise)",
       r.signal_noise_observation,
     );
+    // SOT 2026-05-08 + 2026-05-17 — empathy ladder + outcome + opener + plan.
+    appendField(lines, "Primary emotion going in", r.primary_emotion);
+    appendField(lines, "Where I feel it in my body", r.body_location);
+    appendField(lines, "What this emotion is data about", r.emotion_as_data);
+    appendField(lines, "My default pattern under this emotion", r.default_pattern);
+    appendField(lines, "What I observed in them", r.observed_from_them);
+    appendField(lines, "What I'd guess they're feeling (hedged)", r.their_state_hedged);
+    appendField(lines, "Fairest version of their behavior", r.fairest_version);
+    appendField(lines, "What I predict their reaction will be", r.predicted_reaction);
+    appendField(lines, "Hidden expectation I'm bringing", r.hidden_expectation);
+    appendField(lines, "Neutral question to ask instead of assume", r.neutral_check_question);
+    appendField(lines, "Specific shift I want", r.specific_shift);
+    appendField(lines, "Floor — what's good enough", r.outcome_floor);
+    appendField(lines, "Opener", r.opener);
+    appendField(lines, "If-then trigger plan", r.trigger_plan);
     blocks.push(lines.join("\n"));
   }
   return section(
@@ -218,20 +259,41 @@ export function formatPrepareSection(
   );
 }
 
-// Review rows span two shapes after the 2026-04-23 redesign. Legacy
-// rows carry what_helped / what_hurt / validated_assumptions /
-// unresolved_and_next. New rows carry what_you_did / what_you_avoided /
-// ask_before_understanding / needs_to_happen_next and (when the repair
-// branch fired) your_part / secret_want / could_make_them_feel.
+// Review rows span three shape eras:
+// - Legacy: what_helped, what_hurt, validated_assumptions, unresolved_and_next.
+// - 2026-04-23 redesign: what_you_did, what_you_avoided,
+//   ask_before_understanding, needs_to_happen_next, plus repair branch
+//   (your_part, secret_want, could_make_them_feel).
+// - SOT 2026-05-08 (0036) + 2026-05-17 followup (0037):
+//   review_depth (quick/full), felt_at_hardest_moment + body_location
+//   pair, feeling_tracking, calibration_block jsonb {compare,shift,floor},
+//   what_protecting + what_protecting_text, lesson screen
+//   (lesson_about_them / lesson_about_self / lesson_differently), forecast,
+//   what_else_explains, what_read_missed, plus expanded repair fields
+//   (impact_to_name, their_need_first, pressure_vs_care, timing_when,
+//   timing_now, first_repair_sentence) and outcome arc fields
+//   (easier_or_harder, treat_as_data, something_that_helped,
+//   their_in_moment_experience, signs_how_they_left, turning_point).
+// All fields render via appendField — non-empty values only.
+type CalibrationBlock = {
+  compare?: string;
+  shift?: string;
+  floor?: string;
+};
 type ReviewRow = Pick<
   Tables["review_entries"]["Row"],
   | "created_at"
+  | "review_depth"
   | "what_happened"
   | "observed_raw"
   | "interpreted_raw"
   | "hardest_moment_feeling"
+  | "felt_at_hardest_moment"
+  | "body_location"
+  | "feeling_tracking"
   | "observed_in_them"
   | "their_experience"
+  | "their_in_moment_experience"
   | "what_helped"
   | "what_hurt"
   | "validated_assumptions"
@@ -240,7 +302,27 @@ type ReviewRow = Pick<
   | "what_you_avoided"
   | "ask_before_understanding"
   | "needs_to_happen_next"
+  | "forecast"
+  | "easier_or_harder"
+  | "treat_as_data"
+  | "something_that_helped"
+  | "signs_how_they_left"
+  | "turning_point"
+  | "what_protecting"
+  | "what_protecting_text"
+  | "lesson_about_them"
+  | "lesson_about_self"
+  | "lesson_differently"
+  | "what_else_explains"
+  | "what_read_missed"
+  | "calibration_block"
   | "repair_branch_active"
+  | "impact_to_name"
+  | "their_need_first"
+  | "pressure_vs_care"
+  | "timing_when"
+  | "timing_now"
+  | "first_repair_sentence"
   | "your_part"
   | "secret_want"
   | "could_make_them_feel"
@@ -259,8 +341,15 @@ export function formatReviewSection(
   const blocks: string[] = [];
   for (const r of rows) {
     const lines: string[] = [];
+    const depthLabel =
+      r.review_depth === "quick"
+        ? " — Quick review"
+        : r.review_depth === "full"
+          ? " — Full review"
+          : "";
     lines.push(
-      entryHeader(r.created_at, r.person_id, personMap, r.thread_id, threadMap),
+      entryHeader(r.created_at, r.person_id, personMap, r.thread_id, threadMap) +
+        depthLabel,
     );
     lines.push("");
     appendField(lines, "What happened", r.what_happened);
@@ -268,20 +357,60 @@ export function formatReviewSection(
     // Legacy rows have null on these and skip via appendField.
     appendField(lines, "What I observed (facts)", r.observed_raw);
     appendField(lines, "What I thought it meant", r.interpreted_raw);
-    appendField(lines, "Hardest moment — what I was feeling", r.hardest_moment_feeling);
+    // SOT 2026-05-08: felt_at_hardest_moment + body_location pair supersedes
+    // the legacy hardest_moment_feeling text column. Both rendered if present
+    // (legacy rows have one, SOT rows the other).
+    appendField(lines, "What I felt at the hardest moment", r.felt_at_hardest_moment);
+    appendField(lines, "Where I felt it in my body", r.body_location);
+    appendField(lines, "Hardest moment — what I was feeling (legacy)", r.hardest_moment_feeling);
+    appendField(lines, "Was that feeling tracking something real?", r.feeling_tracking);
     appendField(lines, "What I observed in them", r.observed_in_them);
-    appendField(lines, "Their experience", r.their_experience);
-    // New shape
+    appendField(lines, "What it might have felt like for them in that moment", r.their_in_moment_experience);
+    appendField(lines, "Their experience (legacy)", r.their_experience);
+    // New shape (2026-04-23)
     appendField(lines, "What I did", r.what_you_did);
     appendField(lines, "What I avoided", r.what_you_avoided);
     appendField(lines, "Did I ask before assuming", r.ask_before_understanding);
     appendField(lines, "What needs to happen next", r.needs_to_happen_next);
-    if (r.repair_branch_active) {
-      appendField(lines, "My part in this", r.your_part);
-      appendField(lines, "What I secretly want from them", r.secret_want);
-      appendField(lines, "What I want them to feel after the repair", r.could_make_them_feel);
+    appendField(lines, "Forecast (5–7 day)", r.forecast);
+    // SOT 2026-05-08 outcome arc
+    appendField(lines, "Easier or harder than I predicted?", r.easier_or_harder);
+    appendField(lines, "Was that prediction worth treating as data?", r.treat_as_data);
+    appendField(lines, "Something that helped (even if small)", r.something_that_helped);
+    appendField(lines, "Signs of how they left it", r.signs_how_they_left);
+    appendField(lines, "Turning point in the conversation", r.turning_point);
+    // SOT 2026-05-08 lesson + protecting
+    appendField(lines, "What I was wanting or protecting", r.what_protecting);
+    appendField(lines, "What that was (one line)", r.what_protecting_text);
+    appendField(lines, "Lesson — what I learned about them", r.lesson_about_them);
+    appendField(lines, "Lesson — what I learned about myself", r.lesson_about_self);
+    appendField(lines, "Lesson — what I'd do differently", r.lesson_differently);
+    appendField(lines, "What else could explain what happened", r.what_else_explains);
+    appendField(lines, "What might my read have missed", r.what_read_missed);
+    // Calibration block (linked-Prepare reviews only) — jsonb shape
+    // { compare, shift, floor }. Each is an enum string; render verbatim.
+    if (r.calibration_block && typeof r.calibration_block === "object") {
+      const cal = r.calibration_block as CalibrationBlock;
+      appendField(lines, "Calibration — vs prediction", cal.compare);
+      appendField(lines, "Calibration — vs prior similar conversations", cal.shift);
+      appendField(lines, "Calibration — vs outcome floor", cal.floor);
     }
-    // Legacy shape
+    if (r.repair_branch_active) {
+      // SOT 2026-05-08 expanded repair branch (6 fields).
+      appendField(lines, "Impact to name in the repair", r.impact_to_name);
+      appendField(lines, "Their need to address first", r.their_need_first);
+      appendField(lines, "Pressure vs care — how to land it", r.pressure_vs_care);
+      appendField(lines, "Timing — when to repair", r.timing_when);
+      if (r.timing_now !== null && r.timing_now !== undefined) {
+        appendField(lines, "Repair-now decision", r.timing_now ? "Now" : "Later");
+      }
+      appendField(lines, "First repair sentence", r.first_repair_sentence);
+      // Legacy repair fields (pre-SOT).
+      appendField(lines, "My part in this (legacy)", r.your_part);
+      appendField(lines, "What I secretly want from them (legacy)", r.secret_want);
+      appendField(lines, "What I want them to feel after the repair (legacy)", r.could_make_them_feel);
+    }
+    // Legacy shape (pre-2026-04-23)
     appendField(lines, "What helped", r.what_helped);
     appendField(lines, "What hurt", r.what_hurt);
     appendField(lines, "Assumptions I validated", r.validated_assumptions);
@@ -576,7 +705,7 @@ export async function buildExportText(
     supabase
       .from("prepare_entries")
       .select(
-        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, signal_noise_observation, person_id, thread_id",
+        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, signal_noise_observation, primary_emotion, body_location, emotion_as_data, default_pattern, observed_from_them, their_state_hedged, fairest_version, predicted_reaction, hidden_expectation, neutral_check_question, specific_shift, outcome_floor, opener, trigger_plan, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)
@@ -586,7 +715,7 @@ export async function buildExportText(
     supabase
       .from("review_entries")
       .select(
-        "created_at, what_happened, observed_raw, interpreted_raw, hardest_moment_feeling, observed_in_them, their_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, repair_branch_active, your_part, secret_want, could_make_them_feel, person_id, thread_id",
+        "created_at, review_depth, what_happened, observed_raw, interpreted_raw, hardest_moment_feeling, felt_at_hardest_moment, body_location, feeling_tracking, observed_in_them, their_experience, their_in_moment_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, forecast, easier_or_harder, treat_as_data, something_that_helped, signs_how_they_left, turning_point, what_protecting, what_protecting_text, lesson_about_them, lesson_about_self, lesson_differently, what_else_explains, what_read_missed, calibration_block, repair_branch_active, impact_to_name, their_need_first, pressure_vs_care, timing_when, timing_now, first_repair_sentence, your_part, secret_want, could_make_them_feel, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)
