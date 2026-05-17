@@ -75,11 +75,16 @@ const PULSE_CHECK_PAGES: PageDef[] = [
         kind: "textarea",
       },
       {
+        // 2026-05-17 fix3 (#16): use a compact textarea (rows=2) for this
+        // "moment estimate" Q so Page 1 doesn't scroll ~1000px on 375px
+        // viewports. The Q expects a short answer ("Sunday afternoon",
+        // "after dinner") — full 4-row textarea inflates the page wall.
         key: "whenItShifted",
         title: "When did it shift?",
         prompt:
           "A moment, a day, a stretch — your best estimate of when something changed.",
         kind: "textarea",
+        rows: 2,
       },
     ],
   },
@@ -552,7 +557,7 @@ export default function PulseCheckPage() {
         <VoiceInput
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          rows={4}
+          rows={step.rows ?? 4}
           placeholder="Type or tap the mic to speak..."
         />
       );

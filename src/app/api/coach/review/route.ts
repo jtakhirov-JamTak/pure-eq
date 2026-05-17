@@ -4,27 +4,15 @@ import { reviewOutputSchema } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
 import { runCoachModule } from "@/lib/coach/run-module";
 import { findLinkedPrepareEntry } from "@/lib/coach/calibration";
-import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
+import { deriveRepairBranchActive } from "@/lib/coach/page-flow";
 import type { CoachModuleConfig } from "@/lib/coach/types";
 
-/**
- * Server-side authoritative derivation of repair-branch activation.
- * The client posts `repairBranchActive` as a hint (the page's REPAIR_PAGES
- * use the same predicate to render the 3 repair pages), but the server
- * MUST NOT trust it — a malicious or buggy client could POST
- * `{ repairBranchActive: true, needsToHappenNext: "set_boundary" }` and
- * bypass REPAIR_TRIGGER_NEEDS otherwise. Computed once at the top of each
- * buildX hook so all three (payload / insert / prompt) agree.
- */
-function deriveRepairBranchActive(input: {
-  reviewDepth?: "quick" | "full";
-  needsToHappenNext?: (typeof REPAIR_TRIGGER_NEEDS)[number] | string | null;
-}): boolean {
-  if (input.reviewDepth !== "full") return false;
-  const chip = input.needsToHappenNext;
-  if (!chip) return false;
-  return (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(chip);
-}
+// 2026-05-17 fix3 (#14): deriveRepairBranchActive lifted to page-flow.ts
+// so client (review/page.tsx) and server (this file) share the predicate.
+// The client uses it to decide whether to render the 3 Repair pages; the
+// server re-runs it over the parsed payload to authoritative-stamp the
+// `repair_branch_active` column and null repair fields if the derived
+// value is false — never trusts the client-posted boolean.
 
 export const runtime = "nodejs";
 
@@ -80,11 +68,20 @@ export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   // Server-side authoritative lookup for the Prepare → Review link. Runs
   // for Full reviews only (Quick path skips calibration entirely). Failure
   // degrades to no-link → standalone branch shape; never fails the request.
+  //
+  // 2026-05-17 fix3 (#10): force linkedPrepareEntryId to null whenever the
+  // server-side lookup finds no snapshot. Without this, a client posting a
+  // smuggled UUID (e.g. another user's Prepare row) would land that foreign
+  // key in the DB FK column. RLS prevents reads of the foreign row, but the
+  // FK reference itself leaks. We only ever trust UUIDs that came from
+  // findLinkedPrepareEntry (which scopes by userId).
   prePromptEnrich: async (input, supabase, userId, personId) => {
-    if (input.reviewDepth !== "full") return input;
-    if (!personId) return input;
+    if (input.reviewDepth !== "full") {
+      return { ...input, linkedPrepareEntryId: null };
+    }
+    if (!personId) return { ...input, linkedPrepareEntryId: null };
     const snapshot = await findLinkedPrepareEntry(supabase, userId, personId);
-    if (!snapshot) return input;
+    if (!snapshot) return { ...input, linkedPrepareEntryId: null };
     return {
       ...input,
       linkedPrepareEntryId: snapshot.prepareEntryId,

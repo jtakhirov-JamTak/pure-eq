@@ -40,7 +40,7 @@ import {
 } from "@/components/coach/steps/timing-combo";
 import {
   pageCanAdvance,
-  REPAIR_TRIGGER_NEEDS,
+  deriveRepairBranchActive,
   type PageDef,
   type StepDef,
 } from "@/lib/coach/page-flow";
@@ -468,15 +468,17 @@ export default function ReviewPage() {
     ],
   };
 
-  // Repair branch active when needsAndForecast.chip ∈ REPAIR_TRIGGER_NEEDS
-  // AND we're on Full path. Quick path NEVER triggers repair.
+  // 2026-05-17 fix3 (#14): use the shared deriveRepairBranchActive from
+  // page-flow.ts so client + server can't drift if the trigger chip set or
+  // depth rules change. The server re-runs the same predicate over the
+  // parsed payload and treats this client value as a hint only.
   const needsForecast = data.needsAndForecast as
     | SelectNeedsWithForecastValue
     | undefined;
-  const repairActive =
-    reviewDepth === "full" &&
-    needsForecast !== undefined &&
-    (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(needsForecast.chip);
+  const repairActive = deriveRepairBranchActive({
+    reviewDepth,
+    needsToHappenNext: needsForecast?.chip ?? null,
+  });
 
   const PAGES: PageDef[] =
     reviewDepth === "quick"
@@ -490,20 +492,24 @@ export default function ReviewPage() {
         : [];
   const totalPages = PAGES.length;
 
-  // SOT 2026-05-08 fix2: clamp pageIndex when the user navigates back and
-  // changes the needs-to-happen-next chip in a way that drops the Repair
-  // pages out of PAGES. Without this clamp, pageIndex can point past
-  // totalPages-1 (e.g., user on repair_2 = index 5; chip flips from
-  // "apologize" to "nothing"; totalPages drops 8 → 5; currentPage becomes
-  // undefined; the form renders a blank page with no way forward). Runs
-  // synchronously inside render so the next paint already sees the clamp.
+  // SOT 2026-05-08 fix2 + 2026-05-17 followup fix3 (#11): clamp pageIndex
+  // when the user navigates back and changes the needs-to-happen-next chip
+  // in a way that drops Repair pages out of PAGES. Inline derivation runs
+  // during render, so currentPage and totalPages are consistent on the
+  // SAME paint (the prior useEffect approach left one frame where
+  // PAGES[pageIndex] was undefined before the effect re-ran setPageIndex,
+  // briefly rendering an empty page). The useEffect below still runs to
+  // bring stored pageIndex back into range so handleBack/handleNext don't
+  // skip pages, but rendering no longer depends on it firing.
+  const safePageIndex =
+    totalPages > 0 ? Math.min(pageIndex, totalPages - 1) : 0;
   useEffect(() => {
     if (totalPages > 0 && pageIndex > totalPages - 1) {
       setPageIndex(totalPages - 1);
     }
   }, [totalPages, pageIndex]);
 
-  const currentPage: PageDef | null = PAGES[pageIndex] ?? null;
+  const currentPage: PageDef | null = PAGES[safePageIndex] ?? null;
 
   function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
@@ -516,15 +522,15 @@ export default function ReviewPage() {
 
   function handleNext() {
     if (!canAdvance()) return;
-    if (pageIndex < totalPages - 1) {
-      setPageIndex(pageIndex + 1);
+    if (safePageIndex < totalPages - 1) {
+      setPageIndex(safePageIndex + 1);
     } else {
       handleSubmit();
     }
   }
 
   function handleBack() {
-    if (pageIndex > 0) setPageIndex(pageIndex - 1);
+    if (safePageIndex > 0) setPageIndex(safePageIndex - 1);
   }
 
   async function handleSubmit() {
@@ -1016,15 +1022,22 @@ export default function ReviewPage() {
     }
     if (step.kind === "select_calibration_chip") {
       const value = (data[step.key] as string | undefined) ?? "";
-      // chipSet is required for this kind — coerce undefined to "compare"
-      // as a safe default; the StepDef builder always supplies one for
-      // calibration steps.
-      const chipSet = step.chipSet ?? "compare";
+      // 2026-05-17 fix3 (#12): hard fail when a calibration StepDef forgets
+      // to declare chipSet. The prior fallback to "compare" rendered the
+      // wrong chips and 400'd at submit with no clear cause — bad for
+      // diagnosis. With the throw, the bug becomes loud and immediate
+      // during dev/QA, and prod gets a single broken Q rather than a
+      // silent partial-mislabel that contaminates the calibration block.
+      if (!step.chipSet) {
+        throw new Error(
+          `select_calibration_chip StepDef "${step.key}" is missing required chipSet prop`,
+        );
+      }
       return (
         <SelectCalibrationChip
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          chipSet={chipSet}
+          chipSet={step.chipSet}
         />
       );
     }
@@ -1055,7 +1068,7 @@ export default function ReviewPage() {
       <CoachPage
         eyebrow={reviewDepth === "quick" ? "Review · Quick" : "Review"}
         eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink"
-        pageIndex={pageIndex}
+        pageIndex={safePageIndex}
         totalPages={totalPages}
         page={currentPage}
         state={data}
@@ -1066,7 +1079,7 @@ export default function ReviewPage() {
         <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
       )}
       <div className="mt-6 flex gap-3">
-        {pageIndex > 0 && (
+        {safePageIndex > 0 && (
           <button
             onClick={handleBack}
             className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
@@ -1079,7 +1092,7 @@ export default function ReviewPage() {
           disabled={!canAdvance()}
           className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
-          {pageIndex === totalPages - 1 ? "Get Reflection" : "Next"}
+          {safePageIndex === totalPages - 1 ? "Get Reflection" : "Next"}
         </button>
       </div>
     </div>

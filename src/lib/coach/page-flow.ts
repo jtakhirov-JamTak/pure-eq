@@ -37,6 +37,25 @@ export const REPAIR_TRIGGER_NEEDS = [
 
 export type RepairTriggerNeed = (typeof REPAIR_TRIGGER_NEEDS)[number];
 
+/**
+ * Server- and client-shared derivation of repair-branch activation.
+ * Lifted here from `src/app/api/coach/review/route.ts` (2026-05-17 fix3
+ * #14) so the page-renderer and the API handler can't drift when the
+ * trigger chip set or depth rules change. The server still treats the
+ * client-posted `repairBranchActive` flag as a hint only — it re-runs
+ * this function over the parsed payload and null-stamps repair columns
+ * if the derived value is false.
+ */
+export function deriveRepairBranchActive(input: {
+  reviewDepth?: "quick" | "full" | null;
+  needsToHappenNext?: string | null;
+}): boolean {
+  if (input.reviewDepth !== "full") return false;
+  const chip = input.needsToHappenNext;
+  if (!chip) return false;
+  return (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(chip);
+}
+
 export type StepKind =
   | "person"
   | "select"
@@ -71,6 +90,13 @@ export type StepDef = {
    * Required when `kind === "select_calibration_chip"`; ignored otherwise.
    */
   chipSet?: CalibrationChipSet;
+  /**
+   * Optional row count for `kind === "textarea"` steps. Defaults to 4 in
+   * the renderer when omitted. Lowering it to 2 keeps "moment estimate"
+   * Qs from inflating the page scroll height on mobile (2026-05-17 fix3
+   * #16 — Pulse Check Page 1 density).
+   */
+  rows?: number;
   /**
    * For object-valued steps (e.g. textarea_three_field_lesson), names the
    * sub-fields that MUST be non-empty for advance. Other sub-fields are
