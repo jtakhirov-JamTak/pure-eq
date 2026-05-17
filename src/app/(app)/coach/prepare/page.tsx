@@ -33,11 +33,22 @@ const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// Coach SOT 2026-05-06: 5 pages, 14 fields. Path A/B split is gone —
-// Pulse Check is now its own module with own table + own free-use flag.
+// Coach SOT 2026-05-08 follow-up (feat/sot-followup-0037): 5 pages,
+// 16 steps. The 0036 layout missed several Qs from the locked SOT
+// cross-eval — primary_emotion, default_pattern, neutral_check_question.
+// The body chip moves OFF opener TO primary_emotion (felt sense going in
+// is paired with the named emotion, not the opener). situation moves
+// from Page 2 to Page 1 alongside person + relationship.
+//
+// Page-to-state shape:
+//   1 setup:       personName, relationship, situation
+//   2 self_state:  primaryEmotionWithBody (text+body chip), emotionAsData, defaultPattern
+//   3 their_read:  observedFromThem, theirStateHedged, fairestVersion
+//   4 shape:       predictedReaction, hiddenExpectation, specificShift, outcomeFloor
+//   5 action:      neutralCheckQuestion, opener (text only), triggerPlan
 const PREPARE_PAGES: PageDef[] = [
   {
-    pageKey: "person",
+    pageKey: "setup",
     qs: [
       {
         key: "personName",
@@ -51,22 +62,35 @@ const PREPARE_PAGES: PageDef[] = [
         prompt: null,
         kind: "select",
       },
-    ],
-  },
-  {
-    pageKey: "situation",
-    qs: [
       {
         key: "situation",
         title: "What is this conversation about?",
         prompt: "Describe the situation in facts only. What needs to be discussed?",
         kind: "textarea",
       },
+    ],
+  },
+  {
+    pageKey: "self_state",
+    qs: [
+      {
+        key: "primaryEmotionWithBody",
+        title: "What are you feeling — and where do you notice it in your body?",
+        prompt:
+          "The emotion you're carrying into this conversation. Then point at where it sits.",
+        kind: "textarea_with_body_chip",
+      },
       {
         key: "emotionAsData",
         title: "What is your emotion telling you?",
         prompt:
           "The feeling you're carrying in is signal. Treat it as data, not noise — what is it pointing at?",
+        kind: "textarea",
+      },
+      {
+        key: "defaultPattern",
+        title: "When you feel that way, what do you usually do that gets in the way?",
+        prompt: "Your default. Not the version you wish was true.",
         kind: "textarea",
       },
     ],
@@ -128,19 +152,26 @@ const PREPARE_PAGES: PageDef[] = [
     ],
   },
   {
-    pageKey: "opener",
+    pageKey: "action",
     qs: [
       {
-        key: "openerWithBody",
-        title: "Your opening line — and where you feel it",
+        key: "neutralCheckQuestion",
+        title: "What's one neutral question you can ask to check your read instead of assuming?",
         prompt:
-          "The first thing you're planning to say, plus where in your body you feel this conversation right now.",
-        kind: "textarea_with_body_chip",
+          "Not 'are we okay.' Something specific that would actually surface info.",
+        kind: "textarea",
+      },
+      {
+        key: "opener",
+        title: "What are the first 1–2 sentences you'd actually open with?",
+        prompt:
+          "The actual words. Say it out loud now to test how it sounds. Then check: could it land as pressure, blame, or a test?",
+        kind: "textarea",
       },
       {
         key: "triggerPlan",
         title: "If you get triggered, what will you do instead?",
-        prompt: "Complete this: If I notice myself feeling ___, then I will ___.",
+        prompt: "Complete: 'If I notice myself feeling [your primary emotion], then I will ___ instead of ___.' The second blank is your default move from the previous page.",
         kind: "textarea_if_then",
       },
     ],
@@ -343,19 +374,24 @@ export default function PreparePage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // Flatten openerWithBody back into top-level opener + bodyLocation
-      // to match the createPrepareSchema shape.
-      const opener =
-        (data.openerWithBody as TextareaWithBodyChipValue | undefined)?.text ??
-        "";
+      // SOT 2026-05-08 Commit 4: body chip is paired with primaryEmotion
+      // (not opener). Flatten the textarea_with_body_chip step value into
+      // primaryEmotion (text) + bodyLocation (chip). opener is now a plain
+      // textarea with no body chip.
+      const primaryEmotion =
+        (data.primaryEmotionWithBody as TextareaWithBodyChipValue | undefined)
+          ?.text ?? "";
       const bodyLocation =
-        (data.openerWithBody as TextareaWithBodyChipValue | undefined)
+        (data.primaryEmotionWithBody as TextareaWithBodyChipValue | undefined)
           ?.bodyLocation ?? "";
       const body = {
         personName: data.personName,
         relationship: data.relationship,
         situation: data.situation,
+        primaryEmotion,
+        bodyLocation,
         emotionAsData: data.emotionAsData,
+        defaultPattern: data.defaultPattern,
         observedFromThem: data.observedFromThem,
         theirStateHedged: data.theirStateHedged,
         fairestVersion: data.fairestVersion,
@@ -363,8 +399,8 @@ export default function PreparePage() {
         hiddenExpectation: data.hiddenExpectation,
         specificShift: data.specificShift,
         outcomeFloor: data.outcomeFloor,
-        opener,
-        bodyLocation,
+        neutralCheckQuestion: data.neutralCheckQuestion,
+        opener: data.opener,
         triggerPlan: data.triggerPlan,
         personId: personId || null,
         idempotencyKey: idempotencyKeyRef.current,

@@ -38,12 +38,16 @@ const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// Coach SOT 2026-05-06: Pulse Check has 3 pages. Q "lightCheckQuestion"
-// is on the same page as Q "nextMoveChip" via intra-page conditional —
-// only renders when the chip is ask_clarifying or use_bys.
+// Coach SOT 2026-05-07 follow-up: 3-page layout matches the SOT cognitive arc.
+// Page 1 = setup + what changed (so the user names the contrast before
+// introspecting). Page 2 = self-state + reappraisal (story vs equally
+// plausible alternative — NOT "more generous"; that trains motivated
+// reasoning). Page 3 = falsifiable test + route.
+// `lightCheckQuestion` is on the same page as `nextMoveChip` via intra-page
+// conditional — only renders when the chip is ask_clarifying or use_bys.
 const PULSE_CHECK_PAGES: PageDef[] = [
   {
-    pageKey: "what_off",
+    pageKey: "setup_what_changed",
     qs: [
       {
         key: "personName",
@@ -64,11 +68,6 @@ const PULSE_CHECK_PAGES: PageDef[] = [
           "What's bugging you or pulling at your attention — even if you can't name it yet.",
         kind: "textarea",
       },
-    ],
-  },
-  {
-    pageKey: "when_body",
-    qs: [
       {
         key: "whatChangedAndBefore",
         title: "What changed — and what felt fine before?",
@@ -82,36 +81,40 @@ const PULSE_CHECK_PAGES: PageDef[] = [
           "A moment, a day, a stretch — your best estimate of when something changed.",
         kind: "textarea",
       },
+    ],
+  },
+  {
+    pageKey: "story_vs_alternative",
+    qs: [
       {
         key: "feelingAndBody",
         title: "What are you feeling, and where do you feel it?",
         prompt: "Name the feeling, then point at where it sits in your body.",
         kind: "textarea_with_body_chip",
       },
-    ],
-  },
-  {
-    pageKey: "story_next",
-    qs: [
       {
         key: "theirsNotAboutYou",
-        title: "Why might this not be about you?",
-        prompt:
-          "Their week, their state, their other pressures. The most charitable explanation that still fits.",
+        title: "What might be going on for them right now that has nothing to do with you?",
+        prompt: "Work, sleep, family, health, something they're carrying. Best guess.",
         kind: "textarea",
       },
       {
         key: "storyAndAlternative",
-        title: "Your story vs a more generous alternative",
+        title: "What story are you telling yourself — and what's an alternative that would also fit?",
         prompt:
-          "The story you're telling yourself on the left. A fairer take on the right.",
+          "Two fields. Left: the story you've been concluding. Right: an equally plausible alternative, not the optimistic one.",
         kind: "textarea_two_column",
       },
+    ],
+  },
+  {
+    pageKey: "test_and_route",
+    qs: [
       {
         key: "signalNoiseObservation",
-        title: "What would tell you this is real?",
+        title: "What would you need to observe over the next 3–7 days to know this is signal, not noise?",
         prompt:
-          "What would you need to observe over the next 3–7 days to know this is signal, not noise? A specific behavior, message, or change.",
+          "Concrete. A behavior, a message, a tone change. What would tell you 'yes, this is real'?",
         kind: "textarea",
       },
       {
@@ -570,10 +573,10 @@ export default function PulseCheckPage() {
         <TextareaTwoColumn
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          leftLabel="Your story"
-          rightLabel="A more generous alternative"
-          leftPlaceholder="The meaning you're assigning."
-          rightPlaceholder="A fairer take that still fits."
+          leftLabel="The story"
+          rightLabel="An equally plausible alternative"
+          leftPlaceholder="The meaning you've been concluding."
+          rightPlaceholder="A take that would also fit — not the optimistic one."
         />
       );
     }

@@ -25,7 +25,13 @@
   --color-brand-deep: #2a86e3;
   --color-ink: #0e2748;
   --color-ink-soft: #4a5e82;
-  --color-ink-muted: #8aa0c2;
+  /* SOT 2026-05-08 fix3: #8aa0c2 (~3.0:1 on white) failed WCAG AA at
+     text-[11px], where this token is used heavily for step labels,
+     page count, and result-card eyebrows across 19 files. Bumped to
+     #6a7da3 (~4.6:1) — passes AA at small sizes, still distinctly
+     lighter than ink-soft for the visual-hierarchy intent. CLAUDE.md
+     rule: zinc-500 minimum for body/label, zinc-600 minimum for text-xs. */
+  --color-ink-muted: #6a7da3;
   --color-surface: #ffffff;
   --color-surface-tint: #eef8ff;
   --color-warm: #ffd166;

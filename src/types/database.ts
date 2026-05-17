@@ -379,6 +379,7 @@ export type Database = {
           body_location: string | null
           completed_at: string | null
           created_at: string
+          default_pattern: string | null
           deleted_at: string | null
           desired_outcome: string | null
           emotion_as_data: string | null
@@ -387,6 +388,7 @@ export type Database = {
           how_to_make_them_feel: string | null
           is_complete: boolean
           needs_user_confirmation: boolean
+          neutral_check_question: string | null
           observed_from_them: string | null
           opener: string | null
           outcome_floor: string | null
@@ -398,6 +400,7 @@ export type Database = {
           person_id: string | null
           predicted_reaction: string | null
           prepare_entry_id: string
+          primary_emotion: string | null
           primary_value: string | null
           raw_record_id: string | null
           signal_noise_observation: string | null
@@ -407,6 +410,7 @@ export type Database = {
           their_need: string | null
           their_state_hedged: string | null
           thread_id: string | null
+          trigger_plan: string | null
           user_id: string
           what_changed: string | null
           what_feels_off: string | null
@@ -419,6 +423,7 @@ export type Database = {
           body_location?: string | null
           completed_at?: string | null
           created_at?: string
+          default_pattern?: string | null
           deleted_at?: string | null
           desired_outcome?: string | null
           emotion_as_data?: string | null
@@ -427,6 +432,7 @@ export type Database = {
           how_to_make_them_feel?: string | null
           is_complete?: boolean
           needs_user_confirmation?: boolean
+          neutral_check_question?: string | null
           observed_from_them?: string | null
           opener?: string | null
           outcome_floor?: string | null
@@ -438,6 +444,7 @@ export type Database = {
           person_id?: string | null
           predicted_reaction?: string | null
           prepare_entry_id?: string
+          primary_emotion?: string | null
           primary_value?: string | null
           raw_record_id?: string | null
           signal_noise_observation?: string | null
@@ -447,6 +454,7 @@ export type Database = {
           their_need?: string | null
           their_state_hedged?: string | null
           thread_id?: string | null
+          trigger_plan?: string | null
           user_id: string
           what_changed?: string | null
           what_feels_off?: string | null
@@ -459,6 +467,7 @@ export type Database = {
           body_location?: string | null
           completed_at?: string | null
           created_at?: string
+          default_pattern?: string | null
           deleted_at?: string | null
           desired_outcome?: string | null
           emotion_as_data?: string | null
@@ -467,6 +476,7 @@ export type Database = {
           how_to_make_them_feel?: string | null
           is_complete?: boolean
           needs_user_confirmation?: boolean
+          neutral_check_question?: string | null
           observed_from_them?: string | null
           opener?: string | null
           outcome_floor?: string | null
@@ -478,6 +488,7 @@ export type Database = {
           person_id?: string | null
           predicted_reaction?: string | null
           prepare_entry_id?: string
+          primary_emotion?: string | null
           primary_value?: string | null
           raw_record_id?: string | null
           signal_noise_observation?: string | null
@@ -487,6 +498,7 @@ export type Database = {
           their_need?: string | null
           their_state_hedged?: string | null
           thread_id?: string | null
+          trigger_plan?: string | null
           user_id?: string
           what_changed?: string | null
           what_feels_off?: string | null
@@ -814,6 +826,7 @@ export type Database = {
           deleted_at: string | null
           easier_or_harder: string | null
           feeling_tracking: string | null
+          felt_at_hardest_moment: string | null
           first_repair_sentence: string | null
           forecast: string | null
           hardest_moment_feeling: string | null
@@ -839,6 +852,7 @@ export type Database = {
           signs_how_they_left: string | null
           something_that_helped: string | null
           their_experience: string | null
+          their_in_moment_experience: string | null
           their_need_first: string | null
           thread_id: string | null
           timing_now: boolean | null
@@ -871,6 +885,7 @@ export type Database = {
           deleted_at?: string | null
           easier_or_harder?: string | null
           feeling_tracking?: string | null
+          felt_at_hardest_moment?: string | null
           first_repair_sentence?: string | null
           forecast?: string | null
           hardest_moment_feeling?: string | null
@@ -896,6 +911,7 @@ export type Database = {
           signs_how_they_left?: string | null
           something_that_helped?: string | null
           their_experience?: string | null
+          their_in_moment_experience?: string | null
           their_need_first?: string | null
           thread_id?: string | null
           timing_now?: boolean | null
@@ -928,6 +944,7 @@ export type Database = {
           deleted_at?: string | null
           easier_or_harder?: string | null
           feeling_tracking?: string | null
+          felt_at_hardest_moment?: string | null
           first_repair_sentence?: string | null
           forecast?: string | null
           hardest_moment_feeling?: string | null
@@ -953,6 +970,7 @@ export type Database = {
           signs_how_they_left?: string | null
           something_that_helped?: string | null
           their_experience?: string | null
+          their_in_moment_experience?: string | null
           their_need_first?: string | null
           thread_id?: string | null
           timing_now?: boolean | null

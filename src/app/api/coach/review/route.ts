@@ -4,7 +4,27 @@ import { reviewOutputSchema } from "@/lib/ai/schemas";
 import { buildReviewPrompt } from "@/lib/ai/prompts";
 import { runCoachModule } from "@/lib/coach/run-module";
 import { findLinkedPrepareEntry } from "@/lib/coach/calibration";
+import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
 import type { CoachModuleConfig } from "@/lib/coach/types";
+
+/**
+ * Server-side authoritative derivation of repair-branch activation.
+ * The client posts `repairBranchActive` as a hint (the page's REPAIR_PAGES
+ * use the same predicate to render the 3 repair pages), but the server
+ * MUST NOT trust it — a malicious or buggy client could POST
+ * `{ repairBranchActive: true, needsToHappenNext: "set_boundary" }` and
+ * bypass REPAIR_TRIGGER_NEEDS otherwise. Computed once at the top of each
+ * buildX hook so all three (payload / insert / prompt) agree.
+ */
+function deriveRepairBranchActive(input: {
+  reviewDepth?: "quick" | "full";
+  needsToHappenNext?: (typeof REPAIR_TRIGGER_NEEDS)[number] | string | null;
+}): boolean {
+  if (input.reviewDepth !== "full") return false;
+  const chip = input.needsToHappenNext;
+  if (!chip) return false;
+  return (REPAIR_TRIGGER_NEEDS as readonly string[]).includes(chip);
+}
 
 export const runtime = "nodejs";
 
@@ -29,7 +49,10 @@ type Input = z.infer<typeof createReviewSchema> & {
 };
 type AiOutput = z.infer<typeof reviewOutputSchema>;
 
-const config: CoachModuleConfig<Input, AiOutput> = {
+// Exported (SOT 2026-05-08 fix6, #14) so vitest round-trip tests can
+// directly call buildDerivedInsert / buildPayloadFields and catch column-
+// rename drift the schema-only tests miss.
+export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   moduleName: "review",
   requestSchema:
     requestSchema as unknown as CoachModuleConfig<Input, AiOutput>["requestSchema"],
@@ -43,10 +66,16 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "review_entry_id",
   aiJsonColumn: "ai_reflection_json",
   aiVersionColumn: "ai_reflection_version",
-  // 2026-05-07: bump 7 → 8 alongside PROMPT_VERSION 4.5.0 → 5.0.0 and the
-  // SOT migration. Distinguishes Quick/Full split + calibration prepend +
-  // standalone branch + repair-swap (Commit 6) from pre-SOT 7-rows.
-  aiVersionValue: 8,
+  // 2026-05-08 Commit 5: bump 8 → 9 alongside PROMPT_VERSION 5.0.0 → 5.1.0
+  // and the Review Full SOT overhaul (8 new Qs on Full, lessonScreen 3-
+  // field, shared Page-5 head/tail, deprecated-Q removal, repair-branch
+  // wording fix). Distinguishes Commit-5 rows from 0036-shape rows
+  // (aiVersionValue 8). felt_at_hardest_moment + body_location +
+  // feeling_tracking + easier_or_harder + treat_as_data +
+  // something_that_helped + signs_how_they_left + turning_point +
+  // what_else_explains + what_read_missed + lesson_about_them /
+  // lesson_about_self / lesson_differently now persist on Full.
+  aiVersionValue: 9,
 
   // Server-side authoritative lookup for the Prepare → Review link. Runs
   // for Full reviews only (Quick path skips calibration entirely). Failure
@@ -71,55 +100,116 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     };
   },
 
-  buildPayloadFields: (input) => ({
+  buildPayloadFields: (input) => {
+    const repairBranchActive = deriveRepairBranchActive(input);
+    return ({
     reviewDepth: input.reviewDepth,
     whatHappened: input.whatHappened,
     observedRaw: input.observedRaw,
     interpretedRaw: input.interpretedRaw,
-    hardestMomentFeeling: input.hardestMomentFeeling,
+    // SOT 2026-05-08 Commit 5: Full self-state + impact + theirs Qs.
+    feltAtHardestMoment: input.feltAtHardestMoment ?? null,
+    bodyLocation: input.bodyLocation ?? null,
+    feelingTracking: input.feelingTracking ?? null,
     whatYouDid: input.whatYouDid ?? null,
+    easierOrHarder: input.easierOrHarder ?? null,
+    treatAsData: input.treatAsData ?? null,
+    somethingThatHelped: input.somethingThatHelped ?? null,
+    theirInMomentExperience: input.theirInMomentExperience ?? null,
+    signsHowTheyLeft: input.signsHowTheyLeft ?? null,
+    turningPoint: input.turningPoint ?? null,
+    // Deprecated Full fields no longer collected — historical rows keep
+    // these populated. New posts write null.
+    hardestMomentFeeling: input.hardestMomentFeeling ?? null,
     observedInThem: input.observedInThem ?? null,
-    theirExperience: input.theirExperience ?? null,
     whatYouAvoided: input.whatYouAvoided ?? null,
     askBeforeUnderstanding: input.askBeforeUnderstanding ?? null,
     needsToHappenNext: input.needsToHappenNext ?? null,
-    repairBranchActive: input.repairBranchActive,
+    forecast: input.forecast ?? null,
+    // SOT 2026-05-08 fix2: server-derived, ignores client value.
+    repairBranchActive,
+    // Null-out repair fields when not in the repair branch so a buggy/
+    // malicious client can't smuggle pre-canned repair content.
+    impactToName: repairBranchActive ? input.impactToName ?? null : null,
+    theirNeedFirst: repairBranchActive ? input.theirNeedFirst ?? null : null,
+    pressureVsCare: repairBranchActive ? input.pressureVsCare ?? null : null,
+    timingWhen: repairBranchActive ? input.timingWhen ?? null : null,
+    timingNow: repairBranchActive ? input.timingNow ?? null : null,
+    firstRepairSentence: repairBranchActive
+      ? input.firstRepairSentence ?? null
+      : null,
     yourPart: input.yourPart ?? null,
     linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
     calibrationBlock: input.calibrationBlock ?? null,
     whatProtecting: input.whatProtecting ?? null,
-    whatYouLearned: input.whatYouLearned ?? null,
-  }),
+    lessonScreen: input.lessonScreen ?? null,
+    whatElseExplains: input.whatElseExplains ?? null,
+    whatReadMissed: input.whatReadMissed ?? null,
+  });
+  },
 
   buildDerivedInsert: (input) => {
-    // forecast lives on whatProtecting? No — forecast = optional companion
-    // on needsToHappenNext (select_needs_with_forecast). The schema models
-    // it as `forecast` future-field; here we pass through whatever the
-    // client sent. Old field names retained for back-compat.
+    // SOT 2026-05-08 fix2: repair_branch_active is server-derived, NOT
+    // taken from input.repairBranchActive. Repair-branch columns are
+    // forced null when the derived value is false so a client cannot
+    // smuggle repair content with a non-trigger chip.
+    const repairBranchActive = deriveRepairBranchActive(input);
     const insert: Record<string, unknown> = {
       review_depth: input.reviewDepth,
       what_happened: input.whatHappened,
       observed_raw: input.observedRaw,
       interpreted_raw: input.interpretedRaw,
-      hardest_moment_feeling: input.hardestMomentFeeling,
+      felt_at_hardest_moment: input.feltAtHardestMoment ?? null,
+      body_location: input.bodyLocation ?? null,
+      feeling_tracking: input.feelingTracking ?? null,
       what_you_did: input.whatYouDid ?? null,
+      easier_or_harder: input.easierOrHarder ?? null,
+      treat_as_data: input.treatAsData ?? null,
+      something_that_helped: input.somethingThatHelped ?? null,
+      their_in_moment_experience: input.theirInMomentExperience ?? null,
+      signs_how_they_left: input.signsHowTheyLeft ?? null,
+      turning_point: input.turningPoint ?? null,
+      // Deprecated Full fields — historical rows keep their values; new
+      // posts write null. Columns stay for /history reads on legacy rows.
+      hardest_moment_feeling: input.hardestMomentFeeling ?? null,
       observed_in_them: input.observedInThem ?? null,
-      their_experience: input.theirExperience ?? null,
       what_you_avoided: input.whatYouAvoided ?? null,
       ask_before_understanding: input.askBeforeUnderstanding ?? null,
       needs_to_happen_next: input.needsToHappenNext ?? null,
-      repair_branch_active: input.repairBranchActive,
+      forecast: input.forecast ?? null,
+      repair_branch_active: repairBranchActive,
+      // SOT 2026-05-08 fix1+fix2: 5-Q repair swap, gated on the server-
+      // derived repairBranchActive so a client cannot persist repair
+      // content with a non-trigger chip.
+      impact_to_name: repairBranchActive ? input.impactToName ?? null : null,
+      their_need_first: repairBranchActive
+        ? input.theirNeedFirst ?? null
+        : null,
+      pressure_vs_care: repairBranchActive
+        ? input.pressureVsCare ?? null
+        : null,
+      timing_when: repairBranchActive ? input.timingWhen ?? null : null,
+      timing_now: repairBranchActive ? input.timingNow ?? null : null,
+      first_repair_sentence: repairBranchActive
+        ? input.firstRepairSentence ?? null
+        : null,
       your_part: input.yourPart ?? null,
       linked_prepare_entry_id: input.linkedPrepareEntryId ?? null,
       calibration_block: input.calibrationBlock ?? null,
       what_protecting: input.whatProtecting?.chip ?? null,
       what_protecting_text: input.whatProtecting?.text ?? null,
+      lesson_about_them: input.lessonScreen?.a ?? null,
+      lesson_about_self: input.lessonScreen?.b ?? null,
+      lesson_differently: input.lessonScreen?.c ?? null,
+      what_else_explains: input.whatElseExplains ?? null,
+      what_read_missed: input.whatReadMissed ?? null,
     };
     return insert;
   },
 
-  buildPrompt: (input, profile, context) =>
-    buildReviewPrompt({
+  buildPrompt: (input, profile, context) => {
+    const repairBranchActive = deriveRepairBranchActive(input);
+    return buildReviewPrompt({
       profile,
       personName: context.personName,
       personRelationship: context.personRelationship,
@@ -128,19 +218,32 @@ const config: CoachModuleConfig<Input, AiOutput> = {
       observedRaw: input.observedRaw,
       interpretedRaw: input.interpretedRaw,
       hardestMomentFeeling: input.hardestMomentFeeling,
+      // SOT 2026-05-08 Commit 5 — new SOT inputs.
+      feltAtHardestMoment: input.feltAtHardestMoment ?? null,
+      bodyLocation: input.bodyLocation ?? null,
+      feelingTracking: input.feelingTracking ?? null,
+      easierOrHarder: input.easierOrHarder ?? null,
+      treatAsData: input.treatAsData ?? null,
+      somethingThatHelped: input.somethingThatHelped ?? null,
+      theirInMomentExperience: input.theirInMomentExperience ?? null,
+      signsHowTheyLeft: input.signsHowTheyLeft ?? null,
+      turningPoint: input.turningPoint ?? null,
+      whatElseExplains: input.whatElseExplains ?? null,
+      whatReadMissed: input.whatReadMissed ?? null,
+      lessonScreen: input.lessonScreen ?? null,
       whatYouDid: input.whatYouDid,
       observedInThem: input.observedInThem,
-      theirExperience: input.theirExperience,
       whatYouAvoided: input.whatYouAvoided,
       askBeforeUnderstanding: input.askBeforeUnderstanding,
       needsToHappenNext: input.needsToHappenNext,
-      repairBranchActive: input.repairBranchActive,
+      repairBranchActive,
       yourPart: input.yourPart,
       linkedPrepareEntryId: input.linkedPrepareEntryId ?? null,
       prepareSnapshot: input.prepareSnapshotForPrompt ?? null,
       calibrationBlock: input.calibrationBlock ?? null,
       whatProtecting: input.whatProtecting ?? null,
-    }),
+    });
+  },
 
   buildResponseExtras: (derivedEntryId) => ({
     reviewEntryId: derivedEntryId,
@@ -148,5 +251,5 @@ const config: CoachModuleConfig<Input, AiOutput> = {
 };
 
 export async function POST(req: Request) {
-  return runCoachModule(req, config);
+  return runCoachModule(req, reviewModuleConfig);
 }

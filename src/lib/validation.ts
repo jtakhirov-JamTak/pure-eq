@@ -120,6 +120,30 @@ export const THEIR_NEED_FIRST_VALUES = [
   "boundary",
 ] as const;
 
+/**
+ * Review calibration chip taxonomy (3 sub-enums). SOT 2026-05-08 — the
+ * Prepare → Review prediction loop. Each sub-enum scores one dimension
+ * of "did the forecast match reality?":
+ *   compare — was the conversation better/about_right/worse than predicted?
+ *   shift   — did the specific shift you asked for actually happen?
+ *   floor   — did you hit the good-enough outcome you set?
+ * Promoted from `SelectCalibrationChip` component (fix2). Schema now
+ * enforces the enums server-side so a direct API caller can't post
+ * arbitrary 40-char strings into `review_entries.calibration_block`.
+ */
+export const CALIBRATION_COMPARE_VALUES = [
+  "better",
+  "about_right",
+  "worse",
+] as const;
+export const CALIBRATION_SHIFT_VALUES = [
+  "yes",
+  "partial",
+  "no",
+  "too_soon",
+] as const;
+export const CALIBRATION_FLOOR_VALUES = ["yes", "mostly", "no"] as const;
+
 // ============================================================
 // Coach — Prepare (Coach SOT 2026-05-06)
 // ============================================================
@@ -138,14 +162,26 @@ export const THEIR_NEED_FIRST_VALUES = [
 // Old fields (situation_text/primary_value/their_need/etc.) stay nullable
 // in the DB for /history reads on legacy rows; new posts do not send them.
 
+// SOT 2026-05-08 Commit 4: 16-step / 16-field schema. Pages now read:
+//   1. personName, relationship, situation
+//   2. primaryEmotion (text+body), emotionAsData, defaultPattern
+//   3. observedFromThem, theirStateHedged, fairestVersion
+//   4. predictedReaction, hiddenExpectation, specificShift, outcomeFloor
+//   5. neutralCheckQuestion, opener (text only), triggerPlan
+// bodyLocation is the body chip paired with primaryEmotion (the felt sense
+// going in). 0036 originally attached body_location to opener; 0037 leaves
+// the column as-is and re-purposes the consumer — same column, new pairing.
 export const createPrepareSchema = z.object({
-  // Page 1 — person + relationship
+  // Page 1 — person + relationship + situation
   personName: z.string().trim().min(1).max(200),
   relationship: RELATIONSHIP_ENUM,
-  // Page 2 — situation + emotion-as-data
   situation: z.string().min(1).max(5000),
+  // Page 2 — primary emotion (+ body) + emotion-as-data + default pattern
+  primaryEmotion: z.string().min(1).max(2000),
+  bodyLocation: z.enum(BODY_LOCATION_VALUES),
   emotionAsData: z.string().min(1).max(2000),
-  // Page 3 — observed/state-hedged/fairest (three-field lesson)
+  defaultPattern: z.string().min(1).max(2000),
+  // Page 3 — observed/state-hedged/fairest
   observedFromThem: z.string().min(1).max(2000),
   theirStateHedged: z.string().min(1).max(2000),
   fairestVersion: z.string().min(1).max(2000),
@@ -154,9 +190,9 @@ export const createPrepareSchema = z.object({
   hiddenExpectation: z.string().min(1).max(2000),
   specificShift: z.string().min(1).max(2000),
   outcomeFloor: z.string().min(1).max(2000),
-  // Page 5 — opener + body location, then trigger plan
+  // Page 5 — neutral check question + opener (text only) + trigger plan
+  neutralCheckQuestion: z.string().min(1).max(2000),
   opener: z.string().min(1).max(1000),
-  bodyLocation: z.enum(BODY_LOCATION_VALUES),
   triggerPlan: z.string().min(1).max(2000),
   // Person/thread + idempotency. idempotencyKey is injected by route layer.
   personId: z.string().uuid().nullable().optional(),
@@ -211,23 +247,62 @@ export const createReviewSchema = z.object({
   // Cross-eval batch #1 (2026-05-03): two-column observed/interpreted step.
   observedRaw: z.string().min(1).max(2000),
   interpretedRaw: z.string().min(1).max(2000),
-  hardestMomentFeeling: z.string().min(1).max(5000),
-  // Full-only fields (optional on Quick — page never collects them, post
-  // either omits or sends an empty string which Zod rejects, so consumers
-  // must omit on Quick).
+  // SOT 2026-05-08: Quick no longer collects hardestMomentFeeling; Full
+  // replaces it with feltAtHardestMoment + body chip + a separate
+  // feelingTracking Q ("Was the feeling tracking something real?").
+  // Legacy column kept nullable for /history reads.
+  hardestMomentFeeling: z.string().min(1).max(5000).optional(),
+  // SOT 2026-05-08 Commit 5: 8 new Full-Review Qs (felt-at-hardest-moment
+  // text + body, feeling-tracking, easier-or-harder, treat-as-data,
+  // something-that-helped, their-in-moment-experience, signs-how-they-
+  // left, turning-point). Schema fields are optional + nullable so Quick
+  // can omit them entirely; Full posts populate. Empty strings rejected
+  // (`.min(1)`) so the page-canAdvance contract holds at the API boundary.
+  feltAtHardestMoment: z.string().min(1).max(5000).nullable().optional(),
+  feelingTracking: z.string().min(1).max(5000).nullable().optional(),
+  easierOrHarder: z.string().min(1).max(5000).nullable().optional(),
+  treatAsData: z.string().min(1).max(5000).nullable().optional(),
+  somethingThatHelped: z.string().min(1).max(5000).nullable().optional(),
+  theirInMomentExperience: z.string().min(1).max(5000).nullable().optional(),
+  signsHowTheyLeft: z.string().min(1).max(5000).nullable().optional(),
+  turningPoint: z.string().min(1).max(5000).nullable().optional(),
+  // SOT 2026-05-08 Commit 5: Page 5 standalone branch (renders when no
+  // linkedPrepareEntryId). 2 textarea Qs that replace whatYouLearned.
+  whatElseExplains: z.string().min(1).max(5000).nullable().optional(),
+  whatReadMissed: z.string().min(1).max(5000).nullable().optional(),
+  // Body chip paired with feltAtHardestMoment. Same 8-chip enum as
+  // Prepare (no fuzzy_cant_tell — that's Pulse Check only).
+  bodyLocation: z.enum(BODY_LOCATION_VALUES).nullable().optional(),
+  // Page-5 shared fields (both calibration and standalone branches).
+  // lessonScreen is a 3-field block; first sub-field required, others
+  // optional (pageCanAdvance special-cases textarea_three_field_lesson).
+  lessonScreen: z
+    .object({
+      a: z.string().min(1).max(2000),
+      b: z.string().max(2000).nullable().optional(),
+      c: z.string().max(2000).nullable().optional(),
+    })
+    .nullable()
+    .optional(),
+  // Both depths now collect needsAndForecast: Quick needs it for the
+  // calibration loop to have a forecast to score against later; Full
+  // already had it. `forecast` carries the free-text prediction companion
+  // to the chip (stored in review_entries.forecast, added in 0036).
   whatYouDid: z.string().min(1).max(5000).optional(),
   observedInThem: z.string().min(1).max(5000).optional(),
   theirExperience: z.string().min(1).max(5000).optional(),
   whatYouAvoided: z.string().min(1).max(5000).optional(),
   askBeforeUnderstanding: z.enum(["yes", "no", "unclear"]).optional(),
   needsToHappenNext: z.enum(REVIEW_NEEDS_NEXT_VALUES).optional(),
+  forecast: z.string().min(1).max(2000).optional(),
   // Page-5 calibration block: populated when linkedPrepareEntryId exists.
   linkedPrepareEntryId: z.string().uuid().nullable().optional(),
   calibrationBlock: z
     .object({
-      compare: z.string().min(1).max(40),
-      shift: z.string().min(1).max(40),
-      floor: z.string().min(1).max(40),
+      // SOT 2026-05-08 fix2: chip enums enforced server-side.
+      compare: z.enum(CALIBRATION_COMPARE_VALUES),
+      shift: z.enum(CALIBRATION_SHIFT_VALUES),
+      floor: z.enum(CALIBRATION_FLOOR_VALUES),
     })
     .nullable()
     .optional(),
@@ -241,12 +316,22 @@ export const createReviewSchema = z.object({
     .nullable()
     .optional(),
   whatYouLearned: z.string().max(2000).nullable().optional(),
-  // Repair-branch fields. Old yourPart kept for back-compat; Commit 6 adds
-  // impactToName / theirNeedFirst / pressureVsCare / timing /
-  // firstRepairSentence as the new SOT shape.
+  // Repair-branch fields.
+  // SOT 2026-05-08 fix1: the 5-Q repair swap (impactToName / theirNeedFirst /
+  // pressureVsCare / timing combo / firstRepairSentence) MUST be declared
+  // here — without these, the page POSTed the fields and Zod silently
+  // stripped them, losing every Repair submission. DB columns added in 0036.
+  // repairBranchActive is provided by the client but the route MUST re-derive
+  // it server-side from needsToHappenNext + reviewDepth (see route.ts).
   repairBranchActive: z.boolean().default(false),
+  impactToName: z.string().min(1).max(5000).nullable().optional(),
+  theirNeedFirst: z.enum(THEIR_NEED_FIRST_VALUES).nullable().optional(),
+  pressureVsCare: z.string().min(1).max(5000).nullable().optional(),
+  timingWhen: z.string().min(1).max(2000).nullable().optional(),
+  timingNow: z.boolean().nullable().optional(),
+  firstRepairSentence: z.string().min(1).max(2000).nullable().optional(),
+  // Legacy back-compat. New posts do not write these.
   yourPart: z.string().min(1).max(5000).nullable().optional(),
-  // Deprecated 2026-05-03 per cross-eval batch #1.
   secretWant: z.string().min(1).max(5000).nullable().optional(),
   couldMakeThemFeel: z.string().min(1).max(5000).nullable().optional(),
   // Person/thread.
@@ -315,15 +400,14 @@ export const createPulseCheckSchema = z
 
 /**
  * Review calibration block (3 chips, jsonb in DB). Stored as a structured
- * object; chip values are constrained to non-empty strings here. Specific
- * chip-id enums are page-side (Commit 5 — see review/page.tsx) so the
- * step component owns its label/value mapping; the schema layer only
- * guarantees the 3-field shape arrived intact.
+ * object; chip values are constrained to the SOT enums (fix2 — promoted
+ * from the component to enforce server-side). Each sub-enum scores a
+ * single forecast-vs-reality dimension.
  */
 export const calibrationBlockSchema = z.object({
-  compare: z.string().min(1).max(40),
-  shift: z.string().min(1).max(40),
-  floor: z.string().min(1).max(40),
+  compare: z.enum(CALIBRATION_COMPARE_VALUES),
+  shift: z.enum(CALIBRATION_SHIFT_VALUES),
+  floor: z.enum(CALIBRATION_FLOOR_VALUES),
 });
 
 // Tools after_feeling: must mirror the DB CHECK in
