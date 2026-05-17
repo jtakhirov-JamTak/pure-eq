@@ -102,5 +102,36 @@ describe("pageCanAdvance", () => {
       expect(pageCanAdvance(page, { lesson: { a: "  \n" } })).toBe(false);
       expect(pageCanAdvance(page, { lesson: { b: "y", c: "z" } })).toBe(false);
     });
+
+    // Regression: whatProtecting StepDef on Review Full Page 5 declares
+    // requiredSubFields: ["chip"]. Without it, a user picking a chip but
+    // leaving the optional companion text empty hits the default-object
+    // branch which rejects text: "" — bricking Full Review.
+    it("advances when only the chip is set on whatProtecting-shaped value", () => {
+      const protectingPage: PageDef = {
+        pageKey: "full_5",
+        qs: [
+          {
+            key: "whatProtecting",
+            title: "",
+            prompt: null,
+            kind: "select_protecting_with_optional_text",
+            requiredSubFields: ["chip"],
+          },
+        ],
+      };
+      expect(
+        pageCanAdvance(protectingPage, { whatProtecting: { chip: "image", text: "" } }),
+      ).toBe(true);
+      expect(
+        pageCanAdvance(protectingPage, { whatProtecting: { chip: "image", text: "    " } }),
+      ).toBe(true);
+      expect(
+        pageCanAdvance(protectingPage, { whatProtecting: { chip: "image" } }),
+      ).toBe(true);
+      expect(
+        pageCanAdvance(protectingPage, { whatProtecting: { chip: "", text: "" } }),
+      ).toBe(false);
+    });
   });
 });

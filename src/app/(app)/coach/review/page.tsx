@@ -395,6 +395,10 @@ export default function ReviewPage() {
       title: "What were you wanting or protecting that you didn't say out loud?",
       prompt: "Pick the closest. Optional one-line after.",
       kind: "select_protecting_with_optional_text",
+      // Companion text is voluntary — only the chip selection gates advance.
+      // Without this, pageCanAdvance's default-object branch returns false
+      // whenever `text: ""`, bricking Page 5 for every Full Review user.
+      requiredSubFields: ["chip"],
     },
     {
       key: "lessonScreen",
