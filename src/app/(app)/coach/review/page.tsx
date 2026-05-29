@@ -332,6 +332,11 @@ export default function ReviewPage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  // On a 403 (free Review already used) show an inline upgrade panel instead
+  // of redirecting — a hard router.push would unmount the form and discard
+  // the user's whole multi-step entry. Component stays mounted, so `data`
+  // survives; "Back to my entry" flips this off with their input intact.
+  const [gated, setGated] = useState(false);
   const [reviewEntryId, setReviewEntryId] = useState<string | null>(null);
   const [submittedRepairBranchActive, setSubmittedRepairBranchActive] =
     useState(false);
@@ -645,7 +650,9 @@ export default function ReviewPage() {
         body: JSON.stringify(body),
       });
       if (res.status === 403) {
-        router.push("/paywall");
+        // Free Review consumed. Keep the form mounted so the user's entry
+        // isn't lost — surface an inline upgrade panel instead of redirecting.
+        setGated(true);
         return;
       }
       if (!res.ok) {
@@ -837,6 +844,36 @@ export default function ReviewPage() {
           className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back to Coach
+        </button>
+      </div>
+    );
+  }
+
+  if (gated) {
+    return (
+      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <ReviewBackground />
+        <h2
+          className="font-display text-[28px] leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
+        >
+          You&rsquo;ve used your free Review
+        </h2>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
+          Subscribe to keep getting coaching feedback. Your reflection is still
+          here — tap below to go back to it anytime.
+        </p>
+        <button
+          onClick={() => router.push("/paywall")}
+          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+        >
+          See plans
+        </button>
+        <button
+          onClick={() => setGated(false)}
+          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+        >
+          Back to my entry
         </button>
       </div>
     );

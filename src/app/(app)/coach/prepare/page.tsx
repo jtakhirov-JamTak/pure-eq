@@ -338,6 +338,12 @@ export default function PreparePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  // On a 403 (free Prepare already used) we show an inline upgrade panel
+  // instead of redirecting — a hard router.push would unmount the form and
+  // discard the user's whole multi-step entry at the exact upgrade moment.
+  // The component stays mounted, so `data` survives; "Back to my entry"
+  // just flips this off and re-renders the form with their input intact.
+  const [gated, setGated] = useState(false);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
@@ -411,7 +417,9 @@ export default function PreparePage() {
         body: JSON.stringify(body),
       });
       if (res.status === 403) {
-        router.push("/paywall");
+        // Free Prepare consumed. Keep the form mounted so the user's entry
+        // isn't lost — surface an inline upgrade panel instead of redirecting.
+        setGated(true);
         return;
       }
       if (!res.ok) {
@@ -474,6 +482,33 @@ export default function PreparePage() {
         onBack={() => router.push("/coach")}
         message={savedMessage}
       />
+    );
+  }
+
+  if (gated) {
+    return (
+      <div className="relative flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
+        <PrepareBackground />
+        <h2 className="font-display text-[24px] leading-[1.15] text-ink">
+          You&rsquo;ve used your free Prepare
+        </h2>
+        <p className="mt-3 max-w-sm text-[14px] font-medium leading-[1.5] text-ink-soft">
+          Subscribe to keep getting coaching feedback. Your entry is still
+          here — tap below to go back to it anytime.
+        </p>
+        <button
+          onClick={() => router.push("/paywall")}
+          className="mt-6 flex h-12 w-full max-w-xs items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98]"
+        >
+          See plans
+        </button>
+        <button
+          onClick={() => setGated(false)}
+          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
+        >
+          Back to my entry
+        </button>
+      </div>
     );
   }
 

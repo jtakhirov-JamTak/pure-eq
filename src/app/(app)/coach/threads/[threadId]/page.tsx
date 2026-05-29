@@ -168,12 +168,6 @@ export default async function ThreadDetailPage({
           >
             Review
           </Link>
-          <Link
-            href="/coach/repair"
-            className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-          >
-            Repair
-          </Link>
         </div>
       </div>
     </div>
