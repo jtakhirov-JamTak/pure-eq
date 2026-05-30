@@ -11,6 +11,7 @@ import {
 } from "@/lib/onboarding";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { grantSignupCoins } from "@/lib/coins";
 
 export const runtime = "nodejs";
 
@@ -166,6 +167,17 @@ export async function POST(req: Request) {
       { error: "Could not save profile snapshot" },
       { status: 500 }
     );
+  }
+
+  // 7. Grant the one-time 50-coin signup bonus (Slice B). Idempotent on the
+  //    fixed ref_key, so a retake / strict-mode double-fire never double-grants.
+  //    Anchored here (onboarding completion), matching the old free-window
+  //    anchor. A grant failure must NOT fail onboarding — the profile is saved;
+  //    grantSignupCoins already captures the RPC error to Sentry. Worst case
+  //    the user starts at 0 coins and a later retry / lazy top-up recovers it.
+  const grantResult = await grantSignupCoins(user.id);
+  if (grantResult === "invalid") {
+    console.error("onboarding: signup coin grant did not apply");
   }
 
   return NextResponse.json({

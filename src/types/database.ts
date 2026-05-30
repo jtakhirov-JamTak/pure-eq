@@ -135,6 +135,57 @@ export type Database = {
           },
         ]
       }
+      coin_balances: {
+        Row: {
+          balance: number
+          created_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          balance?: number
+          created_at?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          balance?: number
+          created_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      coin_transactions: {
+        Row: {
+          balance_after: number
+          created_at: string
+          delta: number
+          reason: string
+          ref_key: string | null
+          transaction_id: string
+          user_id: string
+        }
+        Insert: {
+          balance_after: number
+          created_at?: string
+          delta: number
+          reason: string
+          ref_key?: string | null
+          transaction_id?: string
+          user_id: string
+        }
+        Update: {
+          balance_after?: number
+          created_at?: string
+          delta?: number
+          reason?: string
+          ref_key?: string | null
+          transaction_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       conversation_threads: {
         Row: {
           last_activity_at: string
@@ -1343,7 +1394,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      grant_coins: {
+        Args: {
+          p_user_id: string
+          p_amount: number
+          p_reason: string
+          p_ref_key: string | null
+        }
+        Returns: string
+      }
+      spend_coins: {
+        Args: {
+          p_user_id: string
+          p_amount: number
+          p_reason: string
+          p_ref_key: string | null
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

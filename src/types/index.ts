@@ -208,6 +208,48 @@ export type AiCardEntryTable = (typeof AI_CARD_ENTRY_TABLES)[number];
 // model's original card value.
 export type CardEditStatus = "accepted" | "edited" | "not_true";
 
+// ============================================================
+// Coins economy (Slice B, migration 0043). Authoritative economics in memory
+// project_coins_framework_final. Coins never expire → balance is a plain
+// integer; coin_transactions is the append-only audit + idempotency ledger.
+// ============================================================
+
+// coin_transactions.reason — mirrors the CHECK in migration 0043. Single
+// source of truth for the ledger discriminator.
+export const COIN_TXN_REASONS = [
+  "signup_grant",
+  "purchase",
+  "debit_quick",
+  "debit_deep",
+  "debit_weekly_insights",
+  "debit_monthly_report",
+  "refund",
+  "admin_adjust",
+] as const;
+export type CoinTxnReason = (typeof COIN_TXN_REASONS)[number];
+
+// Price list (founder-final). Quick AI = 4, Deep = 6, Weekly Insights = 20,
+// Monthly Report = 80. The AI-tier cost is keyed by AiTier so run-module can
+// derive it straight from the request. Keep in sync with the framework memory.
+export const COIN_COSTS = {
+  quick: 4,
+  deep: 6,
+  weekly_insights: 20,
+  monthly_report: 80,
+} as const;
+
+// The signup grant: 50 coins, once per user (idempotent on this ref_key).
+export const SIGNUP_GRANT_COINS = 50;
+export const SIGNUP_GRANT_REF_KEY = "signup_grant";
+
+// Result of the atomic spend_coins / grant_coins RPCs (Postgres-side strings).
+export type CoinSpendResult =
+  | "ok"
+  | "insufficient"
+  | "already_applied"
+  | "invalid";
+export type CoinGrantResult = "ok" | "already_applied" | "invalid";
+
 // Coach module entry interfaces (app-level shape — distinct from
 // generated DB row types in src/types/database.ts).
 export interface PrepareEntry {
