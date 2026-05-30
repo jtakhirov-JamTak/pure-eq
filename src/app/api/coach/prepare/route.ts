@@ -8,11 +8,17 @@ import type { CoachModuleConfig } from "@/lib/coach/types";
 export const runtime = "nodejs";
 
 // ============================================================
-// Prepare — single 14-field SOT flow (Coach SOT 2026-05-06)
+// Prepare — lean 8-field flow, tier-aware cards (coins redesign 2026-05-29)
 // ============================================================
-// Path A/B split is gone — Pulse Check is now its own module. Old fields
-// (situation_text/primary_value/their_need/etc.) stay nullable in the DB
-// for /history reads on legacy rows; new posts do not write them.
+// The lean form sends 8 fields + a Quick/Deep tier. Removed SOT inputs
+// (primary_emotion, emotion_as_data, default_pattern, observed_from_them,
+// their_state_hedged, specific_shift, hidden_expectation, outcome_floor,
+// neutral_check_question, body_location) keep their columns nullable for
+// legacy /history reads; new posts do not write them. predicted_reaction is
+// no longer a user input — it is now written from the AI Quick "Predicted
+// Reaction" card via extractDerivedFromAi, so calibration.ts is unchanged.
+// hidden_expectation + outcome_floor are merged into hidden_ask_and_floor;
+// conversation_move is the new routing chip.
 
 const requestSchema = createPrepareSchema.extend({
   idempotencyKey: z.string().uuid(),
@@ -37,86 +43,71 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
   aiVersionColumn: "ai_plan_version",
-  // 2026-05-08 Commit 4: bump 7 → 8 alongside PROMPT_VERSION 5.0.0 → 5.1.0
-  // and the SOT follow-up migration 0037 (primary_emotion + default_pattern
-  // + neutral_check_question, body chip moves off opener onto primary
-  // emotion semantically). Distinguishes SOT-follow-up rows from
-  // 0036-shape rows (aiVersionValue 7, path = "sot").
-  aiVersionValue: 8,
+  // Coins redesign Slice A 2026-05-29: bump 8 → 9. The lean form drops most
+  // SOT inputs and the AI output shape changes from the fixed 5-card set to
+  // the tier-aware {pressure_check, cleaner_opener, predicted_reaction
+  // (+ neutral_check_question, deeper_read on Deep)} set. Readers MUST gate
+  // on ai_plan_version when distinguishing shape — 9 = lean tiered, 8 = SOT
+  // follow-up, ≤7 = older.
+  aiVersionValue: 9,
 
-  // SOT 2026-05-08 Commit 4: aiVersionValue 7 → 8 alongside the SOT
-  // follow-up. New fields (primary_emotion, default_pattern,
-  // neutral_check_question) enter buildPreparePrompt; the body chip moves
-  // off the opener onto primary_emotion semantically (column stays as
-  // body_location — re-purposed consumer per 0037).
   buildPayloadFields: (input) => ({
+    tier: input.tier,
     personName: input.personName,
     relationship: input.relationship,
+    conversationMove: input.conversationMove,
     situation: input.situation,
-    primaryEmotion: input.primaryEmotion,
-    bodyLocation: input.bodyLocation,
-    emotionAsData: input.emotionAsData,
-    defaultPattern: input.defaultPattern,
-    observedFromThem: input.observedFromThem,
-    theirStateHedged: input.theirStateHedged,
     fairestVersion: input.fairestVersion,
-    predictedReaction: input.predictedReaction,
-    hiddenExpectation: input.hiddenExpectation,
-    specificShift: input.specificShift,
-    outcomeFloor: input.outcomeFloor,
-    neutralCheckQuestion: input.neutralCheckQuestion,
+    hiddenAskAndFloor: input.hiddenAskAndFloor,
     opener: input.opener,
     triggerPlan: input.triggerPlan,
   }),
 
   buildDerivedInsert: (input) => ({
-    // `path` is the legacy discriminator (path_a / path_b / sot / sot_v2)
-    // kept for /history readers and export.ts row labels. After 2026-05-17
-    // fix3 (#15), `ai_plan_version` (aiVersionValue) is the authoritative
-    // shape selector — readers MUST gate on ai_plan_version when distinguishing
-    // shape, not on `path`. We still write a non-null `path` value so legacy
-    // filter-by-path queries don't drop new rows.
-    path: "sot_v2",
+    // `path` is the legacy discriminator kept for /history readers and
+    // export.ts row labels. ai_plan_version (aiVersionValue 9) is the
+    // authoritative shape selector — readers gate on it, not on `path`.
+    // We still write a non-null value so legacy filter-by-path queries
+    // don't drop new rows.
+    path: "lean_v1",
     situation_text: input.situation,
-    primary_emotion: input.primaryEmotion,
-    body_location: input.bodyLocation,
-    emotion_as_data: input.emotionAsData,
-    default_pattern: input.defaultPattern,
-    observed_from_them: input.observedFromThem,
-    their_state_hedged: input.theirStateHedged,
+    conversation_move: input.conversationMove,
     fairest_version: input.fairestVersion,
-    predicted_reaction: input.predictedReaction,
-    hidden_expectation: input.hiddenExpectation,
-    specific_shift: input.specificShift,
-    outcome_floor: input.outcomeFloor,
-    neutral_check_question: input.neutralCheckQuestion,
+    hidden_ask_and_floor: input.hiddenAskAndFloor,
     opener: input.opener,
     trigger_plan: input.triggerPlan,
+    ai_tier: input.tier,
+    // Filled from the AI Predicted Reaction card on the step-13 update
+    // (extractDerivedFromAi). Null at insert time.
+    predicted_reaction: null,
   }),
 
   buildPrompt: (input, profile) =>
     buildPreparePrompt({
       profile,
+      tier: input.tier,
       personName: input.personName,
       relationship: input.relationship,
+      conversationMove: input.conversationMove,
       situation: input.situation,
-      primaryEmotion: input.primaryEmotion,
-      bodyLocation: input.bodyLocation,
-      emotionAsData: input.emotionAsData,
-      defaultPattern: input.defaultPattern,
-      observedFromThem: input.observedFromThem,
-      theirStateHedged: input.theirStateHedged,
       fairestVersion: input.fairestVersion,
-      predictedReaction: input.predictedReaction,
-      hiddenExpectation: input.hiddenExpectation,
-      specificShift: input.specificShift,
-      outcomeFloor: input.outcomeFloor,
-      neutralCheckQuestion: input.neutralCheckQuestion,
+      hiddenAskAndFloor: input.hiddenAskAndFloor,
       opener: input.opener,
       triggerPlan: input.triggerPlan,
     }),
 
-  buildResponseExtras: () => ({}),
+  // Promote the AI Predicted Reaction card into predicted_reaction so the
+  // Review calibration link (calibration.ts reads predicted_reaction) keeps
+  // working — only the writer moved from a user input to this AI card.
+  // Refusal mode has no cards, so write nothing.
+  extractDerivedFromAi: (aiOutput) =>
+    aiOutput.mode === "normal"
+      ? { predicted_reaction: aiOutput.predicted_reaction }
+      : {},
+
+  // Surface the derived prepare_entry_id so the result screen can attach
+  // Accept/Edit/Not-true card edits (POST /api/coach/card-edit) to it.
+  buildResponseExtras: (derivedEntryId) => ({ prepareEntryId: derivedEntryId }),
 
   getThreadTitle: (input) => {
     const truncated = input.situation.slice(0, 80).replace(/\s+\S*$/, "");

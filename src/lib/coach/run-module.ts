@@ -505,12 +505,21 @@ export async function runCoachModule<
   }
 
   // 13. Update derived row with AI output.
+  // extractDerivedFromAi (optional) promotes fields out of the AI output
+  // into their own derived columns — e.g. lean Prepare copies the AI
+  // Predicted Reaction card into predicted_reaction so Review calibration
+  // reads it. Merged into the same update so the column + ai_json land
+  // atomically.
   let saveWarning = false;
   if (aiOutput) {
+    const derivedFromAi = config.extractDerivedFromAi
+      ? config.extractDerivedFromAi(aiOutput)
+      : {};
     const updateResult = await (supabase.from(config.derivedTable) as ReturnType<typeof supabase.from>)
       .update({
         [config.aiJsonColumn]: aiOutput,
         [config.aiVersionColumn]: config.aiVersionValue,
+        ...derivedFromAi,
         is_complete: true,
         completed_at: new Date().toISOString(),
       })

@@ -87,49 +87,81 @@ describe("createReviewSchema — observedRaw / interpretedRaw", () => {
 });
 
 // ============================================================
-// Prepare — single 14-field SOT schema (Coach SOT 2026-05-06)
+// Prepare — lean 8-field tiered schema (coins redesign 2026-05-29)
 // ============================================================
 const validPrepareBase = {
+  tier: "quick" as const,
   personName: "Alex",
   relationship: "partner" as const,
+  conversationMove: "boundary" as const,
   situation: "Need to talk about how chores are getting split.",
-  // SOT 2026-05-08 Commit 4: primary_emotion + default_pattern +
-  // neutral_check_question added; body chip moves off opener onto
-  // primary_emotion semantically (column stays body_location).
-  primaryEmotion: "Resentment, with a knot of dread under it.",
-  bodyLocation: "chest" as const,
-  emotionAsData: "Resentment — pointing at unfairness over the last month.",
-  defaultPattern: "I go quiet, then come out swinging the third time it comes up.",
-  observedFromThem:
-    "They sigh when I bring it up and change the subject within a minute.",
-  theirStateHedged:
-    "They might be already running on empty and reading my raises as criticism.",
   fairestVersion:
     "They've been picking up extra at work and aren't dodging on purpose.",
-  predictedReaction:
-    "If I open with stats, they'll go quiet and we'll loop back into the same fight.",
-  hiddenExpectation:
-    "I'm hoping they'll volunteer to take over the dishes without me asking.",
-  specificShift:
-    "A standing rotation we both put on the calendar for two specific tasks.",
-  outcomeFloor:
-    "If we don't agree on a rotation tonight, at least name that this keeps coming back.",
-  neutralCheckQuestion:
-    "What's been eating most of your bandwidth lately — the work crunch or something else?",
+  hiddenAskAndFloor:
+    "I'm hoping they take over the dishes; floor is naming that this keeps recurring.",
   opener: "Hey, can we talk about how we split things up at home?",
   triggerPlan: "If I feel chest-tightening, I'll pause and ask one question.",
 };
 
-describe("createPrepareSchema — SOT shape", () => {
-  it("accepts a fully-populated SOT payload", () => {
+describe("createPrepareSchema — lean tiered shape", () => {
+  it("accepts a fully-populated lean payload", () => {
     const result = createPrepareSchema.safeParse(validPrepareBase);
     expect(result.success).toBe(true);
   });
 
-  it("rejects an empty emotionAsData", () => {
+  it("defaults tier to quick when omitted", () => {
+    const { tier: _omit, ...minus } = validPrepareBase;
+    const result = createPrepareSchema.safeParse(minus);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.tier).toBe("quick");
+  });
+
+  it("accepts tier deep", () => {
     const result = createPrepareSchema.safeParse({
       ...validPrepareBase,
-      emotionAsData: "",
+      tier: "deep",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown tier", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      tier: "ultra",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown conversationMove", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      conversationMove: "vent",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts every conversation move (6 values)", () => {
+    const moves = [
+      "clarify",
+      "ask",
+      "boundary",
+      "share",
+      "decide",
+      "pause",
+    ] as const;
+    for (const move of moves) {
+      const result = createPrepareSchema.safeParse({
+        ...validPrepareBase,
+        conversationMove: move,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("rejects an empty situation", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      situation: "",
     });
     expect(result.success).toBe(false);
   });
@@ -142,34 +174,6 @@ describe("createPrepareSchema — SOT shape", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects an unknown bodyLocation chip", () => {
-    const result = createPrepareSchema.safeParse({
-      ...validPrepareBase,
-      bodyLocation: "fuzzy_cant_tell",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("accepts every BODY_LOCATION chip (8 values)", () => {
-    const chips = [
-      "throat",
-      "chest",
-      "stomach",
-      "jaw",
-      "shoulders",
-      "face",
-      "other",
-      "dont_notice",
-    ] as const;
-    for (const chip of chips) {
-      const result = createPrepareSchema.safeParse({
-        ...validPrepareBase,
-        bodyLocation: chip,
-      });
-      expect(result.success).toBe(true);
-    }
-  });
-
   it("rejects opener over 1000 chars", () => {
     const result = createPrepareSchema.safeParse({
       ...validPrepareBase,
@@ -178,44 +182,24 @@ describe("createPrepareSchema — SOT shape", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects an empty primaryEmotion", () => {
+  it("rejects an empty hiddenAskAndFloor", () => {
     const result = createPrepareSchema.safeParse({
       ...validPrepareBase,
-      primaryEmotion: "",
+      hiddenAskAndFloor: "",
     });
     expect(result.success).toBe(false);
   });
 
-  it("rejects an empty defaultPattern", () => {
+  it("rejects an empty fairestVersion", () => {
     const result = createPrepareSchema.safeParse({
       ...validPrepareBase,
-      defaultPattern: "",
+      fairestVersion: "",
     });
     expect(result.success).toBe(false);
   });
 
-  it("rejects an empty neutralCheckQuestion", () => {
-    const result = createPrepareSchema.safeParse({
-      ...validPrepareBase,
-      neutralCheckQuestion: "",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects omitted primaryEmotion (now required)", () => {
-    const { primaryEmotion: _, ...minus } = validPrepareBase;
-    const result = createPrepareSchema.safeParse(minus);
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects omitted defaultPattern (now required)", () => {
-    const { defaultPattern: _, ...minus } = validPrepareBase;
-    const result = createPrepareSchema.safeParse(minus);
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects omitted neutralCheckQuestion (now required)", () => {
-    const { neutralCheckQuestion: _, ...minus } = validPrepareBase;
+  it("rejects omitted conversationMove (required)", () => {
+    const { conversationMove: _omit, ...minus } = validPrepareBase;
     const result = createPrepareSchema.safeParse(minus);
     expect(result.success).toBe(false);
   });

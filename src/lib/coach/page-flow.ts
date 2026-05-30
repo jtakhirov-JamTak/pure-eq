@@ -59,6 +59,7 @@ export function deriveRepairBranchActive(input: {
 export type StepKind =
   | "person"
   | "select"
+  | "select_conversation_move"
   | "textarea"
   | "textarea_with_body_chip"
   | "textarea_two_column"

@@ -117,6 +117,18 @@ interface BaseCoachModuleConfig<
     effectivePersonId: string | null,
   ) => Promise<TInput>;
 
+  /**
+   * Optional: derive extra derived-table columns from the validated AI
+   * output, merged into the step-13 update alongside the ai_json + version
+   * stamp. Used by lean Prepare to copy the AI "Predicted Reaction" card
+   * into the predicted_reaction column (its writer moved from a user input
+   * to this AI card) so the Review calibration link keeps working unchanged.
+   *
+   * Only called when aiOutput is non-null. Implementations MUST handle the
+   * refusal mode — return {} when the output isn't normal coaching.
+   */
+  extractDerivedFromAi?: (aiOutput: TAiOutput) => Record<string, unknown>;
+
   // -- Response --
 
   /** Extra fields to include in the response beyond the standard ones. */

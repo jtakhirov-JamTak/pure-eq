@@ -86,28 +86,29 @@ describe("validateAIOutput — stripGeneric on action fields", () => {
   });
 });
 
-describe("prepareOutputSchema — action-field nullability + cap", () => {
-  const baseNormal = {
+describe("prepareOutputSchema — lean tier shape", () => {
+  // Coins redesign 2026-05-29: the fixed 5-card shape (real_issue,
+  // reality_check_question, thing_not_to_do, they_might_need, best_next_move)
+  // was replaced by the tiered set. The Deep cards are optional, so a Quick
+  // output with only the 3 required cards must validate.
+  const quick = {
     mode: "normal" as const,
-    real_issue: "Something concrete and specific happens when X.",
-    reality_check_question: "What did you actually notice first?",
-    thing_not_to_do: "Don't open with 'I just want to say one thing.'",
-    they_might_need: "Acknowledgement before anything else.",
+    pressure_check: "Don't open with 'we need to talk.'",
+    cleaner_opener: "Hey, got 10 minutes to sort the split?",
+    predicted_reaction: "She'll likely go quiet at first.",
     pattern_tag: "withdrew_under_tension" as const,
   };
 
-  it("accepts best_next_move: null", () => {
-    const result = prepareOutputSchema.safeParse({
-      ...baseNormal,
-      best_next_move: null,
-    });
-    expect(result.success).toBe(true);
+  it("accepts a Quick output with no Deep fields", () => {
+    expect(prepareOutputSchema.safeParse(quick).success).toBe(true);
   });
 
-  it("rejects best_next_move over the 120 cap", () => {
+  it("rejects the retired 5-card shape (real_issue / best_next_move)", () => {
     const result = prepareOutputSchema.safeParse({
-      ...baseNormal,
-      best_next_move: "a".repeat(121),
+      mode: "normal",
+      real_issue: "x",
+      best_next_move: null,
+      pattern_tag: "withdrew_under_tension",
     });
     expect(result.success).toBe(false);
   });

@@ -44,21 +44,13 @@ const baseReviewInput: ReviewInput = {
 } as ReviewInput;
 
 const basePrepareInput: PrepareInput = {
+  tier: "quick",
   personName: "Alex",
   relationship: "partner",
+  conversationMove: "boundary",
   situation: "Chores split.",
-  primaryEmotion: "resentment + dread",
-  bodyLocation: "chest",
-  emotionAsData: "pointing at unfairness",
-  defaultPattern: "go quiet, then snap on the third time",
-  observedFromThem: "sighs when I bring it up",
-  theirStateHedged: "they might be empty",
   fairestVersion: "picking up overtime",
-  predictedReaction: "they'll go quiet",
-  hiddenExpectation: "they volunteer for dishes",
-  specificShift: "standing rotation on calendar",
-  outcomeFloor: "name that this keeps coming back",
-  neutralCheckQuestion: "what's eating most of your bandwidth?",
+  hiddenAskAndFloor: "they volunteer for dishes; floor is naming the recurrence",
   opener: "Hey, can we talk about how we split things?",
   triggerPlan: "If chest-tight, pause and ask one question.",
 } as PrepareInput;
@@ -158,33 +150,53 @@ describe("reviewModuleConfig.buildDerivedInsert — SOT column mapping", () => {
   });
 });
 
-describe("prepareModuleConfig.buildDerivedInsert — SOT column mapping", () => {
-  it("maps Prepare SOT fields to the right DB columns", () => {
+describe("prepareModuleConfig.buildDerivedInsert — lean column mapping", () => {
+  it("maps lean Prepare fields to the right DB columns", () => {
     const insert = prepareModuleConfig.buildDerivedInsert(basePrepareInput) as Record<
       string,
       unknown
     >;
 
-    expect(insert.path).toBe("sot_v2");
+    expect(insert.path).toBe("lean_v1");
     expect(insert.situation_text).toBe(basePrepareInput.situation);
-    expect(insert.primary_emotion).toBe(basePrepareInput.primaryEmotion);
-    expect(insert.body_location).toBe("chest");
-    expect(insert.emotion_as_data).toBe(basePrepareInput.emotionAsData);
-    expect(insert.default_pattern).toBe(basePrepareInput.defaultPattern);
-    expect(insert.observed_from_them).toBe(basePrepareInput.observedFromThem);
-    expect(insert.their_state_hedged).toBe(basePrepareInput.theirStateHedged);
+    expect(insert.conversation_move).toBe("boundary");
     expect(insert.fairest_version).toBe(basePrepareInput.fairestVersion);
-    expect(insert.predicted_reaction).toBe(basePrepareInput.predictedReaction);
-    expect(insert.hidden_expectation).toBe(basePrepareInput.hiddenExpectation);
-    expect(insert.specific_shift).toBe(basePrepareInput.specificShift);
-    expect(insert.outcome_floor).toBe(basePrepareInput.outcomeFloor);
-    expect(insert.neutral_check_question).toBe(
-      basePrepareInput.neutralCheckQuestion,
-    );
+    expect(insert.hidden_ask_and_floor).toBe(basePrepareInput.hiddenAskAndFloor);
     expect(insert.opener).toBe(basePrepareInput.opener);
-    // SOT 2026-05-08 fix1 (#2): trigger_plan was being dropped — schema
-    // required it, prompt rendered it, but no column write.
     expect(insert.trigger_plan).toBe(basePrepareInput.triggerPlan);
+    expect(insert.ai_tier).toBe("quick");
+    // predicted_reaction is now written from the AI Quick card on the
+    // step-13 update (extractDerivedFromAi) — null at insert time.
+    expect(insert.predicted_reaction).toBe(null);
+  });
+});
+
+describe("prepareModuleConfig.extractDerivedFromAi — Predicted Reaction → column", () => {
+  type AiArg = Parameters<
+    NonNullable<typeof prepareModuleConfig.extractDerivedFromAi>
+  >[0];
+
+  it("copies the AI predicted_reaction card into the column on normal output", () => {
+    const extra = prepareModuleConfig.extractDerivedFromAi?.({
+      mode: "normal",
+      pressure_check: "Don't open with 'we need to talk.'",
+      cleaner_opener: "Hey, got 10 minutes to sort chores?",
+      predicted_reaction: "They'll likely go quiet at first.",
+      pattern_tag: "withdrew_under_tension",
+    } as AiArg);
+    expect(extra).toEqual({
+      predicted_reaction: "They'll likely go quiet at first.",
+    });
+  });
+
+  it("writes nothing on refusal output", () => {
+    const extra = prepareModuleConfig.extractDerivedFromAi?.({
+      mode: "refusal",
+      refusal_reason: "out_of_scope",
+      message_to_user: "...",
+      suggested_resource: "none",
+    } as AiArg);
+    expect(extra).toEqual({});
   });
 });
 
@@ -243,25 +255,19 @@ describe("reviewModuleConfig.buildPayloadFields — SOT field passthrough", () =
   });
 });
 
-describe("prepareModuleConfig.buildPayloadFields — SOT field passthrough", () => {
-  it("passes through every SOT input to the raw payload", () => {
+describe("prepareModuleConfig.buildPayloadFields — lean field passthrough", () => {
+  it("passes through every lean input to the raw payload", () => {
     const payload = prepareModuleConfig.buildPayloadFields(basePrepareInput) as Record<
       string,
       unknown
     >;
+    expect(payload.tier).toBe("quick");
+    expect(payload.personName).toBe(basePrepareInput.personName);
+    expect(payload.relationship).toBe(basePrepareInput.relationship);
+    expect(payload.conversationMove).toBe("boundary");
     expect(payload.situation).toBe(basePrepareInput.situation);
-    expect(payload.primaryEmotion).toBe(basePrepareInput.primaryEmotion);
-    expect(payload.bodyLocation).toBe("chest");
-    expect(payload.emotionAsData).toBe(basePrepareInput.emotionAsData);
-    expect(payload.defaultPattern).toBe(basePrepareInput.defaultPattern);
-    expect(payload.observedFromThem).toBe(basePrepareInput.observedFromThem);
-    expect(payload.theirStateHedged).toBe(basePrepareInput.theirStateHedged);
     expect(payload.fairestVersion).toBe(basePrepareInput.fairestVersion);
-    expect(payload.predictedReaction).toBe(basePrepareInput.predictedReaction);
-    expect(payload.hiddenExpectation).toBe(basePrepareInput.hiddenExpectation);
-    expect(payload.specificShift).toBe(basePrepareInput.specificShift);
-    expect(payload.outcomeFloor).toBe(basePrepareInput.outcomeFloor);
-    expect(payload.neutralCheckQuestion).toBe(basePrepareInput.neutralCheckQuestion);
+    expect(payload.hiddenAskAndFloor).toBe(basePrepareInput.hiddenAskAndFloor);
     expect(payload.opener).toBe(basePrepareInput.opener);
     expect(payload.triggerPlan).toBe(basePrepareInput.triggerPlan);
   });
@@ -277,8 +283,8 @@ describe("module configs — pinned identity", () => {
     expect(reviewModuleConfig.derivedTable).toBe("review_entries");
   });
 
-  it("prepare.aiVersionValue is 8 (SOT fix1 Commit-4 marker)", () => {
-    expect(prepareModuleConfig.aiVersionValue).toBe(8);
+  it("prepare.aiVersionValue is 9 (coins lean-tier marker)", () => {
+    expect(prepareModuleConfig.aiVersionValue).toBe(9);
     expect(prepareModuleConfig.moduleName).toBe("prepare");
     expect(prepareModuleConfig.derivedTable).toBe("prepare_entries");
   });

@@ -90,6 +90,19 @@ export type ObservationTag = (typeof OBSERVATION_TAGS)[number];
 // early-detection).
 export type PreparePath = "path_a" | "path_b";
 
+// Lean Prepare conversation-move chip (redesign). What kind of conversation
+// this is — drives the AI prompt framing. Stored on
+// prepare_entries.conversation_move (migration 0040).
+export const CONVERSATION_MOVES = [
+  "clarify",
+  "ask",
+  "boundary",
+  "share",
+  "decide",
+  "pause",
+] as const;
+export type ConversationMove = (typeof CONVERSATION_MOVES)[number];
+
 // Before-You-Send: message_type and verdict enums.
 export type BeforeYouSendMessageType =
   | "conflict"
@@ -115,6 +128,34 @@ export type ReviewNeedsToHappenNext =
 
 // Review repair-branch readiness gate response.
 export type RepairReadiness = "yes" | "somewhat" | "no";
+
+// ============================================================
+// AI feedback tiering + editable cards (Slice A — coins redesign)
+// ============================================================
+// Persisted on every Coach derived table's ai_tier column (migration 0038)
+// and read by the renderer + the future coin ledger. quick = 3 cards (4
+// coins), deep = 5 cards (6 coins). NULL on a row = legacy pre-tiering output.
+export type AiTier = "quick" | "deep";
+
+// The five Coach derived tables an AI card can belong to. Mirrors the
+// entry_table CHECK in migration 0039 — keep in sync (single source of truth
+// for the polymorphic ai_card_edits.entry_table value).
+export const AI_CARD_ENTRY_TABLES = [
+  "prepare_entries",
+  "review_entries",
+  "before_you_send_entries",
+  "pulse_check_entries",
+  "repair_entries",
+] as const;
+export type AiCardEntryTable = (typeof AI_CARD_ENTRY_TABLES)[number];
+
+// A user's verdict on a single AI card (migration 0039 ai_card_edits.status).
+//   accepted — card kept as-is
+//   edited   — card text replaced; edited_text is the version of record
+//   not_true — card rejected as inaccurate
+// Calibration / memory read edited_text when status = 'edited', else the
+// model's original card value.
+export type CardEditStatus = "accepted" | "edited" | "not_true";
 
 // Coach module entry interfaces (app-level shape — distinct from
 // generated DB row types in src/types/database.ts).

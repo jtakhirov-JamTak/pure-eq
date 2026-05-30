@@ -33,12 +33,16 @@ export const refusalShape = z.object({
 });
 
 // ============================================================
-// Prepare — discriminated union (Coach v2, 2026-04-23)
+// Prepare — tier-aware card set (coins redesign, Slice A 2026-05-29)
 // ============================================================
-// Both Path A ("I need to have a conversation") and Path B ("Something
-// feels off") produce the same AI output shape. The 5 user-visible
-// cards: real_issue, reality_check_question, thing_not_to_do,
-// they_might_need, best_next_move. Plus pattern_tag (display-only for v1).
+// Quick tier = 3 cards (pressure_check, cleaner_opener, predicted_reaction).
+// Deep tier = those 3 + 2 more (neutral_check_question, deeper_read). The two
+// Deep fields are .optional() — the prompt fills them only when tier ===
+// "deep", mirroring Review's optional repair-branch fields. predicted_reaction
+// is copied into prepare_entries.predicted_reaction (route extractDerivedFromAi)
+// so the Review calibration link keeps working — only the writer changed from
+// a user input to this AI card. None of these are action-copy fields, so the
+// Prepare output no longer contributes to ACTION_FIELDS / stripGeneric.
 //
 // All string fields chain `.trim().min(1)` so a model returning "" or "   "
 // fails Zod parse server-side. 300-char cap unified across modules per
@@ -46,14 +50,13 @@ export const refusalShape = z.object({
 
 const prepareNormalShape = z.object({
   mode: z.literal("normal"),
-  real_issue: z.string().trim().min(1).max(300),
-  reality_check_question: z.string().trim().min(1).max(300),
-  thing_not_to_do: z.string().trim().min(1).max(300),
-  they_might_need: z.string().trim().min(1).max(300),
-  // Action field — tighter cap + nullable per the editorial contract.
-  // The model returns null when no real verb+object+trigger action
-  // fits; stripGeneric nullifies "be more patient"-class filler.
-  best_next_move: z.string().trim().min(1).max(120).nullable(),
+  // Quick tier (always required).
+  pressure_check: z.string().trim().min(1).max(300),
+  cleaner_opener: z.string().trim().min(1).max(300),
+  predicted_reaction: z.string().trim().min(1).max(300),
+  // Deep tier (populated only when tier === "deep").
+  neutral_check_question: z.string().trim().min(1).max(300).optional(),
+  deeper_read: z.string().trim().min(1).max(300).optional(),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 

@@ -77,23 +77,33 @@ describe("refusalShape", () => {
 });
 
 // ============================================================
-// prepareOutputSchema (Coach redesign 2026-04-23)
+// prepareOutputSchema (coins redesign 2026-05-29) — tier-aware
 // ============================================================
-const validPrepareNormal = {
+// Quick = 3 required cards; Deep adds 2 optional cards. The two Deep fields
+// are .optional() so a Quick output validates without them.
+const validPrepareQuick = {
   mode: "normal",
-  real_issue:
-    "She's not actually angry about the trash — she's reading your habit as 'you don't notice the load I carry.'",
-  reality_check_question: "What did you mean when you said it's been a long week?",
-  thing_not_to_do: "Don't open with 'I just want to clear something up.'",
-  they_might_need: "She likely needs to feel seen for the load before she can hear logistics.",
-  best_next_move:
-    "Tonight when she's done with bedtime, sit next to her and ask: 'What's been hardest about this week?'",
+  pressure_check: "Don't open with 'we need to talk.'",
+  cleaner_opener: "Hey, got 10 minutes tonight to sort the chore split?",
+  predicted_reaction:
+    "She'll likely go quiet at first, then ask why it matters now.",
   pattern_tag: "assumed_meaning_without_checking",
 };
 
+const validPrepareDeep = {
+  ...validPrepareQuick,
+  neutral_check_question: "What's been eating most of your bandwidth this week?",
+  deeper_read:
+    "The fairest read is she's swamped, not careless — and your hidden ask is to feel the load is shared.",
+};
+
 describe("prepareOutputSchema", () => {
-  it("parses a valid normal-mode Prepare output", () => {
-    expect(prepareOutputSchema.safeParse(validPrepareNormal).success).toBe(true);
+  it("parses a valid Quick normal-mode Prepare output (3 cards)", () => {
+    expect(prepareOutputSchema.safeParse(validPrepareQuick).success).toBe(true);
+  });
+
+  it("parses a valid Deep normal-mode Prepare output (5 cards)", () => {
+    expect(prepareOutputSchema.safeParse(validPrepareDeep).success).toBe(true);
   });
 
   it("parses a valid refusal-mode Prepare output", () => {
@@ -108,7 +118,7 @@ describe("prepareOutputSchema", () => {
   });
 
   it("rejects a normal-mode output missing pattern_tag", () => {
-    const { pattern_tag: _omit, ...rest } = validPrepareNormal;
+    const { pattern_tag: _omit, ...rest } = validPrepareQuick;
     void _omit;
     expect(prepareOutputSchema.safeParse(rest).success).toBe(false);
   });
@@ -116,32 +126,32 @@ describe("prepareOutputSchema", () => {
   it("rejects an unknown pattern_tag", () => {
     expect(
       prepareOutputSchema.safeParse({
-        ...validPrepareNormal,
+        ...validPrepareQuick,
         pattern_tag: "made_up_tag",
       }).success,
     ).toBe(false);
   });
 
-  it("rejects a normal-mode output missing real_issue", () => {
-    const { real_issue: _omit, ...rest } = validPrepareNormal;
+  it("rejects a normal-mode output missing pressure_check (required Quick card)", () => {
+    const { pressure_check: _omit, ...rest } = validPrepareQuick;
     void _omit;
     expect(prepareOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects a best_next_move over 120 chars", () => {
+  it("rejects a predicted_reaction over 300 chars", () => {
     expect(
       prepareOutputSchema.safeParse({
-        ...validPrepareNormal,
-        best_next_move: "a".repeat(121),
+        ...validPrepareQuick,
+        predicted_reaction: "a".repeat(301),
       }).success,
     ).toBe(false);
   });
 
-  it("rejects whitespace-only thing_not_to_do after trim", () => {
+  it("rejects whitespace-only cleaner_opener after trim", () => {
     expect(
       prepareOutputSchema.safeParse({
-        ...validPrepareNormal,
-        thing_not_to_do: "   ",
+        ...validPrepareQuick,
+        cleaner_opener: "   ",
       }).success,
     ).toBe(false);
   });

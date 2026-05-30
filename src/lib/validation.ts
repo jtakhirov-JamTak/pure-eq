@@ -1,5 +1,6 @@
 // Pure EQ domain — replace in fork.
 import { z } from "zod";
+import { CONVERSATION_MOVES } from "@/types";
 
 // Onboarding
 export const quizAnswerSchema = z.object({
@@ -162,36 +163,30 @@ export const CALIBRATION_FLOOR_VALUES = ["yes", "mostly", "no"] as const;
 // Old fields (situation_text/primary_value/their_need/etc.) stay nullable
 // in the DB for /history reads on legacy rows; new posts do not send them.
 
-// SOT 2026-05-08 Commit 4: 16-step / 16-field schema. Pages now read:
-//   1. personName, relationship, situation
-//   2. primaryEmotion (text+body), emotionAsData, defaultPattern
-//   3. observedFromThem, theirStateHedged, fairestVersion
-//   4. predictedReaction, hiddenExpectation, specificShift, outcomeFloor
-//   5. neutralCheckQuestion, opener (text only), triggerPlan
-// bodyLocation is the body chip paired with primaryEmotion (the felt sense
-// going in). 0036 originally attached body_location to opener; 0037 leaves
-// the column as-is and re-purposes the consumer — same column, new pairing.
+// Coins redesign (Slice A, 2026-05-29): lean 8-field Prepare. The old
+// 16-field SOT flow is replaced by 8 fields + a Quick/Deep tier selector.
+// Fields the lean form no longer collects (primaryEmotion+body, emotionAsData,
+// defaultPattern, observedFromThem, theirStateHedged, predictedReaction,
+// hiddenExpectation, specificShift, outcomeFloor, neutralCheckQuestion) keep
+// their columns nullable for legacy /history reads — new posts simply stop
+// sending them. Two formerly-user inputs move:
+//   - predictedReaction → now an AI Quick card (writes predicted_reaction
+//     via extractDerivedFromAi); no longer a form field.
+//   - hiddenExpectation + outcomeFloor → merged into hiddenAskAndFloor
+//     (new column hidden_ask_and_floor, migration 0040).
+// New: conversationMove (routing chip, column conversation_move) + tier.
+// Pages: 1) personName, relationship, conversationMove
+//        2) situation, fairestVersion
+//        3) hiddenAskAndFloor, opener, triggerPlan
 export const createPrepareSchema = z.object({
-  // Page 1 — person + relationship + situation
+  // Quick = 3 AI cards (lower coin cost), Deep = 5. Persisted to ai_tier.
+  tier: z.enum(["quick", "deep"]).default("quick"),
   personName: z.string().trim().min(1).max(200),
   relationship: RELATIONSHIP_ENUM,
+  conversationMove: z.enum(CONVERSATION_MOVES),
   situation: z.string().trim().min(1).max(5000),
-  // Page 2 — primary emotion (+ body) + emotion-as-data + default pattern
-  primaryEmotion: z.string().trim().min(1).max(2000),
-  bodyLocation: z.enum(BODY_LOCATION_VALUES),
-  emotionAsData: z.string().trim().min(1).max(2000),
-  defaultPattern: z.string().trim().min(1).max(2000),
-  // Page 3 — observed/state-hedged/fairest
-  observedFromThem: z.string().trim().min(1).max(2000),
-  theirStateHedged: z.string().trim().min(1).max(2000),
   fairestVersion: z.string().trim().min(1).max(2000),
-  // Page 4 — predicted reaction + hidden expectation + specific shift + outcome floor
-  predictedReaction: z.string().trim().min(1).max(2000),
-  hiddenExpectation: z.string().trim().min(1).max(2000),
-  specificShift: z.string().trim().min(1).max(2000),
-  outcomeFloor: z.string().trim().min(1).max(2000),
-  // Page 5 — neutral check question + opener (text only) + trigger plan
-  neutralCheckQuestion: z.string().trim().min(1).max(2000),
+  hiddenAskAndFloor: z.string().trim().min(1).max(2000),
   opener: z.string().trim().min(1).max(1000),
   triggerPlan: z.string().trim().min(1).max(2000),
   // Person/thread + idempotency. idempotencyKey is injected by route layer.

@@ -5,31 +5,22 @@ import {
   PROMPT_VERSION,
 } from "../prompts";
 
-// SOT 2026-05-08 Commit 4: added primaryEmotion + defaultPattern +
-// neutralCheckQuestion. body chip moves off opener onto primary_emotion
-// semantically (column stays body_location).
+// Coins redesign Slice A 2026-05-29: lean 8-field Prepare + Quick/Deep tier.
 const baseParams = {
   profile: "reflective" as const,
+  tier: "quick" as const,
   personName: "Alex",
   relationship: "partner",
+  conversationMove: "boundary",
   situation: "How we split chores at home.",
-  primaryEmotion: "Resentment, with dread under it.",
-  bodyLocation: "chest",
-  emotionAsData: "Resentment — pointing at unfairness this month.",
-  defaultPattern: "I go quiet, then come out swinging the third time.",
-  observedFromThem: "They sigh when I bring it up and change the subject.",
-  theirStateHedged: "They might be running on empty.",
   fairestVersion: "Picking up overtime, not dodging on purpose.",
-  predictedReaction: "If I open with stats, they'll go quiet.",
-  hiddenExpectation: "Hoping they'll volunteer to take over the dishes.",
-  specificShift: "A standing rotation on the calendar.",
-  outcomeFloor: "Name that this keeps coming back.",
-  neutralCheckQuestion: "What's been eating most of your bandwidth lately?",
+  hiddenAskAndFloor:
+    "Hoping they'll take over the dishes; floor is naming it keeps recurring.",
   opener: "Hey, can we talk about how we split things up?",
   triggerPlan: "If I feel chest-tightening, I'll pause and ask one question.",
 };
 
-describe("buildPreparePrompt — Coach SOT shape", () => {
+describe("buildPreparePrompt — lean tiered shape", () => {
   it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
@@ -43,29 +34,14 @@ describe("buildPreparePrompt — Coach SOT shape", () => {
     expect(out.system).toContain("BLAME patterns");
   });
 
-  it("renders all 16 SOT fields verbatim in the user block", () => {
+  it("renders all 8 lean fields verbatim in the user block", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.user).toContain("Alex (partner)");
+    expect(out.user).toContain("boundary");
     expect(out.user).toContain("How we split chores at home.");
-    expect(out.user).toContain("Resentment, with dread under it.");
-    expect(out.user).toContain("(body: chest)");
-    expect(out.user).toContain("Resentment — pointing at unfairness this month.");
-    expect(out.user).toContain(
-      "I go quiet, then come out swinging the third time.",
-    );
-    expect(out.user).toContain(
-      "They sigh when I bring it up and change the subject.",
-    );
-    expect(out.user).toContain("They might be running on empty.");
     expect(out.user).toContain("Picking up overtime, not dodging on purpose.");
-    expect(out.user).toContain("If I open with stats, they'll go quiet.");
     expect(out.user).toContain(
-      "Hoping they'll volunteer to take over the dishes.",
-    );
-    expect(out.user).toContain("A standing rotation on the calendar.");
-    expect(out.user).toContain("Name that this keeps coming back.");
-    expect(out.user).toContain(
-      "What's been eating most of your bandwidth lately?",
+      "Hoping they'll take over the dishes; floor is naming it keeps recurring.",
     );
     expect(out.user).toContain(
       "Hey, can we talk about how we split things up?",
@@ -75,20 +51,24 @@ describe("buildPreparePrompt — Coach SOT shape", () => {
     );
   });
 
-  it("primaryEmotion + body line is paired (not on the opener line)", () => {
+  it("Quick tier omits the two Deep card DEFINITIONS from the output schema", () => {
     const out = buildPreparePrompt(baseParams);
-    // The body chip should appear next to the primary_emotion line — not
-    // on the opener line. SOT moved the body pairing to felt-sense-going-in.
-    const primaryEmotionLine = out.user
-      .split("\n")
-      .find((line) => line.startsWith("Primary emotion"));
-    expect(primaryEmotionLine).toBeDefined();
-    expect(primaryEmotionLine).toContain("(body: chest)");
-    const openerLine = out.user
-      .split("\n")
-      .find((line) => line.startsWith("Opening line"));
-    expect(openerLine).toBeDefined();
-    expect(openerLine).not.toContain("body:");
+    expect(out.system).toContain("pressure_check");
+    expect(out.system).toContain("cleaner_opener");
+    expect(out.system).toContain("predicted_reaction");
+    expect(out.system).toContain("Return ONLY the Quick fields");
+    // The "do NOT include …" instruction line names the fields, so match on
+    // the quoted JSON key (the schema definition) — absent in Quick.
+    expect(out.system).not.toContain('"neutral_check_question":');
+    expect(out.system).not.toContain('"deeper_read":');
+  });
+
+  it("Deep tier adds the neutral_check_question + deeper_read definitions", () => {
+    const out = buildPreparePrompt({ ...baseParams, tier: "deep" });
+    expect(out.system).toContain('"neutral_check_question":');
+    expect(out.system).toContain('"deeper_read":');
+    expect(out.system).not.toContain("Return ONLY the Quick fields");
+    expect(out.user).toContain("Deep request");
   });
 });
 

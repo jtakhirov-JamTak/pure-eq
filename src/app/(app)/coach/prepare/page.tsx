@@ -4,23 +4,19 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
+import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
-import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { CoachPage } from "@/components/coach/coach-page";
-import {
-  TextareaWithBodyChip,
-  type TextareaWithBodyChipValue,
-} from "@/components/coach/steps/textarea-with-body-chip";
 import { TextareaIfThen } from "@/components/coach/steps/textarea-if-then";
 import {
   pageCanAdvance,
   type PageDef,
   type StepDef,
 } from "@/lib/coach/page-flow";
-import { BODY_LOCATION_VALUES } from "@/lib/validation";
 import { safeUUID } from "@/lib/utils";
-import type { RelationshipDomain } from "@/types";
+import { CONVERSATION_MOVES } from "@/types";
+import type { AiTier, ConversationMove, RelationshipDomain } from "@/types";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "partner", label: "Partner" },
@@ -33,19 +29,33 @@ const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// Coach SOT 2026-05-08 follow-up (feat/sot-followup-0037): 5 pages,
-// 16 steps. The 0036 layout missed several Qs from the locked SOT
-// cross-eval — primary_emotion, default_pattern, neutral_check_question.
-// The body chip moves OFF opener TO primary_emotion (felt sense going in
-// is paired with the named emotion, not the opener). situation moves
-// from Page 2 to Page 1 alongside person + relationship.
-//
-// Page-to-state shape:
-//   1 setup:       personName, relationship, situation
-//   2 self_state:  primaryEmotionWithBody (text+body chip), emotionAsData, defaultPattern
-//   3 their_read:  observedFromThem, theirStateHedged, fairestVersion
-//   4 shape:       predictedReaction, hiddenExpectation, specificShift, outcomeFloor
-//   5 action:      neutralCheckQuestion, opener (text only), triggerPlan
+// Conversation-move chip labels (column conversation_move). The move frames
+// the AI prompt — what KIND of conversation this is.
+const CONVERSATION_MOVE_LABELS: Record<ConversationMove, string> = {
+  clarify: "Clear up a misunderstanding",
+  ask: "Ask for something",
+  boundary: "Set a boundary",
+  share: "Share how I feel",
+  decide: "Decide something together",
+  pause: "Take a pause / cool down",
+};
+
+// Tier metadata. Coins are NOT debited yet (Slice B); these are display-only
+// cost constants so the selector reads the same as the future priced flow.
+const TIER_META: {
+  value: AiTier;
+  label: string;
+  cards: string;
+  coins: string;
+}[] = [
+  { value: "quick", label: "Quick", cards: "3 cards", coins: "4 coins" },
+  { value: "deep", label: "Deep", cards: "5 cards", coins: "6 coins" },
+];
+
+// Coins redesign Slice A 2026-05-29: lean 8-field Prepare across 3 pages.
+//   1 setup:   personName, relationship, conversationMove
+//   2 context: situation (facts), fairestVersion
+//   3 plan:    hiddenAskAndFloor, opener, triggerPlan
 const PREPARE_PAGES: PageDef[] = [
   {
     pageKey: "setup",
@@ -63,52 +73,21 @@ const PREPARE_PAGES: PageDef[] = [
         kind: "select",
       },
       {
+        key: "conversationMove",
+        title: "What kind of conversation is this?",
+        prompt: "The move you're trying to make. It shapes the feedback.",
+        kind: "select_conversation_move",
+      },
+    ],
+  },
+  {
+    pageKey: "context",
+    qs: [
+      {
         key: "situation",
         title: "What is this conversation about?",
-        prompt: "Describe the situation in facts only. What needs to be discussed?",
-        kind: "textarea",
-      },
-    ],
-  },
-  {
-    pageKey: "self_state",
-    qs: [
-      {
-        key: "primaryEmotionWithBody",
-        title: "What are you feeling — and where do you notice it in your body?",
         prompt:
-          "The emotion you're carrying into this conversation. Then point at where it sits.",
-        kind: "textarea_with_body_chip",
-      },
-      {
-        key: "emotionAsData",
-        title: "What is your emotion telling you?",
-        prompt:
-          "The feeling you're carrying in is signal. Treat it as data, not noise — what is it pointing at?",
-        kind: "textarea",
-      },
-      {
-        key: "defaultPattern",
-        title: "When you feel that way, what do you usually do that gets in the way?",
-        prompt: "Your default. Not the version you wish was true.",
-        kind: "textarea",
-      },
-    ],
-  },
-  {
-    pageKey: "their_read",
-    qs: [
-      {
-        key: "observedFromThem",
-        title: "What have you observed from them recently?",
-        prompt: "Specific behaviors — body, tone, words. Not interpretations yet.",
-        kind: "textarea",
-      },
-      {
-        key: "theirStateHedged",
-        title: "Your hedged read of their state",
-        prompt:
-          "Your best guess at where they are right now, hedged: 'They might be…'",
+          "Describe the situation in facts only. What needs to be discussed?",
         kind: "textarea",
       },
       {
@@ -121,44 +100,13 @@ const PREPARE_PAGES: PageDef[] = [
     ],
   },
   {
-    pageKey: "shape",
+    pageKey: "plan",
     qs: [
       {
-        key: "predictedReaction",
-        title: "How do you predict they'll react?",
-        prompt: "To the way you're planning to bring this up.",
-        kind: "textarea",
-      },
-      {
-        key: "hiddenExpectation",
-        title: "What hidden expectation are you carrying in?",
+        key: "hiddenAskAndFloor",
+        title: "What are you secretly hoping for — and what would be good enough?",
         prompt:
-          "The thing you're hoping for or assuming will happen, that you haven't said out loud — even to yourself.",
-        kind: "textarea",
-      },
-      {
-        key: "specificShift",
-        title: "What specific shift do you want?",
-        prompt: "One concrete change in them, the situation, or the relationship.",
-        kind: "textarea",
-      },
-      {
-        key: "outcomeFloor",
-        title: "What's your outcome floor?",
-        prompt:
-          "If the shift doesn't fully land, what would still be acceptable? The line below which it's a bad outcome.",
-        kind: "textarea",
-      },
-    ],
-  },
-  {
-    pageKey: "action",
-    qs: [
-      {
-        key: "neutralCheckQuestion",
-        title: "What's one neutral question you can ask to check your read instead of assuming?",
-        prompt:
-          "Not 'are we okay.' Something specific that would actually surface info.",
+          "The thing you haven't said out loud, plus the outcome floor you could still live with.",
         kind: "textarea",
       },
       {
@@ -171,7 +119,8 @@ const PREPARE_PAGES: PageDef[] = [
       {
         key: "triggerPlan",
         title: "If you get triggered, what will you do instead?",
-        prompt: "Complete: 'If I notice myself feeling [your primary emotion], then I will ___ instead of ___.' The second blank is your default move from the previous page.",
+        prompt:
+          "Complete: 'If I notice myself getting [reaction], then I will ___ instead of ___.'",
         kind: "textarea_if_then",
       },
     ],
@@ -180,11 +129,11 @@ const PREPARE_PAGES: PageDef[] = [
 
 type AiNormal = {
   mode: "normal";
-  real_issue: string;
-  reality_check_question: string;
-  thing_not_to_do: string;
-  they_might_need: string;
-  best_next_move: string | null;
+  pressure_check: string;
+  cleaner_opener: string;
+  predicted_reaction: string;
+  neutral_check_question?: string;
+  deeper_read?: string;
   pattern_tag: string;
 };
 
@@ -198,20 +147,22 @@ type AiRefusal = {
 type AiOutput = AiNormal | AiRefusal;
 
 const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
-  { label: "The real issue", key: "real_issue" },
-  { label: "Reality-check question", key: "reality_check_question" },
-  { label: "Thing not to do", key: "thing_not_to_do" },
-  { label: "What they might need", key: "they_might_need" },
-  { label: "Best next move", key: "best_next_move" },
+  { label: "Pressure check", key: "pressure_check" },
+  { label: "A cleaner opener", key: "cleaner_opener" },
+  { label: "Predicted reaction", key: "predicted_reaction" },
+  { label: "Neutral check question", key: "neutral_check_question" },
+  { label: "A deeper read", key: "deeper_read" },
 ];
 
 const PrepareBackground = () => <SkyBackground variant="calm" />;
 
 function NormalResultCard({
   output,
+  entryId,
   onBack,
 }: {
   output: AiNormal;
+  entryId: string | null;
   onBack: () => void;
 }) {
   const visible = RESULT_FIELDS.filter(({ key }) => {
@@ -230,19 +181,31 @@ function NormalResultCard({
       >
         Your <span className="italic">feedback</span>.
       </h2>
+      <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
+        Keep each card, edit it in your words, or mark it not true.
+      </p>
       <div className="mt-5 space-y-3">
         {visible.map(({ label, key }) => {
-          const isAction = ACTION_FIELDS.has(key);
-          return (
+          const text = output[key] as string;
+          return entryId ? (
+            <EditableCard
+              key={key}
+              label={label}
+              value={text}
+              cardKey={key}
+              entryTable="prepare_entries"
+              entryId={entryId}
+            />
+          ) : (
             <div
               key={key}
-              className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+              className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
             >
               <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
                 {label}
               </p>
               <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                {output[key]}
+                {text}
               </p>
             </div>
           );
@@ -330,19 +293,18 @@ function EmptyOutputCard({
 export default function PreparePage() {
   const router = useRouter();
   const [pageIndex, setPageIndex] = useState(0);
-  // State is keyed by SOT field name where flat, by step.key where the
-  // step bundles fields (openerWithBody → { text, bodyLocation }).
+  const [tier, setTier] = useState<AiTier>("quick");
+  // State is keyed by field name (all lean fields are flat strings/enums).
   const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  const [prepareEntryId, setPrepareEntryId] = useState<string | null>(null);
   // On a 403 (free Prepare already used) we show an inline upgrade panel
   // instead of redirecting — a hard router.push would unmount the form and
   // discard the user's whole multi-step entry at the exact upgrade moment.
-  // The component stays mounted, so `data` survives; "Back to my entry"
-  // just flips this off and re-renders the form with their input intact.
   const [gated, setGated] = useState(false);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
@@ -380,32 +342,14 @@ export default function PreparePage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      // SOT 2026-05-08 Commit 4: body chip is paired with primaryEmotion
-      // (not opener). Flatten the textarea_with_body_chip step value into
-      // primaryEmotion (text) + bodyLocation (chip). opener is now a plain
-      // textarea with no body chip.
-      const primaryEmotion =
-        (data.primaryEmotionWithBody as TextareaWithBodyChipValue | undefined)
-          ?.text ?? "";
-      const bodyLocation =
-        (data.primaryEmotionWithBody as TextareaWithBodyChipValue | undefined)
-          ?.bodyLocation ?? "";
       const body = {
+        tier,
         personName: data.personName,
         relationship: data.relationship,
+        conversationMove: data.conversationMove,
         situation: data.situation,
-        primaryEmotion,
-        bodyLocation,
-        emotionAsData: data.emotionAsData,
-        defaultPattern: data.defaultPattern,
-        observedFromThem: data.observedFromThem,
-        theirStateHedged: data.theirStateHedged,
         fairestVersion: data.fairestVersion,
-        predictedReaction: data.predictedReaction,
-        hiddenExpectation: data.hiddenExpectation,
-        specificShift: data.specificShift,
-        outcomeFloor: data.outcomeFloor,
-        neutralCheckQuestion: data.neutralCheckQuestion,
+        hiddenAskAndFloor: data.hiddenAskAndFloor,
         opener: data.opener,
         triggerPlan: data.triggerPlan,
         personId: personId || null,
@@ -426,6 +370,9 @@ export default function PreparePage() {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
+      if (typeof result.prepareEntryId === "string") {
+        setPrepareEntryId(result.prepareEntryId);
+      }
       if (result.aiOutput) {
         setAiOutput(result.aiOutput as AiOutput);
       } else {
@@ -455,16 +402,14 @@ export default function PreparePage() {
       return (
         <NormalResultCard
           output={aiOutput}
+          entryId={prepareEntryId}
           onBack={() => router.push("/coach")}
         />
       );
     }
     if (isRefusal(aiOutput)) {
       return (
-        <RefusalCard
-          output={aiOutput}
-          onBack={() => router.push("/coach")}
-        />
+        <RefusalCard output={aiOutput} onBack={() => router.push("/coach")} />
       );
     }
     return (
@@ -544,11 +489,6 @@ export default function PreparePage() {
       );
     }
     if (step.kind === "select") {
-      // The relationship select. Auto-skipped when the person picker
-      // already populated relationship — see currentPage.qs[1].conditional
-      // below in PageDef build... actually we use PersonPicker auto-fill;
-      // when a person is chosen, relationship is set inline. The user can
-      // still see/change it on the form. No conditional hide here.
       const value = (data[step.key] as string | undefined) ?? "";
       return (
         <div className="space-y-2">
@@ -564,6 +504,27 @@ export default function PreparePage() {
               }`}
             >
               {rel.label}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (step.kind === "select_conversation_move") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <div className="space-y-2">
+          {CONVERSATION_MOVES.map((move) => (
+            <button
+              key={move}
+              type="button"
+              onClick={() => setFieldValue(step.key, move)}
+              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-[14px] font-semibold transition active:scale-[0.99] ${
+                value === move
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              {CONVERSATION_MOVE_LABELS[move]}
             </button>
           ))}
         </div>
@@ -589,22 +550,43 @@ export default function PreparePage() {
         />
       );
     }
-    if (step.kind === "textarea_with_body_chip") {
-      const value = data[step.key] as TextareaWithBodyChipValue | undefined;
-      return (
-        <TextareaWithBodyChip
-          value={value}
-          onChange={(next) => setFieldValue(step.key, next)}
-          chipValues={BODY_LOCATION_VALUES}
-        />
-      );
-    }
     return null;
   }
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
+
+      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only
+          coin costs; nothing is debited until Slice B. */}
+      <div className="mb-4">
+        <div className="flex gap-2">
+          {TIER_META.map((t) => {
+            const active = tier === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setTier(t.value)}
+                aria-pressed={active}
+                className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-card-sm px-3 py-2 transition active:scale-[0.99] ${
+                  active
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
+                }`}
+              >
+                <span className="text-[14px] font-bold">{t.label}</span>
+                <span
+                  className={`text-[11px] font-medium ${active ? "text-white/80" : "text-ink-muted"}`}
+                >
+                  {t.cards} · {t.coins}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <CoachPage
         eyebrow="Prepare"
         pageIndex={pageIndex}

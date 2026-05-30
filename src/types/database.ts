@@ -14,8 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_card_edits: {
+        Row: {
+          card_edit_id: string
+          card_key: string
+          created_at: string
+          edited_text: string | null
+          entry_id: string
+          entry_table: string
+          original_text: string | null
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          card_edit_id?: string
+          card_key: string
+          created_at?: string
+          edited_text?: string | null
+          entry_id: string
+          entry_table: string
+          original_text?: string | null
+          status: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          card_edit_id?: string
+          card_key?: string
+          created_at?: string
+          edited_text?: string | null
+          entry_id?: string
+          entry_table?: string
+          original_text?: string | null
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       before_you_send_entries: {
         Row: {
+          ai_tier: string | null
           ai_verdict_json: Json | null
           ai_verdict_version: number | null
           before_you_send_entry_id: string
@@ -34,6 +74,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_tier?: string | null
           ai_verdict_json?: Json | null
           ai_verdict_version?: number | null
           before_you_send_entry_id?: string
@@ -52,6 +93,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_tier?: string | null
           ai_verdict_json?: Json | null
           ai_verdict_version?: number | null
           before_you_send_entry_id?: string
@@ -375,15 +417,18 @@ export type Database = {
           afraid_it_means: string | null
           ai_plan_json: Json | null
           ai_plan_version: number | null
+          ai_tier: string | null
           ambiguity_flag: boolean
           body_location: string | null
           completed_at: string | null
+          conversation_move: string | null
           created_at: string
           default_pattern: string | null
           deleted_at: string | null
           desired_outcome: string | null
           emotion_as_data: string | null
           fairest_version: string | null
+          hidden_ask_and_floor: string | null
           hidden_expectation: string | null
           how_to_make_them_feel: string | null
           is_complete: boolean
@@ -419,15 +464,18 @@ export type Database = {
           afraid_it_means?: string | null
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
+          ai_tier?: string | null
           ambiguity_flag?: boolean
           body_location?: string | null
           completed_at?: string | null
+          conversation_move?: string | null
           created_at?: string
           default_pattern?: string | null
           deleted_at?: string | null
           desired_outcome?: string | null
           emotion_as_data?: string | null
           fairest_version?: string | null
+          hidden_ask_and_floor?: string | null
           hidden_expectation?: string | null
           how_to_make_them_feel?: string | null
           is_complete?: boolean
@@ -463,15 +511,18 @@ export type Database = {
           afraid_it_means?: string | null
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
+          ai_tier?: string | null
           ambiguity_flag?: boolean
           body_location?: string | null
           completed_at?: string | null
+          conversation_move?: string | null
           created_at?: string
           default_pattern?: string | null
           deleted_at?: string | null
           desired_outcome?: string | null
           emotion_as_data?: string | null
           fairest_version?: string | null
+          hidden_ask_and_floor?: string | null
           hidden_expectation?: string | null
           how_to_make_them_feel?: string | null
           is_complete?: boolean
@@ -531,6 +582,7 @@ export type Database = {
         Row: {
           ai_output_json: Json | null
           ai_output_version: number | null
+          ai_tier: string | null
           alternative: string | null
           body_location: string | null
           completed_at: string | null
@@ -556,6 +608,7 @@ export type Database = {
         Insert: {
           ai_output_json?: Json | null
           ai_output_version?: number | null
+          ai_tier?: string | null
           alternative?: string | null
           body_location?: string | null
           completed_at?: string | null
@@ -581,6 +634,7 @@ export type Database = {
         Update: {
           ai_output_json?: Json | null
           ai_output_version?: number | null
+          ai_tier?: string | null
           alternative?: string | null
           body_location?: string | null
           completed_at?: string | null
@@ -732,6 +786,7 @@ export type Database = {
         Row: {
           ai_strategy_json: Json | null
           ai_strategy_version: number | null
+          ai_tier: string | null
           channel: string
           completed_at: string | null
           created_at: string
@@ -752,6 +807,7 @@ export type Database = {
         Insert: {
           ai_strategy_json?: Json | null
           ai_strategy_version?: number | null
+          ai_tier?: string | null
           channel: string
           completed_at?: string | null
           created_at?: string
@@ -772,6 +828,7 @@ export type Database = {
         Update: {
           ai_strategy_json?: Json | null
           ai_strategy_version?: number | null
+          ai_tier?: string | null
           channel?: string
           completed_at?: string | null
           created_at?: string
@@ -817,6 +874,7 @@ export type Database = {
         Row: {
           ai_reflection_json: Json | null
           ai_reflection_version: number | null
+          ai_tier: string | null
           ask_before_understanding: string | null
           body_location: string | null
           calibration_block: Json | null
@@ -876,6 +934,7 @@ export type Database = {
         Insert: {
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
+          ai_tier?: string | null
           ask_before_understanding?: string | null
           body_location?: string | null
           calibration_block?: Json | null
@@ -935,6 +994,7 @@ export type Database = {
         Update: {
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
+          ai_tier?: string | null
           ask_before_understanding?: string | null
           body_location?: string | null
           calibration_block?: Json | null
