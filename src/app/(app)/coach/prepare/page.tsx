@@ -170,7 +170,7 @@ function NormalResultCard({
     return typeof v === "string" && v.trim().length > 0;
   });
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
       <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
         Prepare
@@ -229,7 +229,7 @@ function RefusalCard({
   onBack: () => void;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
       <h2
         className="font-display text-[28px] leading-[1.15] text-ink"
@@ -262,7 +262,7 @@ function EmptyOutputCard({
   message?: string;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
       <h2
         className="font-display text-[28px] leading-[1.15] text-ink"
@@ -554,7 +554,7 @@ export default function PreparePage() {
   }
 
   return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
 
       {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only

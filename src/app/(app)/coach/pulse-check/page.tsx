@@ -363,7 +363,7 @@ export default function PulseCheckPage() {
   // ============================================================
   if (aiOutput && aiOutput.mode === "refusal" && isRefusal(aiOutput)) {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
         <PulseBackground />
         <h2
           className="font-display text-[28px] leading-[1.15] text-ink"
@@ -393,7 +393,7 @@ export default function PulseCheckPage() {
     });
     const cta = chipCta((data.nextMove as string) ?? "");
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
         <PulseBackground />
         <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
           Pulse Check
@@ -455,7 +455,7 @@ export default function PulseCheckPage() {
   if (savedMessage) {
     const cta = chipCta((data.nextMove as string) ?? "");
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
         <PulseBackground />
         <h2
           className="font-display text-[28px] leading-[1.15] text-ink"
@@ -627,7 +627,7 @@ export default function PulseCheckPage() {
   }
 
   return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PulseBackground />
 
       {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only coin

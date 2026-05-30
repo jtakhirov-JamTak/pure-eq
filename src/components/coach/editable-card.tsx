@@ -63,7 +63,7 @@ export function EditableCard({
       setEditing(false);
     } catch (err) {
       console.error("card-edit failed", (err as Error)?.message);
-      setError("Couldn't save. Tap to try again.");
+      setError("Couldn't save — tap to dismiss, then retry.");
     } finally {
       setSaving(false);
     }
@@ -175,7 +175,7 @@ export function EditableCard({
         <button
           type="button"
           onClick={() => setError(null)}
-          className="mt-2 text-left text-[12px] font-medium text-danger underline"
+          className="mt-2 inline-flex min-h-11 items-center px-2 text-left text-[12px] font-medium text-danger underline"
         >
           {error}
         </button>
