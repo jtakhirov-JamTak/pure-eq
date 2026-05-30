@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Design-handoff mockup — not shipped app source, not in the build.
+    // Linting it surfaced ~76 errors for a static reference file.
+    "design_handoff_pure_eq/**",
   ]),
 ]);
 
