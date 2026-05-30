@@ -10,19 +10,12 @@ import { SkyBackground } from "@/components/brand/SkyBackground";
 import { safeUUID } from "@/lib/utils";
 import type { AiTier } from "@/types";
 import { createClient } from "@/lib/supabase/client";
-
-// Tier metadata. Coins are NOT debited yet (Slice B); these are display-only
-// cost constants so the selector reads the same as the future priced flow.
-// Mirrors the Pulse Check tier selector.
-const TIER_META: {
-  value: AiTier;
-  label: string;
-  cards: string;
-  coins: string;
-}[] = [
-  { value: "quick", label: "Quick", cards: "3 cards", coins: "4 coins" },
-  { value: "deep", label: "Deep", cards: "5 cards", coins: "6 coins" },
-];
+import {
+  TierSelector,
+  GetFeedbackScreen,
+  useCoinBalance,
+  coinCostForTier,
+} from "@/components/coach/coin-ui";
 
 // Reject stashes older than this. sessionStorage is tab-scoped, not
 // account-scoped; a short window limits the cross-user bleed window to
@@ -164,7 +157,25 @@ export default function BeforeYouSendPage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
   const [rewriteText, setRewriteText] = useState("");
+  // Save-first coins flow (Slice B Phase 2b). The initial draft is saved free
+  // (handleSaveDraft) and lands on the "Get verdict" screen; the verdict spends
+  // coins. A rewrite ("Check it again") is a brand-new entry — it mints a fresh
+  // key and runs a combined save+verdict, so it's charged like a new draft.
+  const [awaitingGenerate, setAwaitingGenerate] = useState(false);
+  const [insufficient, setInsufficient] = useState<{
+    needed: number;
+    balance: number;
+  } | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const { balance, refresh: refreshBalance } = useCoinBalance();
   const submitRef = useRef(false);
+  // Stable key for the current draft's save→verdict lifecycle. Re-minted per
+  // rewrite so each rewrite scores as its own entry (the old per-submit fresh
+  // key is now lifecycle-scoped).
+  const keyRef = useRef<string>("");
+  if (!keyRef.current) {
+    keyRef.current = safeUUID();
+  }
 
   // Read sessionStorage prefill once on mount (Review → BYS handoff from
   // Commit 6). The stash is cleared on mount regardless of validation so
@@ -217,65 +228,151 @@ export default function BeforeYouSendPage() {
     };
   }, []);
 
-  async function submitCheck(textToCheck: string) {
+  // Shared request body. `key` ties a save and its verdict to one entry; `text`
+  // is the draft being scored (the rewrite box sends a different text).
+  function buildBody(text: string, key: string, generateAi: boolean) {
+    return {
+      tier,
+      draftText: text,
+      messageType,
+      intentOptional: intentOptional.trim() || null,
+      riskContext: riskContext.trim() || null,
+      idempotencyKey: key,
+      generateAi,
+    };
+  }
+
+  // Step 1 — free save of the initial draft. No coins, no verdict. Lands on the
+  // "Get verdict" screen.
+  async function handleSaveDraft() {
     if (submitRef.current) return;
-    if (!textToCheck.trim()) return;
-    // Snapshot the pre-submit verdict. Used by the 403 handler if this
-    // is a rewrite — the user has composed a new draft based on the
-    // verdict in hand, and losing both the verdict and the rewrite text
-    // to a paywall redirect erases their work. We restore the snapshot
-    // on 403 and surface an inline upgrade CTA.
-    const previousAiOutput = aiOutput;
-    const isRewriteSubmit = previousAiOutput !== null;
+    if (!draftText.trim()) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
-    setAiOutput(null);
-    setSavedMessage(null);
     try {
-      // FRESH idempotency key per submit — including "Check it again"
-      // retries. If we reused a key, the run-module idempotency branch
-      // would return the original AI output instead of re-scoring the
-      // rewrite.
-      const idempotencyKey = safeUUID();
       const res = await fetch("/api/coach/before-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tier,
-          draftText: textToCheck,
-          messageType,
-          intentOptional: intentOptional.trim() || null,
-          riskContext: riskContext.trim() || null,
-          idempotencyKey,
-        }),
+        body: JSON.stringify(buildBody(draftText, keyRef.current, false)),
       });
-      if (res.status === 403) {
-        // Initial submit: user hasn't seen any coaching output yet —
-        // send them to the paywall.
-        // Rewrite ("Check it again"): user has composed a rewrite and is
-        // asking for another pass. Don't discard their in-progress draft
-        // to a redirect. Restore the verdict they were looking at and
-        // surface an inline upgrade prompt so they can upgrade without
-        // losing context.
-        if (isRewriteSubmit) {
-          setAiOutput(previousAiOutput);
-          setSubmitError(
-            "A subscription is needed to check rewrites. Tap Done or visit the paywall to upgrade.",
-          );
-        } else {
-          router.push("/paywall");
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`);
+      }
+      const result = await res.json();
+      if (typeof result.beforeYouSendEntryId === "string") {
+        setBeforeYouSendEntryId(result.beforeYouSendEntryId);
+      }
+      setInsufficient(null);
+      setAwaitingGenerate(true);
+      refreshBalance();
+    } catch (err) {
+      console.error("before-send save failed", (err as Error)?.message);
+      setSubmitError("Could not save. Try again in a moment.");
+    } finally {
+      setSubmitting(false);
+      submitRef.current = false;
+    }
+  }
+
+  // Step 2 — paid verdict for the saved draft. Same key as the save; a 402 means
+  // the balance is short (draft already saved), surfaced inline on the screen.
+  async function handleGenerate() {
+    if (submitRef.current) return;
+    submitRef.current = true;
+    setSubmitting(true);
+    setGenerateError(null);
+    setSavedMessage(null);
+    try {
+      const res = await fetch("/api/coach/before-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(draftText, keyRef.current, true)),
+      });
+      if (res.status === 402) {
+        const j = (await res.json().catch(() => ({}))) as {
+          needed?: number;
+          balance?: number;
+          beforeYouSendEntryId?: string;
+        };
+        if (typeof j.beforeYouSendEntryId === "string") {
+          setBeforeYouSendEntryId(j.beforeYouSendEntryId);
         }
+        setInsufficient({
+          needed: j.needed ?? coinCostForTier(tier),
+          balance: j.balance ?? 0,
+        });
+        setAwaitingGenerate(true);
         return;
       }
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
-      // Capture the derived entry id so the result cards can attach
-      // Accept/Edit/Not-true edits via POST /api/coach/card-edit. A fresh
-      // id arrives on every pass (including "Check it again" rewrites), so
-      // the cards are keyed by it and remount per submission.
+      if (typeof result.beforeYouSendEntryId === "string") {
+        setBeforeYouSendEntryId(result.beforeYouSendEntryId);
+      }
+      if (result.aiOutput) {
+        setAwaitingGenerate(false);
+        setAiOutput(result.aiOutput as AiOutput);
+        // Seed the rewrite box with the text we just checked.
+        setRewriteText(draftText);
+      } else {
+        setAwaitingGenerate(false);
+        setSavedMessage(
+          result.message ??
+            "Your draft was saved. Coaching feedback wasn't available this time.",
+        );
+      }
+      refreshBalance();
+    } catch (err) {
+      console.error("before-send generate failed", (err as Error)?.message);
+      setGenerateError("Could not get a verdict. Try again in a moment.");
+    } finally {
+      setSubmitting(false);
+      submitRef.current = false;
+    }
+  }
+
+  // Rewrite loop — a fresh draft scored as its own entry (fresh key, combined
+  // save+verdict in one call). On a 402 we restore the verdict the user was
+  // looking at and surface an inline coins-short message so their rewrite text
+  // isn't lost. Same protect-the-work shape the old 403 rewrite path had.
+  async function handleCheckAgain() {
+    if (submitRef.current) return;
+    const text = rewriteText;
+    if (!text.trim()) return;
+    const previousAiOutput = aiOutput;
+    submitRef.current = true;
+    setSubmitting(true);
+    setSubmitError(null);
+    setAiOutput(null);
+    setSavedMessage(null);
+    setDraftText(text);
+    // Fresh key — reusing the prior key would return the original verdict from
+    // the idempotency branch instead of re-scoring the rewrite.
+    keyRef.current = safeUUID();
+    try {
+      const res = await fetch("/api/coach/before-send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(text, keyRef.current, true)),
+      });
+      if (res.status === 402) {
+        const j = (await res.json().catch(() => ({}))) as {
+          needed?: number;
+          balance?: number;
+        };
+        setAiOutput(previousAiOutput);
+        setSubmitError(
+          `You need ${j.needed ?? coinCostForTier(tier)} coins to check a rewrite — you have ${j.balance ?? 0}.`,
+        );
+        return;
+      }
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`);
+      }
+      const result = await res.json();
       if (typeof result.beforeYouSendEntryId === "string") {
         setBeforeYouSendEntryId(result.beforeYouSendEntryId);
       } else {
@@ -283,35 +380,23 @@ export default function BeforeYouSendPage() {
       }
       if (result.aiOutput) {
         setAiOutput(result.aiOutput as AiOutput);
-        // Seed the rewrite box with the text we just checked so the user
-        // can edit from there for the next pass.
-        setRewriteText(textToCheck);
+        setRewriteText(text);
       } else {
         setSavedMessage(
           result.message ??
             "Your draft was saved. Coaching feedback wasn't available this time.",
         );
       }
+      refreshBalance();
     } catch (err) {
-      console.error("before-send submit failed", (err as Error)?.message);
-      // Keep the prior verdict on screen during a rewrite failure —
-      // losing both the verdict and the rewrite text to a transient
-      // network error erases the user's work.
-      if (isRewriteSubmit) setAiOutput(previousAiOutput);
+      console.error("before-send rewrite failed", (err as Error)?.message);
+      // Keep the prior verdict on screen during a rewrite failure.
+      if (previousAiOutput) setAiOutput(previousAiOutput);
       setSubmitError("Could not check. Try again in a moment.");
     } finally {
       setSubmitting(false);
       submitRef.current = false;
     }
-  }
-
-  function handleInitialSubmit() {
-    submitCheck(draftText);
-  }
-
-  function handleCheckAgain() {
-    setDraftText(rewriteText);
-    submitCheck(rewriteText);
   }
 
   if (submitting) {
@@ -422,7 +507,8 @@ export default function BeforeYouSendPage() {
               disabled={!rewriteText.trim()}
               className="mt-4 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
             >
-              Check it again
+              Check it again · {coinCostForTier(tier)}{" "}
+              {coinCostForTier(tier) === 1 ? "coin" : "coins"}
             </button>
           </div>
 
@@ -459,6 +545,28 @@ export default function BeforeYouSendPage() {
     );
   }
 
+  if (awaitingGenerate) {
+    return (
+      <GetFeedbackScreen
+        background={<BysBackground />}
+        eyebrow={
+          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
+            Before you send
+          </span>
+        }
+        title="Draft saved."
+        blurb="Your draft is saved. Get a verdict on how it'll land whenever you're ready."
+        tier={tier}
+        balance={balance}
+        insufficient={insufficient}
+        error={generateError}
+        actionLabel="Get verdict"
+        onGenerate={handleGenerate}
+        onBack={() => router.push("/coach")}
+      />
+    );
+  }
+
   if (savedMessage) {
     return (
       <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
@@ -473,7 +581,7 @@ export default function BeforeYouSendPage() {
           {savedMessage}
         </p>
         <button
-          onClick={handleInitialSubmit}
+          onClick={handleGenerate}
           className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
         >
           Try again for a verdict
@@ -506,33 +614,10 @@ export default function BeforeYouSendPage() {
         person will read it.
       </p>
 
-      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only coin
-          costs; nothing is debited until Slice B. */}
-      <div className="mt-5 flex gap-2">
-        {TIER_META.map((t) => {
-          const active = tier === t.value;
-          return (
-            <button
-              key={t.value}
-              type="button"
-              onClick={() => setTier(t.value)}
-              aria-pressed={active}
-              className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-card-sm px-3 py-2 transition active:scale-[0.99] ${
-                active
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
-            >
-              <span className="text-[14px] font-bold">{t.label}</span>
-              <span
-                className={`text-[11px] font-medium ${active ? "text-white/80" : "text-ink-muted"}`}
-              >
-                {t.cards} · {t.coins}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). The coins are
+          charged when the user taps "Get verdict" on the saved screen, not
+          here — saving the draft is free. */}
+      <TierSelector tier={tier} onChange={setTier} className="mt-5" />
 
       {prefillSource && (
         <div className="mt-5 rounded-card-sm bg-surface p-3 shadow-soft">
@@ -616,11 +701,11 @@ export default function BeforeYouSendPage() {
       )}
 
       <button
-        onClick={handleInitialSubmit}
+        onClick={handleSaveDraft}
         disabled={!draftText.trim()}
         className="mt-7 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
       >
-        Check this draft
+        Save draft (free)
       </button>
     </div>
   );
