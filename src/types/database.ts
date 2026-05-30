@@ -881,6 +881,7 @@ export type Database = {
           completed_at: string | null
           could_make_them_feel: string | null
           created_at: string
+          data_and_update: string | null
           deleted_at: string | null
           easier_or_harder: string | null
           feeling_tracking: string | null
@@ -896,6 +897,7 @@ export type Database = {
           lesson_differently: string | null
           linked_prepare_entry_id: string | null
           needs_to_happen_next: string | null
+          next_move: string | null
           observed_in_them: string | null
           observed_raw: string | null
           outcome_json: Json | null
@@ -941,6 +943,7 @@ export type Database = {
           completed_at?: string | null
           could_make_them_feel?: string | null
           created_at?: string
+          data_and_update?: string | null
           deleted_at?: string | null
           easier_or_harder?: string | null
           feeling_tracking?: string | null
@@ -956,6 +959,7 @@ export type Database = {
           lesson_differently?: string | null
           linked_prepare_entry_id?: string | null
           needs_to_happen_next?: string | null
+          next_move?: string | null
           observed_in_them?: string | null
           observed_raw?: string | null
           outcome_json?: Json | null
@@ -1001,6 +1005,7 @@ export type Database = {
           completed_at?: string | null
           could_make_them_feel?: string | null
           created_at?: string
+          data_and_update?: string | null
           deleted_at?: string | null
           easier_or_harder?: string | null
           feeling_tracking?: string | null
@@ -1016,6 +1021,7 @@ export type Database = {
           lesson_differently?: string | null
           linked_prepare_entry_id?: string | null
           needs_to_happen_next?: string | null
+          next_move?: string | null
           observed_in_them?: string | null
           observed_raw?: string | null
           outcome_json?: Json | null

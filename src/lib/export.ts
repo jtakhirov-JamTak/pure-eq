@@ -302,6 +302,8 @@ type ReviewRow = Pick<
   | "what_you_avoided"
   | "ask_before_understanding"
   | "needs_to_happen_next"
+  | "next_move"
+  | "data_and_update"
   | "forecast"
   | "easier_or_harder"
   | "treat_as_data"
@@ -372,6 +374,9 @@ export function formatReviewSection(
     appendField(lines, "What I avoided", r.what_you_avoided);
     appendField(lines, "Did I ask before assuming", r.ask_before_understanding);
     appendField(lines, "What needs to happen next", r.needs_to_happen_next);
+    // Lean Review (redesign): next_move chip + merged data_and_update.
+    appendField(lines, "Next move", r.next_move);
+    appendField(lines, "What this taught me / what to change next time", r.data_and_update);
     appendField(lines, "Forecast (5–7 day)", r.forecast);
     // SOT 2026-05-08 outcome arc
     appendField(lines, "Easier or harder than I predicted?", r.easier_or_harder);
@@ -715,7 +720,7 @@ export async function buildExportText(
     supabase
       .from("review_entries")
       .select(
-        "created_at, review_depth, what_happened, observed_raw, interpreted_raw, hardest_moment_feeling, felt_at_hardest_moment, body_location, feeling_tracking, observed_in_them, their_experience, their_in_moment_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, forecast, easier_or_harder, treat_as_data, something_that_helped, signs_how_they_left, turning_point, what_protecting, what_protecting_text, lesson_about_them, lesson_about_self, lesson_differently, what_else_explains, what_read_missed, calibration_block, repair_branch_active, impact_to_name, their_need_first, pressure_vs_care, timing_when, timing_now, first_repair_sentence, your_part, secret_want, could_make_them_feel, person_id, thread_id",
+        "created_at, review_depth, what_happened, observed_raw, interpreted_raw, hardest_moment_feeling, felt_at_hardest_moment, body_location, feeling_tracking, observed_in_them, their_experience, their_in_moment_experience, what_helped, what_hurt, validated_assumptions, unresolved_and_next, what_you_did, what_you_avoided, ask_before_understanding, needs_to_happen_next, next_move, data_and_update, forecast, easier_or_harder, treat_as_data, something_that_helped, signs_how_they_left, turning_point, what_protecting, what_protecting_text, lesson_about_them, lesson_about_self, lesson_differently, what_else_explains, what_read_missed, calibration_block, repair_branch_active, impact_to_name, their_need_first, pressure_vs_care, timing_when, timing_now, first_repair_sentence, your_part, secret_want, could_make_them_feel, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)

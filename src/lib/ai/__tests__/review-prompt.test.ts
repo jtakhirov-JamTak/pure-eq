@@ -1,19 +1,20 @@
 import { describe, it, expect } from "vitest";
 import { buildReviewPrompt, PROMPT_VERSION } from "../prompts";
 
+// Lean Review (coins redesign 2026-05-29). buildReviewPrompt is now a tier-aware
+// 7-field builder: turning_point / pattern_data / recommended_move on Quick,
+// plus their_likely_experience / repeat_stop_update on Deep. The Prepare→Review
+// calibration prepend is preserved.
 const baseParams = {
   profile: "reflective" as const,
+  tier: "quick" as const,
   whatHappened: "We argued about dinner plans.",
   observedRaw: "they raised their voice and walked to the kitchen",
   interpretedRaw: "I read it as them shutting the conversation down",
-  hardestMomentFeeling: "shut down",
   whatYouDid: "went quiet",
-  observedInThem: "they kept pushing for an answer",
-  theirExperience: "felt unheard",
-  whatYouAvoided: "naming that I needed a break",
-  askBeforeUnderstanding: "no" as const,
-  needsToHappenNext: "clarify" as const,
-  repairBranchActive: false,
+  easierOrHarder: "made it harder for them to circle back",
+  dataAndUpdate: "pushing freezes info; ask what they need before naming my read",
+  nextMove: "repair",
 };
 
 describe("buildReviewPrompt — person line rendering", () => {
@@ -33,116 +34,95 @@ describe("buildReviewPrompt — person line rendering", () => {
       personRelationship: null,
     });
     expect(out.user).not.toContain("Person:");
-    expect(out.user).not.toContain("Person relationship:");
-  });
-
-  it("omits the person line when both fields are undefined (legacy callers)", () => {
-    // Backwards-compat: a caller that doesn't pass the new params at all
-    // should produce a prompt byte-identical to pre-4.1.0 (no person line).
-    const out = buildReviewPrompt(baseParams);
-    expect(out.user).not.toContain("Person:");
   });
 
   it("does NOT render a relationship-only line if name is missing", () => {
-    // Defends the simplification at prompts.ts — the run-module fetch
-    // populates both fields together, so this state shouldn't reach the
-    // builder. If it ever does (legacy row, schema drift), we render
-    // nothing rather than a half-shape "Person relationship:" line that
-    // would imply a meaningful intermediate state.
     const out = buildReviewPrompt({
       ...baseParams,
       personName: null,
       personRelationship: "partner",
     });
     expect(out.user).not.toContain("Person:");
-    expect(out.user).not.toContain("Person relationship:");
   });
 
   it("stamps the current PROMPT_VERSION constant", () => {
-    const out = buildReviewPrompt({
-      ...baseParams,
-      personName: "Jessie",
-      personRelationship: "partner",
-    });
+    const out = buildReviewPrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
   });
 });
 
-// SOT 2026-05-08 Commit 5: new Full Review SOT inputs surface in the
-// user block + card-derivation guidance attaches to the system prompt.
-describe("buildReviewPrompt — SOT 2026-05-08 Full inputs", () => {
-  const sotFull = {
-    ...baseParams,
-    reviewDepth: "full" as const,
-    feltAtHardestMoment: "Pinned. Like the floor moved.",
-    bodyLocation: "chest",
-    feelingTracking: "Yes — they'd already been pulling away all week.",
-    easierOrHarder: "Made it harder for them to bring this up later.",
-    treatAsData: "The pause after 'I don't know what you want' was the real answer.",
-    somethingThatHelped: "When I stopped pushing and asked what they needed.",
-    theirInMomentExperience: "Cornered. Trying not to escalate.",
-    signsHowTheyLeft: "Closed laptop, said 'I'm going to bed' without eye contact.",
-    turningPoint: "When I said 'fine, forget it' — that's when their tone hardened.",
-    lessonScreen: {
-      a: "Push doesn't surface info — it freezes it.",
-      b: "Ask what they need before naming what I see.",
-      c: null,
-    },
+describe("buildReviewPrompt — lean fields + tiering", () => {
+  it("renders all 7 lean inputs verbatim in the user block", () => {
+    const out = buildReviewPrompt(baseParams);
+    expect(out.user).toContain("We argued about dinner plans.");
+    expect(out.user).toContain("they raised their voice and walked to the kitchen");
+    expect(out.user).toContain("I read it as them shutting the conversation down");
+    expect(out.user).toContain("went quiet");
+    expect(out.user).toContain("made it harder for them to circle back");
+    expect(out.user).toContain("pushing freezes info");
+    expect(out.user).toContain("repair");
+  });
+
+  it("Quick tier instructs the model to return ONLY the 3 Quick cards", () => {
+    const out = buildReviewPrompt({ ...baseParams, tier: "quick" });
+    expect(out.system).toContain("turning_point");
+    expect(out.system).toContain("pattern_data");
+    expect(out.system).toContain("recommended_move");
+    // The Deep card SCHEMA DEFINITIONS must be absent — only the "do NOT
+    // include" guard line names the Deep keys on Quick.
+    expect(out.system).not.toContain("best behavior-grounded read");
+    expect(out.system).not.toContain("one thing to repeat, one to stop");
+    expect(out.system).toContain(
+      "do NOT include their_likely_experience or repeat_stop_update",
+    );
+  });
+
+  it("Deep tier adds the 2 Deep cards to the schema block", () => {
+    const out = buildReviewPrompt({ ...baseParams, tier: "deep" });
+    expect(out.system).toContain("their_likely_experience");
+    expect(out.system).toContain("repeat_stop_update");
+    expect(out.user).toContain(
+      "also return their_likely_experience and repeat_stop_update",
+    );
+  });
+});
+
+describe("buildReviewPrompt — calibration prepend", () => {
+  const snapshot = {
+    situation: "the overdue budget report",
+    predictedReaction: "They'll likely go quiet and stop explaining.",
+    primaryEmotion: "frustrated",
+    defaultPattern: "I push to resolve fast",
+    neutralCheckQuestion: "What's making this one hard to land?",
+    opener: "Hey, got ten minutes to sort the report?",
+    emotionAsData: null,
+    hiddenExpectation: null,
+    specificShift: null,
+    outcomeFloor: null,
   };
 
-  it("renders all 9 new SOT fields verbatim in the user block", () => {
-    const out = buildReviewPrompt(sotFull);
-    expect(out.user).toContain("Pinned. Like the floor moved.");
-    expect(out.user).toContain("(body: chest)");
-    expect(out.user).toContain(
-      "they'd already been pulling away all week.",
-    );
-    expect(out.user).toContain(
-      "Made it harder for them to bring this up later.",
-    );
-    expect(out.user).toContain(
-      "The pause after 'I don't know what you want' was the real answer.",
-    );
-    expect(out.user).toContain(
-      "When I stopped pushing and asked what they needed.",
-    );
-    expect(out.user).toContain("Cornered. Trying not to escalate.");
-    expect(out.user).toContain("Closed laptop");
-    expect(out.user).toContain("that's when their tone hardened.");
-    expect(out.user).toContain("Push doesn't surface info");
-    expect(out.user).toContain("what they need before naming what I see");
-  });
-
-  it("omits optional lessonScreen sub-fields when null", () => {
-    const out = buildReviewPrompt(sotFull);
-    // c is null in sotFull — render should NOT include the c-clause segment.
-    expect(out.user).not.toContain("what they'll carry forward:");
-    // b is non-null — should render.
-    expect(out.user).toContain("what they'd do differently:");
-  });
-
-  it("attaches REVIEW FULL CARD DERIVATIONS as a named system-prompt block on Full", () => {
-    const out = buildReviewPrompt(sotFull);
-    // SOT 2026-05-08 fix5 (#16): named system block, not inline user-tail.
-    expect(out.system).toContain("REVIEW FULL CARD DERIVATIONS");
-    expect(out.system).toContain("treat_as_data");
-    expect(out.system).toContain("alternative_explanation");
-    expect(out.system).toContain("easier_or_harder");
-    expect(out.system).toContain("impact_vs_intent");
-    expect(out.system).toContain("signs_how_they_left");
-    expect(out.system).toContain("how_you_came_across");
-    expect(out.system).toContain("turning_point");
-    expect(out.system).toContain("question_you_missed");
-    // User block references the system rule by name rather than re-listing it.
-    expect(out.user).toContain("REVIEW FULL CARD DERIVATIONS");
-  });
-
-  it("DOES NOT attach card-derivation guidance on Quick depth", () => {
+  it("renders the forecast block when a linked Prepare snapshot is present", () => {
     const out = buildReviewPrompt({
       ...baseParams,
-      reviewDepth: "quick",
+      linkedPrepareEntryId: "11111111-1111-1111-1111-111111111111",
+      prepareSnapshot: snapshot,
     });
-    expect(out.system).not.toContain("REVIEW FULL CARD DERIVATIONS");
-    expect(out.user).toContain("Quick depth");
+    expect(out.user).toContain("YOUR FORECAST");
+    expect(out.user).toContain("They'll likely go quiet and stop explaining.");
+    expect(out.user).toContain("Use the forecast block above");
+  });
+
+  it("omits the forecast block when there is no link", () => {
+    const out = buildReviewPrompt(baseParams);
+    expect(out.user).not.toContain("YOUR FORECAST");
+  });
+
+  it("omits the forecast block when an id is present but no snapshot", () => {
+    const out = buildReviewPrompt({
+      ...baseParams,
+      linkedPrepareEntryId: "11111111-1111-1111-1111-111111111111",
+      prepareSnapshot: null,
+    });
+    expect(out.user).not.toContain("YOUR FORECAST");
   });
 });

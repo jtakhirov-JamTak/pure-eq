@@ -116,6 +116,9 @@ export type BeforeYouSendVerdict = "safe" | "risky" | "do_not_send";
 
 // Review: select-field enums.
 export type AskBeforeUnderstanding = "yes" | "no" | "unclear";
+// Legacy (pre-redesign) needs-to-happen-next chip. New lean Review posts write
+// `next_move` (REVIEW_NEXT_MOVE_VALUES) instead; this stays for /history reads
+// on legacy rows and the Insights behavioral-context aggregation.
 export type ReviewNeedsToHappenNext =
   | "nothing"
   | "clarify"
@@ -125,6 +128,22 @@ export type ReviewNeedsToHappenNext =
   | "give_space"
   | "set_boundary"
   | "ask_for_repair";
+
+// Lean Review next-move chip (redesign). What the user thinks should happen
+// after the conversation. Stored on review_entries.next_move (migration 0041).
+// Distinct from the old needs_to_happen_next taxonomy: adds prepare / step_back
+// / save_pattern, drops the repair-trigger granularity (Repair is now a single
+// chip routing to the future standalone Repair module).
+export const REVIEW_NEXT_MOVE_VALUES = [
+  "nothing",
+  "repair",
+  "prepare",
+  "set_boundary",
+  "follow_up",
+  "step_back",
+  "save_pattern",
+] as const;
+export type ReviewNextMove = (typeof REVIEW_NEXT_MOVE_VALUES)[number];
 
 // Review repair-branch readiness gate response.
 export type RepairReadiness = "yes" | "somewhat" | "no";

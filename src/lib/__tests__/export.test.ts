@@ -81,6 +81,8 @@ function blankReview(overrides: Partial<ReviewRowArg>): ReviewRowArg {
     what_you_avoided: null,
     ask_before_understanding: null,
     needs_to_happen_next: null,
+    next_move: null,
+    data_and_update: null,
     forecast: null,
     easier_or_harder: null,
     treat_as_data: null,
@@ -324,6 +326,29 @@ describe("formatReviewSection", () => {
     expect(out).toContain("they kept looking at the door");
     expect(out).toContain("What I thought it meant:");
     expect(out).toContain("I read it as them wanting to leave");
+  });
+
+  it("renders lean Review fields (next_move + data_and_update) when populated", () => {
+    const out = formatReviewSection(
+      [
+        blankReview({
+          created_at: "2026-05-30T09:00:00.000Z",
+          what_happened: "We talked about the deadline.",
+          observed_raw: "they sighed and looked away",
+          interpreted_raw: "I read it as frustration with me",
+          what_you_did: "kept explaining the timeline",
+          easier_or_harder: "harder for them to push back",
+          data_and_update: "explaining over listening freezes them; ask first next time",
+          next_move: "repair",
+        }),
+      ],
+      personMap,
+      threadMap,
+    );
+    expect(out).toContain("Next move:");
+    expect(out).toContain("repair");
+    expect(out).toContain("What this taught me / what to change next time:");
+    expect(out).toContain("explaining over listening freezes them");
   });
 
   it("renders signal_noise_observation in Prepare export when populated (cross-eval batch #1)", () => {

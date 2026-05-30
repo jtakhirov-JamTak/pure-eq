@@ -14,33 +14,15 @@ type ReviewInput = Parameters<typeof reviewModuleConfig.buildDerivedInsert>[0];
 type PrepareInput = Parameters<typeof prepareModuleConfig.buildDerivedInsert>[0];
 
 const baseReviewInput: ReviewInput = {
-  reviewDepth: "full",
+  tier: "quick",
+  personName: "Sam",
   whatHappened: "We argued.",
   observedRaw: "they paused",
   interpretedRaw: "I read shutdown",
-  feltAtHardestMoment: "pinned",
-  bodyLocation: "chest",
-  feelingTracking: "yes — already pulling back",
   whatYouDid: "kept pushing",
   easierOrHarder: "harder for them to circle back",
-  treatAsData: "the never-mind was a real answer",
-  somethingThatHelped: "nothing in the moment",
-  theirInMomentExperience: "cornered",
-  signsHowTheyLeft: "closed laptop",
-  turningPoint: "when I said 'forget it'",
-  needsToHappenNext: "apologize",
-  forecast: "they'll go quiet by Friday",
-  whatProtecting: { chip: "image", text: "didn't want to look reactive" },
-  lessonScreen: { a: "push freezes", b: "ask first", c: null },
-  whatElseExplains: null,
-  whatReadMissed: null,
-  impactToName: "they likely felt dismissed and stopped trying to explain",
-  theirNeedFirst: "acknowledgment",
-  pressureVsCare: "a follow-up DM tonight would tip into pressure",
-  timingWhen: "tomorrow morning in person",
-  timingNow: false,
-  firstRepairSentence: "I think I cut you off twice — I'm sorry.",
-  repairBranchActive: true,
+  dataAndUpdate: "push freezes info; ask what they need before naming what I see",
+  nextMove: "repair",
 } as ReviewInput;
 
 const basePrepareInput: PrepareInput = {
@@ -55,98 +37,50 @@ const basePrepareInput: PrepareInput = {
   triggerPlan: "If chest-tight, pause and ask one question.",
 } as PrepareInput;
 
-describe("reviewModuleConfig.buildDerivedInsert — SOT column mapping", () => {
-  it("maps all 24+ new SOT fields to the right DB columns", () => {
+describe("reviewModuleConfig.buildDerivedInsert — lean column mapping", () => {
+  it("maps lean Review fields to the right DB columns", () => {
     const insert = reviewModuleConfig.buildDerivedInsert(baseReviewInput) as Record<
       string,
       unknown
     >;
 
-    expect(insert.review_depth).toBe("full");
     expect(insert.what_happened).toBe(baseReviewInput.whatHappened);
     expect(insert.observed_raw).toBe(baseReviewInput.observedRaw);
     expect(insert.interpreted_raw).toBe(baseReviewInput.interpretedRaw);
-    expect(insert.felt_at_hardest_moment).toBe(
-      baseReviewInput.feltAtHardestMoment,
-    );
-    expect(insert.body_location).toBe("chest");
-    expect(insert.feeling_tracking).toBe(baseReviewInput.feelingTracking);
     expect(insert.what_you_did).toBe(baseReviewInput.whatYouDid);
     expect(insert.easier_or_harder).toBe(baseReviewInput.easierOrHarder);
-    expect(insert.treat_as_data).toBe(baseReviewInput.treatAsData);
-    expect(insert.something_that_helped).toBe(
-      baseReviewInput.somethingThatHelped,
-    );
-    // SOT 2026-05-08 fix5 (#13): writes to the dedicated column, NOT the
-    // deprecated their_experience.
-    expect(insert.their_in_moment_experience).toBe(
-      baseReviewInput.theirInMomentExperience,
-    );
-    expect(insert.signs_how_they_left).toBe(baseReviewInput.signsHowTheyLeft);
-    expect(insert.turning_point).toBe(baseReviewInput.turningPoint);
-    expect(insert.needs_to_happen_next).toBe("apologize");
-    expect(insert.forecast).toBe(baseReviewInput.forecast);
-    // whatProtecting splits across two columns.
-    expect(insert.what_protecting).toBe("image");
-    expect(insert.what_protecting_text).toBe("didn't want to look reactive");
-    // lessonScreen splits across three columns.
-    expect(insert.lesson_about_them).toBe("push freezes");
-    expect(insert.lesson_about_self).toBe("ask first");
-    expect(insert.lesson_differently).toBe(null);
-    expect(insert.what_else_explains).toBe(null);
-    expect(insert.what_read_missed).toBe(null);
+    // Merged lesson + treat-as-data column.
+    expect(insert.data_and_update).toBe(baseReviewInput.dataAndUpdate);
+    // New lean next-move column (replaces needs_to_happen_next taxonomy).
+    expect(insert.next_move).toBe("repair");
+    expect(insert.ai_tier).toBe("quick");
+    // review_depth deprecated — ai_tier is the tier of record; left null.
+    expect(insert.review_depth).toBe(null);
+    // No in-form repair branch in the lean Review; always false (Repair is its
+    // own module now). The column is NOT NULL so a value must be written.
+    expect(insert.repair_branch_active).toBe(false);
   });
 
-  it("persists ALL 6 SOT repair fields when the branch is active", () => {
+  it("forwards the server-resolved linked_prepare_entry_id when present", () => {
+    const linked = {
+      ...baseReviewInput,
+      linkedPrepareEntryId: "11111111-1111-1111-1111-111111111111",
+    } as ReviewInput;
+    const insert = reviewModuleConfig.buildDerivedInsert(linked) as Record<
+      string,
+      unknown
+    >;
+    expect(insert.linked_prepare_entry_id).toBe(
+      "11111111-1111-1111-1111-111111111111",
+    );
+  });
+
+  it("writes null linked_prepare_entry_id when no link resolved", () => {
     const insert = reviewModuleConfig.buildDerivedInsert(baseReviewInput) as Record<
       string,
       unknown
     >;
-    expect(insert.repair_branch_active).toBe(true);
-    expect(insert.impact_to_name).toBe(baseReviewInput.impactToName);
-    expect(insert.their_need_first).toBe("acknowledgment");
-    expect(insert.pressure_vs_care).toBe(baseReviewInput.pressureVsCare);
-    expect(insert.timing_when).toBe(baseReviewInput.timingWhen);
-    expect(insert.timing_now).toBe(false);
-    expect(insert.first_repair_sentence).toBe(
-      baseReviewInput.firstRepairSentence,
-    );
-  });
-
-  it("server-derives repair_branch_active = false on non-trigger chip", () => {
-    // SOT 2026-05-08 fix2 (#4): even if client smuggles repairBranchActive=true
-    // and repair content, the server derivation gates persistence.
-    const smuggled = {
-      ...baseReviewInput,
-      needsToHappenNext: "set_boundary" as const,
-      repairBranchActive: true,
-    } as ReviewInput;
-    const insert = reviewModuleConfig.buildDerivedInsert(smuggled) as Record<
-      string,
-      unknown
-    >;
-    expect(insert.repair_branch_active).toBe(false);
-    expect(insert.impact_to_name).toBe(null);
-    expect(insert.their_need_first).toBe(null);
-    expect(insert.pressure_vs_care).toBe(null);
-    expect(insert.timing_when).toBe(null);
-    expect(insert.timing_now).toBe(null);
-    expect(insert.first_repair_sentence).toBe(null);
-  });
-
-  it("server-derives repair_branch_active = false on Quick depth even with trigger chip", () => {
-    const quickWithTrigger = {
-      ...baseReviewInput,
-      reviewDepth: "quick" as const,
-      needsToHappenNext: "apologize" as const,
-      repairBranchActive: true,
-    } as ReviewInput;
-    const insert = reviewModuleConfig.buildDerivedInsert(quickWithTrigger) as Record<
-      string,
-      unknown
-    >;
-    expect(insert.repair_branch_active).toBe(false);
-    expect(insert.impact_to_name).toBe(null);
+    expect(insert.linked_prepare_entry_id).toBe(null);
   });
 });
 
@@ -206,52 +140,21 @@ describe("prepareModuleConfig.extractDerivedFromAi — Predicted Reaction → co
 // raw rows AND what the AI prompt builder receives — a column-name drift
 // here lands the user's content in an unread payload field and renders
 // blank coaching even when the derived row is correct.
-describe("reviewModuleConfig.buildPayloadFields — SOT field passthrough", () => {
-  it("passes through every SOT input to the raw payload (Full happy path)", () => {
+describe("reviewModuleConfig.buildPayloadFields — lean field passthrough", () => {
+  it("passes through every lean input to the raw payload", () => {
     const payload = reviewModuleConfig.buildPayloadFields(baseReviewInput) as Record<
       string,
       unknown
     >;
-    expect(payload.reviewDepth).toBe("full");
+    expect(payload.tier).toBe("quick");
+    expect(payload.personName).toBe(baseReviewInput.personName);
     expect(payload.whatHappened).toBe(baseReviewInput.whatHappened);
-    expect(payload.feltAtHardestMoment).toBe(baseReviewInput.feltAtHardestMoment);
-    expect(payload.bodyLocation).toBe("chest");
-    expect(payload.feelingTracking).toBe(baseReviewInput.feelingTracking);
+    expect(payload.observedRaw).toBe(baseReviewInput.observedRaw);
+    expect(payload.interpretedRaw).toBe(baseReviewInput.interpretedRaw);
+    expect(payload.whatYouDid).toBe(baseReviewInput.whatYouDid);
     expect(payload.easierOrHarder).toBe(baseReviewInput.easierOrHarder);
-    expect(payload.treatAsData).toBe(baseReviewInput.treatAsData);
-    expect(payload.somethingThatHelped).toBe(baseReviewInput.somethingThatHelped);
-    expect(payload.theirInMomentExperience).toBe(
-      baseReviewInput.theirInMomentExperience,
-    );
-    expect(payload.signsHowTheyLeft).toBe(baseReviewInput.signsHowTheyLeft);
-    expect(payload.turningPoint).toBe(baseReviewInput.turningPoint);
-    expect(payload.needsToHappenNext).toBe("apologize");
-    expect(payload.forecast).toBe(baseReviewInput.forecast);
-    expect(payload.whatProtecting).toEqual(baseReviewInput.whatProtecting);
-    expect(payload.lessonScreen).toEqual(baseReviewInput.lessonScreen);
-  });
-
-  it("strips repair-branch payload fields when server-derivation says inactive", () => {
-    // Mirrors the buildDerivedInsert smuggle test (#4). The payload column
-    // is the second smuggle surface — if it still carries content while the
-    // derived row stamps null, /history reads on raw rows would show repair
-    // content for a row whose DB columns show none.
-    const smuggled = {
-      ...baseReviewInput,
-      needsToHappenNext: "set_boundary" as const,
-      repairBranchActive: true,
-    } as ReviewInput;
-    const payload = reviewModuleConfig.buildPayloadFields(smuggled) as Record<
-      string,
-      unknown
-    >;
-    expect(payload.repairBranchActive).toBe(false);
-    expect(payload.impactToName).toBe(null);
-    expect(payload.theirNeedFirst).toBe(null);
-    expect(payload.pressureVsCare).toBe(null);
-    expect(payload.timingWhen).toBe(null);
-    expect(payload.timingNow).toBe(null);
-    expect(payload.firstRepairSentence).toBe(null);
+    expect(payload.dataAndUpdate).toBe(baseReviewInput.dataAndUpdate);
+    expect(payload.nextMove).toBe("repair");
   });
 });
 
@@ -277,8 +180,8 @@ describe("prepareModuleConfig.buildPayloadFields — lean field passthrough", ()
 // SOT-follow-up values. A drift here lands legacy rows under the new
 // version, breaking generator_version reads downstream.
 describe("module configs — pinned identity", () => {
-  it("review.aiVersionValue is 9 (SOT fix5 Commit-5 marker)", () => {
-    expect(reviewModuleConfig.aiVersionValue).toBe(9);
+  it("review.aiVersionValue is 10 (coins lean-tier marker)", () => {
+    expect(reviewModuleConfig.aiVersionValue).toBe(10);
     expect(reviewModuleConfig.moduleName).toBe("review");
     expect(reviewModuleConfig.derivedTable).toBe("review_entries");
   });

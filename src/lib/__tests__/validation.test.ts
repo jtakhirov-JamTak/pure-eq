@@ -14,35 +14,53 @@ import { REPAIR_TRIGGER_NEEDS } from "@/lib/coach/page-flow";
 // makes failure messages legible at a glance.
 // ============================================================
 
-// 2026-05-17 fix3 (#13): added the cross-field requirement guard, which
-// makes the Full-by-default schema reject payloads without forecast / Full
-// anchor fields. validReviewBase is now Quick + forecast so legacy tests
-// (which only assert on observedRaw / interpretedRaw + repair branch shape)
-// keep passing without needing every Full field stubbed in.
+// ============================================================
+// Review — lean 7-field tiered schema (coins redesign 2026-05-29)
+// ============================================================
+// The old Quick/Full split + page-5 calibration chips + in-form Repair branch
+// are gone. One lean form + a Quick/Deep AI-tier selector. Two formerly-multi
+// inputs merge: lessonScreen + treatAsData → dataAndUpdate; needsToHappenNext
+// taxonomy → nextMove.
 const validReviewBase = {
-  reviewDepth: "quick" as const,
+  tier: "quick" as const,
+  personName: "Sam",
   whatHappened: "We argued about the timeline for the Q3 plan.",
   observedRaw: "Their voice got quieter, they stopped making eye contact.",
   interpretedRaw: "I thought they were shutting down because I'd pushed too hard.",
-  hardestMomentFeeling: "When they said 'never mind' — I felt cornered.",
   whatYouDid: "I kept arguing my point instead of pausing.",
-  observedInThem: "Tense shoulders, short answers.",
-  theirExperience: "They probably felt steamrolled.",
-  whatYouAvoided: "I avoided asking what they actually needed.",
-  askBeforeUnderstanding: "no" as const,
-  needsToHappenNext: "clarify" as const,
-  forecast: "If I don't bring it up by Friday, they'll bring it up sharper.",
-  repairBranchActive: false,
+  easierOrHarder: "Made it harder for them to bring this up again later.",
+  dataAndUpdate: "Pushing freezes info; ask what they need before naming my read.",
+  nextMove: "repair" as const,
 };
 
-// ============================================================
-// Review schema — observed/interpreted two-column step
-// (cross-eval batch #1, 2026-05-03)
-// ============================================================
-describe("createReviewSchema — observedRaw / interpretedRaw", () => {
-  it("accepts a normal-shape payload with both fields populated", () => {
+describe("createReviewSchema — lean tiered shape", () => {
+  it("accepts a fully-populated lean payload", () => {
     const result = createReviewSchema.safeParse(validReviewBase);
     expect(result.success).toBe(true);
+  });
+
+  it("defaults tier to quick when omitted", () => {
+    const { tier: _omit, ...minus } = validReviewBase;
+    void _omit;
+    const result = createReviewSchema.safeParse(minus);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.tier).toBe("quick");
+  });
+
+  it("accepts tier deep", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      tier: "deep",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown tier", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      tier: "ultra",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects empty observedRaw", () => {
@@ -69,18 +87,75 @@ describe("createReviewSchema — observedRaw / interpretedRaw", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects interpretedRaw over 2000 chars", () => {
-    const result = createReviewSchema.safeParse({
-      ...validReviewBase,
-      interpretedRaw: "a".repeat(2001),
-    });
-    expect(result.success).toBe(false);
-  });
-
   it("accepts observedRaw at exactly 2000 chars", () => {
     const result = createReviewSchema.safeParse({
       ...validReviewBase,
       observedRaw: "a".repeat(2000),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an empty dataAndUpdate", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      dataAndUpdate: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty whatYouDid", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      whatYouDid: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an unknown nextMove", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      nextMove: "ghost",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts every next-move value (7 values)", () => {
+    const moves = [
+      "nothing",
+      "repair",
+      "prepare",
+      "set_boundary",
+      "follow_up",
+      "step_back",
+      "save_pattern",
+    ] as const;
+    for (const move of moves) {
+      const result = createReviewSchema.safeParse({
+        ...validReviewBase,
+        nextMove: move,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it("rejects omitted nextMove (required)", () => {
+    const { nextMove: _omit, ...minus } = validReviewBase;
+    void _omit;
+    const result = createReviewSchema.safeParse(minus);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects omitted personName (required)", () => {
+    const { personName: _omit, ...minus } = validReviewBase;
+    void _omit;
+    const result = createReviewSchema.safeParse(minus);
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts a server-resolved linkedPrepareEntryId", () => {
+    const result = createReviewSchema.safeParse({
+      ...validReviewBase,
+      linkedPrepareEntryId: "11111111-1111-4111-8111-111111111111",
     });
     expect(result.success).toBe(true);
   });
@@ -111,6 +186,7 @@ describe("createPrepareSchema — lean tiered shape", () => {
 
   it("defaults tier to quick when omitted", () => {
     const { tier: _omit, ...minus } = validPrepareBase;
+    void _omit;
     const result = createPrepareSchema.safeParse(minus);
     expect(result.success).toBe(true);
     if (result.success) expect(result.data.tier).toBe("quick");
@@ -200,101 +276,9 @@ describe("createPrepareSchema — lean tiered shape", () => {
 
   it("rejects omitted conversationMove (required)", () => {
     const { conversationMove: _omit, ...minus } = validPrepareBase;
+    void _omit;
     const result = createPrepareSchema.safeParse(minus);
     expect(result.success).toBe(false);
-  });
-});
-
-// ============================================================
-// Review Quick shape — SOT 2026-05-08 Commit 2
-// ============================================================
-// Quick = 5 Qs across 2 pages: personName + whatHappened + observedInterpreted
-// on Page 1; whatYouDid + needsAndForecast on Page 2. hardestMomentFeeling
-// is NOT collected on Quick. Forecast text persists via the optional
-// `forecast` field for the calibration loop.
-
-describe("createReviewSchema — Quick shape (SOT 2026-05-08)", () => {
-  const validQuickBase = {
-    reviewDepth: "quick" as const,
-    whatHappened: "We disagreed about whose turn it was to handle the email.",
-    observedRaw: "They paused, then said 'fine, I'll just do it.'",
-    interpretedRaw: "I read that as resentment building up again.",
-    whatYouDid: "I let it drop instead of asking what they actually meant.",
-    needsToHappenNext: "clarify" as const,
-    forecast: "If I don't bring it back up by Friday, they'll bring it up sharper.",
-    repairBranchActive: false,
-  };
-
-  it("accepts a Quick payload with no hardestMomentFeeling", () => {
-    const result = createReviewSchema.safeParse(validQuickBase);
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts a Quick payload with a forecast text", () => {
-    const result = createReviewSchema.safeParse(validQuickBase);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.forecast).toBe(validQuickBase.forecast);
-    }
-  });
-
-  // 2026-05-17 fix3 (#13): the cross-field requirement guard makes forecast
-  // required on both depths. Pre-fix this was "accepts a Quick without
-  // forecast (legacy compat)" — but SOT 2026-05-08 added forecast to the
-  // Quick page and the API must enforce that. Legacy rows already on disk
-  // are reads, not writes, so this doesn't affect /history rendering.
-  it("rejects a Quick payload without forecast (SOT requires the calibration anchor)", () => {
-    const { forecast: _, ...minus } = validQuickBase;
-    const result = createReviewSchema.safeParse(minus);
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects an empty forecast string when provided", () => {
-    const result = createReviewSchema.safeParse({
-      ...validQuickBase,
-      forecast: "",
-    });
-    expect(result.success).toBe(false);
-  });
-});
-
-// ============================================================
-// Review repair branch — secretWant / couldMakeThemFeel deprecation
-// (cross-eval batch #1, 2026-05-03)
-// ============================================================
-describe("createReviewSchema — repair branch (deprecated fields)", () => {
-  it("accepts a repair-active payload with only yourPart (the new common case)", () => {
-    const result = createReviewSchema.safeParse({
-      ...validReviewBase,
-      needsToHappenNext: "apologize",
-      repairBranchActive: true,
-      yourPart: "I cut them off when they tried to explain.",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("still accepts payloads carrying populated secretWant / couldMakeThemFeel (historical-row compat)", () => {
-    const result = createReviewSchema.safeParse({
-      ...validReviewBase,
-      needsToHappenNext: "apologize",
-      repairBranchActive: true,
-      yourPart: "I dismissed their concern.",
-      secretWant: "I want them to admit they overreacted.",
-      couldMakeThemFeel: "Heard and respected.",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts null secretWant / couldMakeThemFeel", () => {
-    const result = createReviewSchema.safeParse({
-      ...validReviewBase,
-      needsToHappenNext: "apologize",
-      repairBranchActive: true,
-      yourPart: "I steered the conversation away from their question.",
-      secretWant: null,
-      couldMakeThemFeel: null,
-    });
-    expect(result.success).toBe(true);
   });
 });
 
@@ -377,202 +361,11 @@ describe("createPulseCheckSchema", () => {
 });
 
 // ============================================================
-// Review Full shape — SOT 2026-05-08 Commit 5
-// ============================================================
-describe("createReviewSchema — Full SOT shape", () => {
-  const validFullBase = {
-    reviewDepth: "full" as const,
-    whatHappened: "We argued about how the weekend got planned.",
-    observedRaw: "They paused for a long time, then looked at the floor.",
-    interpretedRaw: "I read that as them giving up on me explaining.",
-    feltAtHardestMoment: "Pinned. Like the floor moved.",
-    bodyLocation: "chest" as const,
-    feelingTracking: "Yes — they'd already been pulling away.",
-    whatYouDid: "Kept arguing my point instead of pausing.",
-    easierOrHarder: "Made it harder for them to bring this up later.",
-    treatAsData: "The pause after 'I don't know what you want' was real.",
-    somethingThatHelped: "When I asked what they actually needed.",
-    theirInMomentExperience: "Cornered. Trying not to escalate.",
-    signsHowTheyLeft: "Closed laptop, no eye contact.",
-    turningPoint: "When I said 'fine, forget it' — tone hardened then.",
-    lessonScreen: {
-      a: "Push doesn't surface info, it freezes it.",
-      b: "Ask what they need before naming what I see.",
-      c: null,
-    },
-    needsToHappenNext: "clarify" as const,
-    forecast: "If we don't revisit by Wednesday, they'll bring it up sharper.",
-    whatProtecting: { chip: "image" as const, text: null },
-    // 2026-05-17 fix3 (#13): standalone Full Page 5 (no calibrationBlock)
-    // requires whatElseExplains + whatReadMissed per the cross-field guard.
-    // Tests that exercise the calibration branch override these by adding
-    // calibrationBlock alongside.
-    whatElseExplains: "They had a rough morning before we talked.",
-    whatReadMissed: "I read the long pause as resentment, but it was processing.",
-    repairBranchActive: false,
-  };
-
-  it("accepts a Full payload with all 9 new SOT fields", () => {
-    const result = createReviewSchema.safeParse(validFullBase);
-    expect(result.success).toBe(true);
-  });
-
-  it("accepts a lessonScreen with all 3 sub-fields populated", () => {
-    const result = createReviewSchema.safeParse({
-      ...validFullBase,
-      lessonScreen: {
-        a: "Push freezes info.",
-        b: "Ask first.",
-        c: "Carry: pause before naming.",
-      },
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects a lessonScreen missing required `a`", () => {
-    const result = createReviewSchema.safeParse({
-      ...validFullBase,
-      lessonScreen: { b: "Optional.", c: "Optional." } as unknown as {
-        a: string;
-      },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects an empty lessonScreen.a", () => {
-    const result = createReviewSchema.safeParse({
-      ...validFullBase,
-      lessonScreen: { a: "", b: null, c: null },
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("accepts a Full payload with the standalone-branch fields (no calibration)", () => {
-    const { lessonScreen: _ls, ...minus } = validFullBase;
-    const result = createReviewSchema.safeParse({
-      ...minus,
-      lessonScreen: validFullBase.lessonScreen,
-      whatElseExplains: "They may have just had a long day at work.",
-      whatReadMissed: "I assumed their quiet was about me — could be exhaustion.",
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects an unknown Review bodyLocation chip", () => {
-    const result = createReviewSchema.safeParse({
-      ...validFullBase,
-      bodyLocation: "fuzzy_cant_tell",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("accepts a Full payload that still carries deprecated fields (historical-row compat)", () => {
-    const result = createReviewSchema.safeParse({
-      ...validFullBase,
-      hardestMomentFeeling: "shut down",
-      observedInThem: "raised voice",
-      theirExperience: "felt unheard",
-      whatYouAvoided: "naming I needed a break",
-      askBeforeUnderstanding: "no",
-    });
-    expect(result.success).toBe(true);
-  });
-});
-
-// ============================================================
-// Repair-branch round-trip — SOT 2026-05-08 fix1
-// ============================================================
-// Regression test for the data-loss bug: page POSTed 6 repair fields,
-// schema didn't declare them, Zod stripped, route never persisted. All
-// 6 fields must now parse cleanly through createReviewSchema so the
-// route's buildDerivedInsert can map them to DB columns.
-
-describe("createReviewSchema — repair-branch 5-Q swap (data-loss regression)", () => {
-  const validRepairBase = {
-    reviewDepth: "full" as const,
-    whatHappened: "We argued about how I phrased the budget meeting note.",
-    observedRaw: "They said 'never mind' and turned away.",
-    interpretedRaw: "I read that as them shutting down.",
-    feltAtHardestMoment: "Pinned. Like the floor moved.",
-    bodyLocation: "chest" as const,
-    feelingTracking: "Yes — I'd already cut them off twice that week.",
-    whatYouDid: "Kept pushing my point.",
-    easierOrHarder: "Made it harder for them to circle back.",
-    treatAsData: "The 'never mind' was the answer to a different question.",
-    somethingThatHelped: "Nothing in the moment.",
-    theirInMomentExperience: "Cornered. Done.",
-    signsHowTheyLeft: "Closed laptop, no eye contact.",
-    turningPoint: "When I said 'fine, forget it.'",
-    lessonScreen: { a: "Pushing freezes info.", b: null, c: null },
-    needsToHappenNext: "apologize" as const,
-    forecast: "If I don't repair tonight, they'll go quiet for the rest of the week.",
-    whatProtecting: { chip: "image" as const, text: null },
-    // 2026-05-17 fix3 (#13): standalone Full Page 5 requires these.
-    whatElseExplains: "They were already tense from the morning meeting.",
-    whatReadMissed: "I read 'never mind' as resentment but it might have been resignation.",
-    repairBranchActive: true,
-    // The 6 repair fields the page actually sends:
-    impactToName: "they probably felt dismissed and stopped trying to explain",
-    theirNeedFirst: "acknowledgment" as const,
-    pressureVsCare: "Sending a 'sorry I'm not sorry' DM would tip into pressure.",
-    timingWhen: "Tomorrow morning in person, not over text tonight.",
-    timingNow: false,
-    firstRepairSentence: "I think I cut you off twice on Tuesday and didn't notice — I'm sorry.",
-  };
-
-  it("accepts all 6 SOT repair-branch fields", () => {
-    const result = createReviewSchema.safeParse(validRepairBase);
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects an unknown theirNeedFirst value", () => {
-    const result = createReviewSchema.safeParse({
-      ...validRepairBase,
-      theirNeedFirst: "nonsense",
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("accepts all 5 SOT theirNeedFirst chip values", () => {
-    const chips = [
-      "acknowledgment",
-      "clarity",
-      "safety",
-      "space",
-      "boundary",
-    ] as const;
-    for (const chip of chips) {
-      const result = createReviewSchema.safeParse({
-        ...validRepairBase,
-        theirNeedFirst: chip,
-      });
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it("preserves the 6 repair fields on parse (data does not get stripped)", () => {
-    const result = createReviewSchema.safeParse(validRepairBase);
-    expect(result.success).toBe(true);
-    if (result.success) {
-      expect(result.data.impactToName).toBe(validRepairBase.impactToName);
-      expect(result.data.theirNeedFirst).toBe("acknowledgment");
-      expect(result.data.pressureVsCare).toBe(validRepairBase.pressureVsCare);
-      expect(result.data.timingWhen).toBe(validRepairBase.timingWhen);
-      expect(result.data.timingNow).toBe(false);
-      expect(result.data.firstRepairSentence).toBe(
-        validRepairBase.firstRepairSentence,
-      );
-    }
-  });
-});
-
-// ============================================================
 // Calibration block — SOT 2026-05-08 Commit 3
 // ============================================================
-// Storage shape is { compare, shift, floor } jsonb. Schema validates
-// non-empty 3-field shape with each value <= 40 chars (chip values are
-// short tokens like "about_right", "too_soon"). Chip-id enums live in
-// SelectCalibrationChip — schema layer only guarantees shape integrity.
+// calibrationBlockSchema is retained as an export (the SelectCalibrationChip
+// component + legacy /history reads still reference the { compare, shift, floor }
+// jsonb shape) even though the lean Review form no longer collects it.
 
 describe("calibrationBlockSchema", () => {
   it("accepts a fully populated 3-field block with SOT chip values", () => {
@@ -645,11 +438,10 @@ describe("calibrationBlockSchema", () => {
 });
 
 // ============================================================
-// Repair trigger — SOT 2026-05-08 Commit 3 (Change 3.4 verified no-op)
+// Repair trigger — REPAIR_TRIGGER_NEEDS still exported from page-flow
 // ============================================================
-// The shipped REPAIR_TRIGGER_NEEDS already matches the SOT exactly. This
-// test locks that in so a future regression that adds set_boundary or
-// drops clarify fails the build instead of changing behavior silently.
+// Retained as a stable export (deriveRepairBranchActive + legacy consumers).
+// The lean Review no longer uses it, but the const + its consumers remain.
 
 describe("REPAIR_TRIGGER_NEEDS — SOT 4-chip set", () => {
   it("contains clarify (a misunderstanding-repair op)", () => {

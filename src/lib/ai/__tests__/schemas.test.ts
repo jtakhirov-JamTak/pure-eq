@@ -158,38 +158,37 @@ describe("prepareOutputSchema", () => {
 });
 
 // ============================================================
-// reviewOutputSchema (Coach redesign 2026-04-23) — discriminated
+// reviewOutputSchema — tier-aware InteractionLearning (coins redesign 2026-05-29)
 // ============================================================
-const validReviewBase = {
+// Quick = 3 cards (turning_point, pattern_data, recommended_move); Deep adds 2
+// (their_likely_experience, repeat_stop_update). Deep cards are .optional() so a
+// Quick output validates without them.
+const validReviewQuick = {
   mode: "normal",
-  how_you_came_across:
-    "Your opener landed as a verdict — 'we need to talk' read like a foregone conclusion to her.",
-  impact_vs_intent:
-    "You meant to clarify timing but she heard 'this is going to be hard,' which put her on guard.",
-  alternative_explanation:
-    "She may have been bracing for the budget conversation again, not actually upset about the calendar.",
-  question_you_missed: "What part of this week has been hardest for you?",
+  turning_point:
+    "When you said 'fine, forget it,' her tone hardened — that's the pivot the whole thing turned on.",
+  pattern_data:
+    "You answered the worry with logic before naming you'd heard it — that move is what froze the exchange.",
+  recommended_move:
+    "Open the next one by naming what you heard, then ask what she needs before offering a fix.",
   pattern_tag: "moved_to_solution_too_fast",
 };
 
-const validReviewWithRepair = {
-  ...validReviewBase,
-  what_to_own:
-    "Cutting her off twice when she tried to explain the late report — she stopped trying after the second time.",
-  impact_on_them:
-    "She likely felt cornered and unheard, like her version of events didn't matter.",
-  thing_not_to_say: "Don't open with 'I'm sorry but I was just trying to help.'",
-  recommended_timing:
-    "Tomorrow morning in person, not over text tonight while she's still cooling down.",
+const validReviewDeep = {
+  ...validReviewQuick,
+  their_likely_experience:
+    "She may have felt cornered and quietly stopped trying to be understood.",
+  repeat_stop_update:
+    "Repeat: asking what she needs. Stop: rebutting mid-sentence. Update: read her pauses as processing.",
 };
 
 describe("reviewOutputSchema", () => {
-  it("parses a Review without the repair branch (4 base fields only)", () => {
-    expect(reviewOutputSchema.safeParse(validReviewBase).success).toBe(true);
+  it("parses a Quick Review (3 cards)", () => {
+    expect(reviewOutputSchema.safeParse(validReviewQuick).success).toBe(true);
   });
 
-  it("parses a Review with the repair branch (4 base + 4 repair fields)", () => {
-    expect(reviewOutputSchema.safeParse(validReviewWithRepair).success).toBe(true);
+  it("parses a Deep Review (3 + 2 cards)", () => {
+    expect(reviewOutputSchema.safeParse(validReviewDeep).success).toBe(true);
   });
 
   it("parses a Review refusal", () => {
@@ -203,24 +202,23 @@ describe("reviewOutputSchema", () => {
     ).toBe(true);
   });
 
-  it("rejects a Review missing impact_vs_intent (always-required)", () => {
-    const { impact_vs_intent: _omit, ...rest } = validReviewBase;
+  it("rejects a Review missing pattern_data (Quick-required)", () => {
+    const { pattern_data: _omit, ...rest } = validReviewQuick;
     void _omit;
     expect(reviewOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects a Review missing question_you_missed (always-required)", () => {
-    const { question_you_missed: _omit, ...rest } = validReviewBase;
+  it("rejects a Review missing recommended_move (Quick-required)", () => {
+    const { recommended_move: _omit, ...rest } = validReviewQuick;
     void _omit;
     expect(reviewOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("accepts a Review with only some repair-branch fields populated", () => {
-    // Partial repair branch — the schema marks all 4 as .optional(), so any
-    // combination is structurally valid. The prompt instructs the model to
-    // either populate all 4 or none, but the schema doesn't enforce that.
-    const partial = { ...validReviewBase, what_to_own: validReviewWithRepair.what_to_own };
-    expect(reviewOutputSchema.safeParse(partial).success).toBe(true);
+  it("rejects a whitespace-only turning_point", () => {
+    expect(
+      reviewOutputSchema.safeParse({ ...validReviewQuick, turning_point: "   " })
+        .success,
+    ).toBe(false);
   });
 });
 

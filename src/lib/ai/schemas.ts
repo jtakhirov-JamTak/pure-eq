@@ -92,34 +92,30 @@ export const pulseCheckOutputSchema = z.discriminatedUnion("mode", [
 ]);
 
 // ============================================================
-// Review — discriminated union with optional repair-branch fields
+// Review — tier-aware InteractionLearning cards (coins redesign 2026-05-29)
 // ============================================================
-// Review's output shape is conditional. Always shows 4 base cards
-// (how_you_came_across, impact_vs_intent, alternative_explanation,
-// question_you_missed). When the user's needs_to_happen_next select
-// triggers the repair branch AND they pass the readiness gate, the
-// model also fills 4 repair-branch fields (what_to_own, impact_on_them,
-// thing_not_to_say, recommended_timing).
+// Quick tier = 3 cards (turning_point, pattern_data, recommended_move).
+// Deep tier = those 3 + 2 more (their_likely_experience, repeat_stop_update).
+// The two Deep fields are .optional() — the prompt fills them only when tier ===
+// "deep", mirroring lean Prepare. The old conditional repair-branch fields
+// (what_to_own / impact_on_them / thing_not_to_say / recommended_timing) are
+// gone: Repair is now its own module (the lean Review has no in-form repair
+// branch). None of the lean cards are action-copy, so Review no longer feeds
+// ACTION_FIELDS / stripGeneric.
 //
-// All 4 repair fields are .optional() — the prompt instructs the model
-// to populate them only when given the repair-branch context. The
-// renderer uses the same field-presence-filter pattern as before to
-// decide which cards to show.
+// All string fields chain `.trim().min(1)` so a model returning "" or "   "
+// fails Zod parse server-side. 300-char cap unified across modules per the
+// 04-20 incident.
 
 const reviewNormalShape = z.object({
   mode: z.literal("normal"),
-  // Always required.
-  how_you_came_across: z.string().trim().min(1).max(300),
-  impact_vs_intent: z.string().trim().min(1).max(300),
-  alternative_explanation: z.string().trim().min(1).max(300),
-  question_you_missed: z.string().trim().min(1).max(300),
-  // Repair branch — populated only when repairBranchActive is true.
-  // what_to_own + thing_not_to_say are action fields: 120-cap, nullable
-  // (the model can omit the key OR explicitly return null).
-  what_to_own: z.string().trim().min(1).max(120).nullable().optional(),
-  impact_on_them: z.string().trim().min(1).max(300).optional(),
-  thing_not_to_say: z.string().trim().min(1).max(120).nullable().optional(),
-  recommended_timing: z.string().trim().min(1).max(300).optional(),
+  // Quick tier (always required).
+  turning_point: z.string().trim().min(1).max(300),
+  pattern_data: z.string().trim().min(1).max(300),
+  recommended_move: z.string().trim().min(1).max(300),
+  // Deep tier (populated only when tier === "deep").
+  their_likely_experience: z.string().trim().min(1).max(300).optional(),
+  repeat_stop_update: z.string().trim().min(1).max(300).optional(),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 
