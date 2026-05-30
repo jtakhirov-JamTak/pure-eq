@@ -67,6 +67,8 @@ export type StepKind =
   | "textarea_three_field_lesson"
   | "textarea_if_then"
   | "select_signal_next_move"
+  | "select_pulse_next_move"
+  | "select_check_window"
   | "select_repair_need"
   | "select_protecting_with_optional_text"
   | "select_needs_with_forecast"

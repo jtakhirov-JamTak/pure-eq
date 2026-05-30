@@ -72,24 +72,22 @@ describe("buildPreparePrompt — lean tiered shape", () => {
   });
 });
 
-describe("buildPulseCheckPrompt", () => {
+describe("buildPulseCheckPrompt — lean tiered shape", () => {
   const pulseBase = {
     profile: "reflective" as const,
+    tier: "quick" as const,
     personName: "Sam",
-    relationship: "partner",
+    personRelationship: "partner",
     whatFeelsOff: "Quieter than usual the past few days.",
-    whatChangedAndBefore:
+    whatChangedVsBefore:
       "Last weekend we were laughing; now short replies.",
-    whenItShifted: "Sometime after Sunday brunch.",
-    feelingText: "Tight chest, slight dread.",
-    bodyLocation: "chest",
-    theirsNotAboutYou: "They started a new job — could be load not me.",
     story: "I'm being avoided.",
     alternative:
       "They're tapped out by work and going quiet across the board.",
-    signalNoiseObservation:
-      "If they're still terse by Friday, it's signal.",
-    nextMoveChip: "wait_observe",
+    signalTestConfirm: "If they're still terse by Friday, it's signal.",
+    signalTestDisconfirm: "If they warm up after the deadline, it's noise.",
+    nextMove: "observe",
+    checkWindow: "3d",
     lightCheckQuestion: null,
   };
 
@@ -97,6 +95,19 @@ describe("buildPulseCheckPrompt", () => {
     const out = buildPulseCheckPrompt(pulseBase);
     expect(out.system).toContain("PULSE CHECK RULE");
     expect(out.system).toContain("early-detection coaching");
+  });
+
+  it("renders both sides of the two-sided signal test", () => {
+    const out = buildPulseCheckPrompt(pulseBase);
+    expect(out.user).toContain("what would CONFIRM this is real signal");
+    expect(out.user).toContain("what would DISCONFIRM it");
+    expect(out.user).toContain("terse by Friday");
+    expect(out.user).toContain("warm up after the deadline");
+  });
+
+  it("renders the observation window line when checkWindow is set", () => {
+    const out = buildPulseCheckPrompt(pulseBase);
+    expect(out.user).toContain("Observation window they chose: 3d");
   });
 
   it("omits the lightCheckQuestion line when null", () => {
@@ -107,12 +118,29 @@ describe("buildPulseCheckPrompt", () => {
   it("renders the lightCheckQuestion line when populated", () => {
     const out = buildPulseCheckPrompt({
       ...pulseBase,
-      nextMoveChip: "ask_clarifying",
+      nextMove: "ask_light",
+      checkWindow: null,
       lightCheckQuestion:
         "Hey, all good? You've been quiet — anything I should know?",
     });
     expect(out.user).toContain("Light check-in question");
     expect(out.user).toContain("anything I should know?");
+  });
+
+  it("Quick tier omits the Deep cards and instructs to return only Quick", () => {
+    const out = buildPulseCheckPrompt(pulseBase);
+    expect(out.system).not.toContain('"stop_checking_rule"');
+    expect(out.system).not.toContain('"pattern_projection_risk"');
+    expect(out.system).toContain("Return ONLY the Quick fields");
+  });
+
+  it("Deep tier includes the two Deep cards", () => {
+    const out = buildPulseCheckPrompt({ ...pulseBase, tier: "deep" });
+    expect(out.system).toContain('"stop_checking_rule"');
+    expect(out.system).toContain('"pattern_projection_risk"');
+    expect(out.user).toContain(
+      "also return stop_checking_rule and pattern_projection_risk",
+    );
   });
 
   it("stamps the current PROMPT_VERSION constant", () => {

@@ -8,10 +8,27 @@
 import { describe, it, expect } from "vitest";
 import { reviewModuleConfig } from "@/app/api/coach/review/route";
 import { prepareModuleConfig } from "@/app/api/coach/prepare/route";
+import { pulseCheckModuleConfig } from "@/app/api/coach/pulse-check/route";
 
 // Helper types matching the parsed-input shapes the route configs expect.
 type ReviewInput = Parameters<typeof reviewModuleConfig.buildDerivedInsert>[0];
 type PrepareInput = Parameters<typeof prepareModuleConfig.buildDerivedInsert>[0];
+type PulseInput = Parameters<typeof pulseCheckModuleConfig.buildDerivedInsert>[0];
+
+const basePulseInput: PulseInput = {
+  tier: "deep",
+  personName: "Sam",
+  whatFeelsOff: "Quieter than usual.",
+  whatChangedVsBefore: "Was warm last week; short replies now.",
+  storyAndAlternative: {
+    story: "I'm being avoided.",
+    alternative: "They're swamped at work.",
+  },
+  signalTestConfirm: "Still terse by Friday = signal.",
+  signalTestDisconfirm: "Warms up after the deadline = noise.",
+  nextMove: "observe",
+  checkWindow: "3d",
+} as PulseInput;
 
 const baseReviewInput: ReviewInput = {
   tier: "quick",
@@ -176,6 +193,65 @@ describe("prepareModuleConfig.buildPayloadFields — lean field passthrough", ()
   });
 });
 
+describe("pulseCheckModuleConfig.buildDerivedInsert — lean column mapping", () => {
+  it("maps lean Pulse fields to the right DB columns", () => {
+    const insert = pulseCheckModuleConfig.buildDerivedInsert(
+      basePulseInput,
+    ) as Record<string, unknown>;
+
+    expect(insert.what_feels_off).toBe(basePulseInput.whatFeelsOff);
+    // whatChangedVsBefore reuses the existing what_changed_and_before column.
+    expect(insert.what_changed_and_before).toBe(
+      basePulseInput.whatChangedVsBefore,
+    );
+    expect(insert.story).toBe(basePulseInput.storyAndAlternative.story);
+    expect(insert.alternative).toBe(
+      basePulseInput.storyAndAlternative.alternative,
+    );
+    // Two-sided signal test → two columns.
+    expect(insert.signal_test_confirm).toBe(basePulseInput.signalTestConfirm);
+    expect(insert.signal_test_disconfirm).toBe(
+      basePulseInput.signalTestDisconfirm,
+    );
+    expect(insert.next_move).toBe("observe");
+    expect(insert.check_window).toBe("3d");
+    expect(insert.ai_tier).toBe("deep");
+    // Deprecated-in-place columns superseded by the new ones — explicit null.
+    expect(insert.signal_noise_observation).toBe(null);
+    expect(insert.next_move_chip).toBe(null);
+  });
+
+  it("writes null check_window when the move is not observe", () => {
+    const insert = pulseCheckModuleConfig.buildDerivedInsert({
+      ...basePulseInput,
+      nextMove: "do_nothing",
+      checkWindow: null,
+    } as PulseInput) as Record<string, unknown>;
+    expect(insert.check_window).toBe(null);
+    expect(insert.next_move).toBe("do_nothing");
+  });
+});
+
+describe("pulseCheckModuleConfig.buildPayloadFields — lean field passthrough", () => {
+  it("passes through every lean input to the raw payload", () => {
+    const payload = pulseCheckModuleConfig.buildPayloadFields(
+      basePulseInput,
+    ) as Record<string, unknown>;
+    expect(payload.tier).toBe("deep");
+    expect(payload.personName).toBe(basePulseInput.personName);
+    expect(payload.whatFeelsOff).toBe(basePulseInput.whatFeelsOff);
+    expect(payload.whatChangedVsBefore).toBe(
+      basePulseInput.whatChangedVsBefore,
+    );
+    expect(payload.signalTestConfirm).toBe(basePulseInput.signalTestConfirm);
+    expect(payload.signalTestDisconfirm).toBe(
+      basePulseInput.signalTestDisconfirm,
+    );
+    expect(payload.nextMove).toBe("observe");
+    expect(payload.checkWindow).toBe("3d");
+  });
+});
+
 // Sanity: aiVersionValue and module names are pinned to the documented
 // SOT-follow-up values. A drift here lands legacy rows under the new
 // version, breaking generator_version reads downstream.
@@ -190,6 +266,12 @@ describe("module configs — pinned identity", () => {
     expect(prepareModuleConfig.aiVersionValue).toBe(9);
     expect(prepareModuleConfig.moduleName).toBe("prepare");
     expect(prepareModuleConfig.derivedTable).toBe("prepare_entries");
+  });
+
+  it("pulse.aiVersionValue is 2 (coins lean-tier marker)", () => {
+    expect(pulseCheckModuleConfig.aiVersionValue).toBe(2);
+    expect(pulseCheckModuleConfig.moduleName).toBe("pulse_check");
+    expect(pulseCheckModuleConfig.derivedTable).toBe("pulse_check_entries");
   });
 });
 

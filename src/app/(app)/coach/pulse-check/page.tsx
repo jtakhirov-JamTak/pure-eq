@@ -4,62 +4,73 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
+import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
-import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { CoachPage } from "@/components/coach/coach-page";
-import {
-  TextareaWithBodyChip,
-  type TextareaWithBodyChipValue,
-} from "@/components/coach/steps/textarea-with-body-chip";
 import {
   TextareaTwoColumn,
   type TextareaTwoColumnValue,
 } from "@/components/coach/steps/textarea-two-column";
-import { SelectSignalNextMove } from "@/components/coach/steps/select-signal-next-move";
 import {
   pageCanAdvance,
   type PageDef,
   type StepDef,
 } from "@/lib/coach/page-flow";
-import { BODY_LOCATION_PULSE_VALUES } from "@/lib/validation";
 import { safeUUID } from "@/lib/utils";
+import {
+  PULSE_NEXT_MOVE_V2_VALUES,
+  CHECK_WINDOW_VALUES,
+} from "@/types";
+import type { AiTier, PulseNextMove, CheckWindow } from "@/types";
 import { createClient } from "@/lib/supabase/client";
-import type { RelationshipDomain } from "@/types";
 
-const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
-  { value: "partner", label: "Partner" },
-  { value: "friend", label: "Friend" },
-  { value: "family", label: "Family" },
-  { value: "manager", label: "Manager" },
-  { value: "direct_report", label: "Direct Report" },
-  { value: "coworker", label: "Coworker" },
-  { value: "client", label: "Client" },
-  { value: "other", label: "Other" },
+// Lean Pulse next-move chip labels (column next_move). Drives both the form
+// branching (observe → check-window picker, ask_light → light-question field)
+// and the result-screen routing CTA.
+const NEXT_MOVE_LABELS: Record<PulseNextMove, string> = {
+  do_nothing: "Do nothing — let it settle",
+  observe: "Observe for a few days",
+  ask_light: "Ask a light question",
+  prepare: "Prepare for a conversation",
+  repair: "Repair something",
+  set_boundary: "Set a boundary",
+  step_back: "Step back",
+};
+
+const CHECK_WINDOW_LABELS: Record<CheckWindow, string> = {
+  "24h": "24 hours",
+  "3d": "3 days",
+  "7d": "7 days",
+  next_interaction: "Until we next talk",
+};
+
+// Tier metadata. Coins are NOT debited yet (Slice B); these are display-only
+// cost constants so the selector reads the same as the future priced flow.
+const TIER_META: {
+  value: AiTier;
+  label: string;
+  cards: string;
+  coins: string;
+}[] = [
+  { value: "quick", label: "Quick", cards: "3 cards", coins: "4 coins" },
+  { value: "deep", label: "Deep", cards: "5 cards", coins: "6 coins" },
 ];
 
-// Coach SOT 2026-05-07 follow-up: 3-page layout matches the SOT cognitive arc.
-// Page 1 = setup + what changed (so the user names the contrast before
-// introspecting). Page 2 = self-state + reappraisal (story vs equally
-// plausible alternative — NOT "more generous"; that trains motivated
-// reasoning). Page 3 = falsifiable test + route.
-// `lightCheckQuestion` is on the same page as `nextMoveChip` via intra-page
-// conditional — only renders when the chip is ask_clarifying or use_bys.
+// Coins redesign Slice C1 2026-05-29: lean 6-field (+2 conditional) Pulse across
+// 3 pages.
+//   1 notice: personName, whatFeelsOff, whatChangedVsBefore
+//   2 read:   storyAndAlternative (two-column), signalTest (two-column)
+//   3 route:  nextMove, checkWindow (if observe), lightCheckQuestion (if ask_light)
 const PULSE_CHECK_PAGES: PageDef[] = [
   {
-    pageKey: "setup_what_changed",
+    pageKey: "notice",
     qs: [
       {
         key: "personName",
         title: "Who is this about?",
         prompt: "Start typing to see people you've mentioned before.",
         kind: "person",
-      },
-      {
-        key: "relationship",
-        title: "What is your relationship?",
-        prompt: null,
-        kind: "select",
       },
       {
         key: "whatFeelsOff",
@@ -69,64 +80,48 @@ const PULSE_CHECK_PAGES: PageDef[] = [
         kind: "textarea",
       },
       {
-        key: "whatChangedAndBefore",
+        key: "whatChangedVsBefore",
         title: "What changed — and what felt fine before?",
         prompt: "Both halves matter. Name the contrast.",
         kind: "textarea",
       },
-      {
-        // 2026-05-17 fix3 (#16): use a compact textarea (rows=2) for this
-        // "moment estimate" Q so Page 1 doesn't scroll ~1000px on 375px
-        // viewports. The Q expects a short answer ("Sunday afternoon",
-        // "after dinner") — full 4-row textarea inflates the page wall.
-        key: "whenItShifted",
-        title: "When did it shift?",
-        prompt:
-          "A moment, a day, a stretch — your best estimate of when something changed.",
-        kind: "textarea",
-        rows: 2,
-      },
     ],
   },
   {
-    pageKey: "story_vs_alternative",
+    pageKey: "read",
     qs: [
       {
-        key: "feelingAndBody",
-        title: "What are you feeling, and where do you feel it?",
-        prompt: "Name the feeling, then point at where it sits in your body.",
-        kind: "textarea_with_body_chip",
-      },
-      {
-        key: "theirsNotAboutYou",
-        title: "What might be going on for them right now that has nothing to do with you?",
-        prompt: "Work, sleep, family, health, something they're carrying. Best guess.",
-        kind: "textarea",
-      },
-      {
         key: "storyAndAlternative",
-        title: "What story are you telling yourself — and what's an alternative that would also fit?",
+        title:
+          "What story are you telling yourself — and what's an alternative that would also fit?",
         prompt:
           "Two fields. Left: the story you've been concluding. Right: an equally plausible alternative, not the optimistic one.",
+        kind: "textarea_two_column",
+      },
+      {
+        key: "signalTest",
+        title: "Over the next few days, what would tell you this is real?",
+        prompt:
+          "Two sides of one test. Left: what would confirm it's signal. Right: what would tell you it was just noise.",
         kind: "textarea_two_column",
       },
     ],
   },
   {
-    pageKey: "test_and_route",
+    pageKey: "route",
     qs: [
       {
-        key: "signalNoiseObservation",
-        title: "What would you need to observe over the next 3–7 days to know this is signal, not noise?",
-        prompt:
-          "Concrete. A behavior, a message, a tone change. What would tell you 'yes, this is real'?",
-        kind: "textarea",
+        key: "nextMove",
+        title: "What's your next move?",
+        prompt: "Pick the closest. It shapes the feedback.",
+        kind: "select_pulse_next_move",
       },
       {
-        key: "nextMoveChip",
-        title: "What's your next move?",
+        key: "checkWindow",
+        title: "How long will you watch before checking again?",
         prompt: null,
-        kind: "select_signal_next_move",
+        kind: "select_check_window",
+        conditional: (state) => state.nextMove === "observe",
       },
       {
         key: "lightCheckQuestion",
@@ -134,10 +129,7 @@ const PULSE_CHECK_PAGES: PageDef[] = [
         prompt:
           "One sentence. Something that opens a door without forcing them through it.",
         kind: "textarea",
-        conditional: (state) => {
-          const chip = state.nextMoveChip as string | undefined;
-          return chip === "ask_clarifying" || chip === "use_bys";
-        },
+        conditional: (state) => state.nextMove === "ask_light",
       },
     ],
   },
@@ -145,11 +137,11 @@ const PULSE_CHECK_PAGES: PageDef[] = [
 
 type AiNormal = {
   mode: "normal";
-  real_issue: string;
-  reality_check_question: string;
-  thing_not_to_do: string;
-  they_might_need: string;
-  best_next_move: string | null;
+  signal_vs_noise: string;
+  non_you_explanation: string;
+  next_move_card: string;
+  stop_checking_rule?: string;
+  pattern_projection_risk?: string;
   pattern_tag: string;
 };
 
@@ -163,11 +155,11 @@ type AiRefusal = {
 type AiOutput = AiNormal | AiRefusal;
 
 const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
-  { label: "The real issue", key: "real_issue" },
-  { label: "Reality-check question", key: "reality_check_question" },
-  { label: "Thing not to do", key: "thing_not_to_do" },
-  { label: "What they might need", key: "they_might_need" },
-  { label: "Best next move", key: "best_next_move" },
+  { label: "Signal vs. noise", key: "signal_vs_noise" },
+  { label: "What might not be about you", key: "non_you_explanation" },
+  { label: "Your next move", key: "next_move_card" },
+  { label: "A rule to stop re-checking", key: "stop_checking_rule" },
+  { label: "The pattern this is data about", key: "pattern_projection_risk" },
 ];
 
 const PREFILL_KEY = "pure-eq:bys-prefill";
@@ -177,6 +169,7 @@ const PulseBackground = () => <SkyBackground variant="warm" />;
 export default function PulseCheckPage() {
   const router = useRouter();
   const [pageIndex, setPageIndex] = useState(0);
+  const [tier, setTier] = useState<AiTier>("quick");
   const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -187,6 +180,10 @@ export default function PulseCheckPage() {
     null,
   );
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  // On a 403 (free Pulse already used) show an inline upgrade panel instead of
+  // redirecting — a hard router.push would unmount the form and discard the
+  // user's whole multi-step entry at the upgrade moment (free_one retry-UX rule).
+  const [gated, setGated] = useState(false);
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
@@ -212,17 +209,14 @@ export default function PulseCheckPage() {
     setData((d) => ({ ...d, [key]: next }));
   }
 
-  // When `nextMoveChip` flips off the conditional that reveals
-  // `lightCheckQuestion`, clear the field so a stale value can't leak
-  // into POST. (Conditional Q value cleanup — CLAUDE.md lesson.)
-  function setNextMoveChip(value: string) {
+  // When `nextMove` changes, clear any conditional field that its new value no
+  // longer reveals, so a stale value can't leak into POST. (Conditional Q value
+  // cleanup — CLAUDE.md lesson.)
+  function setNextMove(value: PulseNextMove) {
     setData((d) => {
-      const next: Record<string, unknown> = { ...d, nextMoveChip: value };
-      const stillNeedsLight =
-        value === "ask_clarifying" || value === "use_bys";
-      if (!stillNeedsLight) {
-        delete next.lightCheckQuestion;
-      }
+      const next: Record<string, unknown> = { ...d, nextMove: value };
+      if (value !== "observe") delete next.checkWindow;
+      if (value !== "ask_light") delete next.lightCheckQuestion;
       return next;
     });
   }
@@ -250,30 +244,32 @@ export default function PulseCheckPage() {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const feelingAndBody =
-        (data.feelingAndBody as TextareaWithBodyChipValue | undefined) ??
-        { text: "", bodyLocation: "" };
       const storyAndAlternative =
-        (data.storyAndAlternative as TextareaTwoColumnValue | undefined) ??
-        { left: "", right: "" };
+        (data.storyAndAlternative as TextareaTwoColumnValue | undefined) ?? {
+          left: "",
+          right: "",
+        };
+      const signalTest =
+        (data.signalTest as TextareaTwoColumnValue | undefined) ?? {
+          left: "",
+          right: "",
+        };
+      const nextMove = data.nextMove as PulseNextMove | undefined;
       const body = {
+        tier,
         personName: data.personName,
-        relationship: data.relationship,
         whatFeelsOff: data.whatFeelsOff,
-        whatChangedAndBefore: data.whatChangedAndBefore,
-        whenItShifted: data.whenItShifted,
-        feelingAndBody: {
-          text: feelingAndBody.text,
-          bodyLocation: feelingAndBody.bodyLocation,
-        },
-        theirsNotAboutYou: data.theirsNotAboutYou,
+        whatChangedVsBefore: data.whatChangedVsBefore,
         storyAndAlternative: {
           story: storyAndAlternative.left,
           alternative: storyAndAlternative.right,
         },
-        signalNoiseObservation: data.signalNoiseObservation,
-        nextMoveChip: data.nextMoveChip,
-        lightCheckQuestion: (data.lightCheckQuestion as string | undefined) ?? null,
+        signalTestConfirm: signalTest.left,
+        signalTestDisconfirm: signalTest.right,
+        nextMove,
+        checkWindow: (data.checkWindow as CheckWindow | undefined) ?? null,
+        lightCheckQuestion:
+          (data.lightCheckQuestion as string | undefined) ?? null,
         personId: personId || null,
         idempotencyKey: idempotencyKeyRef.current,
       };
@@ -283,14 +279,14 @@ export default function PulseCheckPage() {
         body: JSON.stringify(body),
       });
       if (res.status === 403) {
-        router.push("/paywall");
+        setGated(true);
         return;
       }
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
-      if (result.pulseCheckEntryId) {
+      if (typeof result.pulseCheckEntryId === "string") {
         setPulseCheckEntryId(result.pulseCheckEntryId);
       }
       if (result.aiOutput) {
@@ -317,47 +313,33 @@ export default function PulseCheckPage() {
   }
 
   // ============================================================
-  // Routing matrix CTA — runs on the result screen, switches on
-  // `nextMoveChip` to give the user a single forward move.
+  // Routing matrix CTA — runs on the result screen, switches on the lean
+  // `nextMove` chip to give the user a single forward move.
   // ============================================================
-  function chipCta(chip: string): { label: string; onClick: () => void } | null {
-    if (chip === "wait_observe" || chip === "do_nothing") return null;
-    if (chip === "regulate_first") {
-      return {
-        label: "Open Overwhelmed",
-        onClick: () => router.push("/tools/overwhelmed"),
-      };
-    }
-    if (chip === "prepare_conversation") {
+  function chipCta(
+    chip: string,
+  ): { label: string; onClick: () => void } | null {
+    if (chip === "prepare") {
       const personParam = personId ? `?personId=${personId}` : "";
       return {
         label: "Start a Prepare",
         onClick: () => router.push(`/coach/prepare${personParam}`),
       };
     }
-    if (chip === "review") {
-      const personParam = personId ? `?personId=${personId}` : "";
-      return {
-        label: "Open Review",
-        onClick: () => router.push(`/coach/review${personParam}`),
-      };
-    }
-    if (chip === "ask_clarifying" || chip === "use_bys") {
+    if (chip === "ask_light") {
       return {
         label: "Check this before I send it",
         onClick: () => handoffToBys(),
       };
     }
+    // do_nothing / observe / repair / set_boundary / step_back → no forward
+    // route yet (standalone Repair ships in Slice D; the rest are "hold").
     return null;
   }
 
   function handoffToBys() {
     const draftText = (data.lightCheckQuestion as string | undefined) ?? "";
-    if (!draftText.trim()) {
-      router.push("/coach/before-send");
-      return;
-    }
-    if (!currentUserId) {
+    if (!draftText.trim() || !currentUserId) {
       router.push("/coach/before-send");
       return;
     }
@@ -377,7 +359,7 @@ export default function PulseCheckPage() {
   }
 
   // ============================================================
-  // Result screen
+  // Result screens
   // ============================================================
   if (aiOutput && aiOutput.mode === "refusal" && isRefusal(aiOutput)) {
     return (
@@ -409,7 +391,7 @@ export default function PulseCheckPage() {
       const v = aiOutput[key];
       return typeof v === "string" && v.trim().length > 0;
     });
-    const cta = chipCta((data.nextMoveChip as string) ?? "");
+    const cta = chipCta((data.nextMove as string) ?? "");
     return (
       <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <PulseBackground />
@@ -422,19 +404,31 @@ export default function PulseCheckPage() {
         >
           Your <span className="italic">read</span>.
         </h2>
+        <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
+          Keep each card, edit it in your words, or mark it not true.
+        </p>
         <div className="mt-5 space-y-3">
           {visible.map(({ label, key }) => {
-            const isAction = ACTION_FIELDS.has(key);
-            return (
+            const text = aiOutput[key] as string;
+            return pulseCheckEntryId ? (
+              <EditableCard
+                key={key}
+                label={label}
+                value={text}
+                cardKey={key}
+                entryTable="pulse_check_entries"
+                entryId={pulseCheckEntryId}
+              />
+            ) : (
               <div
                 key={key}
-                className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+                className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
               >
                 <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
                   {label}
                 </p>
                 <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                  {aiOutput[key]}
+                  {text}
                 </p>
               </div>
             );
@@ -458,8 +452,8 @@ export default function PulseCheckPage() {
     );
   }
 
-  if (savedMessage || (aiOutput && !aiOutput.mode)) {
-    const cta = chipCta((data.nextMoveChip as string) ?? "");
+  if (savedMessage) {
+    const cta = chipCta((data.nextMove as string) ?? "");
     return (
       <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
         <PulseBackground />
@@ -470,8 +464,7 @@ export default function PulseCheckPage() {
           Saved
         </h2>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          {savedMessage ??
-            "Your pulse check is saved. Coaching feedback wasn't available this time."}
+          {savedMessage}
         </p>
         <button
           onClick={retryCoaching}
@@ -492,6 +485,33 @@ export default function PulseCheckPage() {
           className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
         >
           Back to Coach
+        </button>
+      </div>
+    );
+  }
+
+  if (gated) {
+    return (
+      <div className="relative flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
+        <PulseBackground />
+        <h2 className="font-display text-[24px] leading-[1.15] text-ink">
+          You&rsquo;ve used your free Pulse Check
+        </h2>
+        <p className="mt-3 max-w-sm text-[14px] font-medium leading-[1.5] text-ink-soft">
+          Subscribe to keep getting coaching feedback. Your entry is still
+          here — tap below to go back to it anytime.
+        </p>
+        <button
+          onClick={() => router.push("/paywall")}
+          className="mt-6 flex h-12 w-full max-w-xs items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98]"
+        >
+          See plans
+        </button>
+        <button
+          onClick={() => setGated(false)}
+          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
+        >
+          Back to my entry
         </button>
       </div>
     );
@@ -520,35 +540,9 @@ export default function PulseCheckPage() {
         <PersonPicker
           value={(data.personName as string | undefined) ?? ""}
           onChange={(next) => setFieldValue("personName", next)}
-          onPersonSelect={(id, relationship) => {
-            setPersonId(id);
-            if (id && relationship) {
-              setFieldValue("relationship", relationship);
-            }
-          }}
+          onPersonSelect={(id) => setPersonId(id)}
           selectedPersonId={personId}
         />
-      );
-    }
-    if (step.kind === "select") {
-      const value = (data[step.key] as string | undefined) ?? "";
-      return (
-        <div className="space-y-2">
-          {RELATIONSHIPS.map((rel) => (
-            <button
-              key={rel.value}
-              type="button"
-              onClick={() => setFieldValue(step.key, rel.value)}
-              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-[14px] font-semibold transition active:scale-[0.99] ${
-                value === rel.value
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
-            >
-              {rel.label}
-            </button>
-          ))}
-        </div>
       );
     }
     if (step.kind === "textarea") {
@@ -562,18 +556,20 @@ export default function PulseCheckPage() {
         />
       );
     }
-    if (step.kind === "textarea_with_body_chip") {
-      const value = data[step.key] as TextareaWithBodyChipValue | undefined;
-      return (
-        <TextareaWithBodyChip
-          value={value}
-          onChange={(next) => setFieldValue(step.key, next)}
-          chipValues={BODY_LOCATION_PULSE_VALUES}
-        />
-      );
-    }
     if (step.kind === "textarea_two_column") {
       const value = data[step.key] as TextareaTwoColumnValue | undefined;
+      if (step.key === "signalTest") {
+        return (
+          <TextareaTwoColumn
+            value={value}
+            onChange={(next) => setFieldValue(step.key, next)}
+            leftLabel="If it's real signal"
+            rightLabel="If it's just noise"
+            leftPlaceholder="What you'd see that confirms it — a behavior, a message, a tone."
+            rightPlaceholder="What you'd see that means you can let it go."
+          />
+        );
+      }
       return (
         <TextareaTwoColumn
           value={value}
@@ -585,9 +581,47 @@ export default function PulseCheckPage() {
         />
       );
     }
-    if (step.kind === "select_signal_next_move") {
+    if (step.kind === "select_pulse_next_move") {
       const value = (data[step.key] as string | undefined) ?? "";
-      return <SelectSignalNextMove value={value} onChange={setNextMoveChip} />;
+      return (
+        <div className="space-y-2">
+          {PULSE_NEXT_MOVE_V2_VALUES.map((move) => (
+            <button
+              key={move}
+              type="button"
+              onClick={() => setNextMove(move)}
+              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
+                value === move
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              {NEXT_MOVE_LABELS[move]}
+            </button>
+          ))}
+        </div>
+      );
+    }
+    if (step.kind === "select_check_window") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <div className="space-y-2">
+          {CHECK_WINDOW_VALUES.map((win) => (
+            <button
+              key={win}
+              type="button"
+              onClick={() => setFieldValue(step.key, win)}
+              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
+                value === win
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              {CHECK_WINDOW_LABELS[win]}
+            </button>
+          ))}
+        </div>
+      );
     }
     return null;
   }
@@ -595,6 +629,37 @@ export default function PulseCheckPage() {
   return (
     <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
       <PulseBackground />
+
+      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only coin
+          costs; nothing is debited until Slice B. */}
+      <div className="mb-4">
+        <div className="flex gap-2">
+          {TIER_META.map((t) => {
+            const active = tier === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setTier(t.value)}
+                aria-pressed={active}
+                className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-card-sm px-3 py-2 transition active:scale-[0.99] ${
+                  active
+                    ? "bg-brand text-white shadow-cta"
+                    : "bg-surface text-ink shadow-soft"
+                }`}
+              >
+                <span className="text-[14px] font-bold">{t.label}</span>
+                <span
+                  className={`text-[11px] font-medium ${active ? "text-white/80" : "text-ink-muted"}`}
+                >
+                  {t.cards} · {t.coins}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <CoachPage
         eyebrow="Pulse Check"
         eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"

@@ -585,18 +585,22 @@ export type Database = {
           ai_tier: string | null
           alternative: string | null
           body_location: string | null
+          check_window: string | null
           completed_at: string | null
           created_at: string
           deleted_at: string | null
           feeling_text: string | null
           is_complete: boolean
           light_check_question: string | null
+          next_move: string | null
           next_move_chip: string | null
           outcome_json: Json | null
           person_id: string | null
           pulse_check_entry_id: string
           raw_record_id: string
           signal_noise_observation: string | null
+          signal_test_confirm: string | null
+          signal_test_disconfirm: string | null
           story: string | null
           theirs_not_about_you: string | null
           thread_id: string | null
@@ -611,18 +615,22 @@ export type Database = {
           ai_tier?: string | null
           alternative?: string | null
           body_location?: string | null
+          check_window?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           feeling_text?: string | null
           is_complete?: boolean
           light_check_question?: string | null
+          next_move?: string | null
           next_move_chip?: string | null
           outcome_json?: Json | null
           person_id?: string | null
           pulse_check_entry_id?: string
           raw_record_id: string
           signal_noise_observation?: string | null
+          signal_test_confirm?: string | null
+          signal_test_disconfirm?: string | null
           story?: string | null
           theirs_not_about_you?: string | null
           thread_id?: string | null
@@ -637,18 +645,22 @@ export type Database = {
           ai_tier?: string | null
           alternative?: string | null
           body_location?: string | null
+          check_window?: string | null
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
           feeling_text?: string | null
           is_complete?: boolean
           light_check_question?: string | null
+          next_move?: string | null
           next_move_chip?: string | null
           outcome_json?: Json | null
           person_id?: string | null
           pulse_check_entry_id?: string
           raw_record_id?: string
           signal_noise_observation?: string | null
+          signal_test_confirm?: string | null
+          signal_test_disconfirm?: string | null
           story?: string | null
           theirs_not_about_you?: string | null
           thread_id?: string | null

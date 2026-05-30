@@ -149,6 +149,38 @@ export type ReviewNextMove = (typeof REVIEW_NEXT_MOVE_VALUES)[number];
 export type RepairReadiness = "yes" | "somewhat" | "no";
 
 // ============================================================
+// Lean Pulse Check ("Something feels off") — redesign Slice C1
+// ============================================================
+// Pulse next-move chip (v2). Determines the result-screen routing matrix:
+//   do_nothing → close · observe → reveals check-window picker, then close
+//   ask_light → reveals light-question field + routes to Before-You-Send
+//   prepare → /coach/prepare · repair → persisted intent (standalone Repair
+//   ships in Slice D) · set_boundary → close · step_back → close.
+// Stored on pulse_check_entries.next_move (migration 0042). Supersedes the
+// legacy PULSE_NEXT_MOVE_VALUES (validation.ts) — kept there for /history reads.
+export const PULSE_NEXT_MOVE_V2_VALUES = [
+  "do_nothing",
+  "observe",
+  "ask_light",
+  "prepare",
+  "repair",
+  "set_boundary",
+  "step_back",
+] as const;
+export type PulseNextMove = (typeof PULSE_NEXT_MOVE_V2_VALUES)[number];
+
+// Observation window when next_move = observe. Stored on
+// pulse_check_entries.check_window (migration 0042). Powers the future
+// Pulse-observe follow-up nudge (Slice E).
+export const CHECK_WINDOW_VALUES = [
+  "24h",
+  "3d",
+  "7d",
+  "next_interaction",
+] as const;
+export type CheckWindow = (typeof CHECK_WINDOW_VALUES)[number];
+
+// ============================================================
 // AI feedback tiering + editable cards (Slice A — coins redesign)
 // ============================================================
 // Persisted on every Coach derived table's ai_tier column (migration 0038)

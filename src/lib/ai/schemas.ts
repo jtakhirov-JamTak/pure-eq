@@ -66,23 +66,30 @@ export const prepareOutputSchema = z.discriminatedUnion("mode", [
 ]);
 
 // ============================================================
-// Pulse Check — discriminated union (Coach SOT 2026-05-06)
+// Pulse Check — tier-aware SignalRead cards (coins redesign 2026-05-29)
 // ============================================================
-// Pulse Check is a distinct module from Prepare with its own table and
-// its own AI output column (pulse_check_entries.ai_output_json,
-// ai_output_version). The 5-card output shape mirrors Prepare's today, but
-// the schema is defined separately so the two modules can evolve their
-// outputs independently — Prepare may grow opener-specific fields (e.g.,
-// opener_revision); Pulse Check may grow observation-window fields. Same
-// .max(300) caps and .min(1).trim() whitespace gates.
+// Pulse Check is a distinct module from Prepare with its own table and AI
+// output column (pulse_check_entries.ai_output_json, ai_output_version). The
+// lean redesign replaces the old fixed 5-card shape (real_issue,
+// reality_check_question, thing_not_to_do, they_might_need, best_next_move)
+// with tier-aware SignalRead cards:
+//   Quick tier = 3 cards (signal_vs_noise, non_you_explanation, next_move_card).
+//   Deep tier = those 3 + 2 more (stop_checking_rule, pattern_projection_risk).
+// The two Deep fields are .optional() — the prompt fills them only when tier ===
+// "deep", mirroring lean Prepare/Review. None of the lean cards are action-copy,
+// so Pulse no longer feeds ACTION_FIELDS / stripGeneric. ai_output_version bumps
+// 1 → 2; the renderer gates shape on it. Same .max(300) caps + .trim().min(1)
+// whitespace gates as every other module.
 
 const pulseCheckNormalShape = z.object({
   mode: z.literal("normal"),
-  real_issue: z.string().trim().min(1).max(300),
-  reality_check_question: z.string().trim().min(1).max(300),
-  thing_not_to_do: z.string().trim().min(1).max(300),
-  they_might_need: z.string().trim().min(1).max(300),
-  best_next_move: z.string().trim().min(1).max(120).nullable(),
+  // Quick tier (always required).
+  signal_vs_noise: z.string().trim().min(1).max(300),
+  non_you_explanation: z.string().trim().min(1).max(300),
+  next_move_card: z.string().trim().min(1).max(300),
+  // Deep tier (populated only when tier === "deep").
+  stop_checking_rule: z.string().trim().min(1).max(300).optional(),
+  pattern_projection_risk: z.string().trim().min(1).max(300).optional(),
   pattern_tag: z.enum(OBSERVATION_TAGS),
 });
 

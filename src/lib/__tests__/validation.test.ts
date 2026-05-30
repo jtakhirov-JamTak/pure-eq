@@ -283,70 +283,89 @@ describe("createPrepareSchema — lean tiered shape", () => {
 });
 
 // ============================================================
-// Pulse Check schema — Coach SOT 2026-05-06
+// Pulse Check schema — lean redesign (Slice C1, 2026-05-29)
 // ============================================================
 const validPulseCheckBase = {
   personName: "Sam",
-  relationship: "partner" as const,
   whatFeelsOff: "Quieter than usual the past few days.",
-  whatChangedAndBefore: "Last weekend we were laughing; now short replies.",
-  whenItShifted: "Sometime after Sunday brunch.",
-  feelingAndBody: {
-    text: "Tight chest, slight dread.",
-    bodyLocation: "chest" as const,
-  },
-  theirsNotAboutYou: "They started a new job — could be load not me.",
+  whatChangedVsBefore: "Last weekend we were laughing; now short replies.",
   storyAndAlternative: {
     story: "I'm being avoided.",
     alternative: "They're tapped out by work and going quiet across the board.",
   },
-  signalNoiseObservation: "If they're still terse by Friday, it's signal.",
-  nextMoveChip: "wait_observe" as const,
+  signalTestConfirm: "If they're still terse by Friday, it's signal.",
+  signalTestDisconfirm: "If they warm up after the deadline, it's noise.",
+  nextMove: "do_nothing" as const,
 };
 
-describe("createPulseCheckSchema", () => {
-  it("accepts a wait_observe payload without lightCheckQuestion", () => {
+describe("createPulseCheckSchema (lean)", () => {
+  it("accepts a do_nothing payload (no conditionals required)", () => {
     const result = createPulseCheckSchema.safeParse(validPulseCheckBase);
     expect(result.success).toBe(true);
   });
 
-  it("requires lightCheckQuestion when nextMoveChip is ask_clarifying", () => {
+  it("defaults tier to quick when omitted", () => {
+    const result = createPulseCheckSchema.safeParse(validPulseCheckBase);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.tier).toBe("quick");
+  });
+
+  it("requires checkWindow when nextMove is observe", () => {
     const result = createPulseCheckSchema.safeParse({
       ...validPulseCheckBase,
-      nextMoveChip: "ask_clarifying",
+      nextMove: "observe",
     });
     expect(result.success).toBe(false);
   });
 
-  it("requires lightCheckQuestion when nextMoveChip is use_bys", () => {
+  it("accepts observe with a valid checkWindow", () => {
     const result = createPulseCheckSchema.safeParse({
       ...validPulseCheckBase,
-      nextMoveChip: "use_bys",
+      nextMove: "observe",
+      checkWindow: "3d",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown checkWindow value", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      nextMove: "observe",
+      checkWindow: "someday",
     });
     expect(result.success).toBe(false);
   });
 
-  it("accepts ask_clarifying with a non-empty lightCheckQuestion", () => {
+  it("requires lightCheckQuestion when nextMove is ask_light", () => {
     const result = createPulseCheckSchema.safeParse({
       ...validPulseCheckBase,
-      nextMoveChip: "ask_clarifying",
-      lightCheckQuestion: "Hey, all good? You've been quiet — anything I should know?",
+      nextMove: "ask_light",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts ask_light with a non-empty lightCheckQuestion", () => {
+    const result = createPulseCheckSchema.safeParse({
+      ...validPulseCheckBase,
+      nextMove: "ask_light",
+      lightCheckQuestion:
+        "Hey, all good? You've been quiet — anything I should know?",
     });
     expect(result.success).toBe(true);
   });
 
-  it("rejects fuzzy_cant_tell on non-pulse body location enums but accepts it here", () => {
+  it("rejects an unknown nextMove value", () => {
     const result = createPulseCheckSchema.safeParse({
       ...validPulseCheckBase,
-      feelingAndBody: { text: "Cloudy.", bodyLocation: "fuzzy_cant_tell" },
+      nextMove: "spelunk",
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 
-  it("rejects an unknown nextMoveChip value", () => {
+  it("rejects an empty signalTestConfirm", () => {
     const result = createPulseCheckSchema.safeParse({
       ...validPulseCheckBase,
-      nextMoveChip: "spelunk",
+      signalTestConfirm: "",
     });
     expect(result.success).toBe(false);
   });

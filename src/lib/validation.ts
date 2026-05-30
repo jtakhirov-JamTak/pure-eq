@@ -1,6 +1,11 @@
 // Pure EQ domain — replace in fork.
 import { z } from "zod";
-import { CONVERSATION_MOVES, REVIEW_NEXT_MOVE_VALUES } from "@/types";
+import {
+  CONVERSATION_MOVES,
+  REVIEW_NEXT_MOVE_VALUES,
+  PULSE_NEXT_MOVE_V2_VALUES,
+  CHECK_WINDOW_VALUES,
+} from "@/types";
 
 // Onboarding
 export const quizAnswerSchema = z.object({
@@ -283,48 +288,71 @@ export const createBeforeYouSendSchema = z.object({
 });
 
 /**
- * Pulse Check Zod schema. Mirrors the createReviewSchema shape
- * (personId/threadId nullable, idempotencyKey injected by runner config).
+ * Pulse Check Zod schema — lean redesign (Slice C1, coins redesign 2026-05-29).
  *
- * `lightCheckQuestion` is required when `nextMoveChip ∈ {ask_clarifying,
- * use_bys}` and forbidden otherwise — those two chips lead to a follow-up
- * question that the user pre-drafts on the same screen. Enforced via
- * `.refine` so wrong-shape posts fail at the API boundary, not at the
- * step renderer.
+ * Trims the old 10-field "Something feels off" worksheet to 6 visible + 2
+ * conditional fields. Drops `relationship` (resolved server-side from the
+ * person row, like lean Review), `whenItShifted`, `feelingAndBody`, and
+ * `theirsNotAboutYou` (their columns stay nullable for legacy /history).
+ * The single-sided `signalNoiseObservation` becomes the two-sided
+ * `signalTestConfirm` + `signalTestDisconfirm` falsifiable test. `nextMoveChip`
+ * (legacy 7) is replaced by the leaner `nextMove` taxonomy (PULSE_NEXT_MOVE_V2).
+ *
+ * Two conditional fields, enforced via `.superRefine` so wrong-shape posts fail
+ * at the API boundary, not the step renderer:
+ *   - `checkWindow` is required when `nextMove === "observe"` (how long to watch
+ *     before re-checking).
+ *   - `lightCheckQuestion` is required when `nextMove === "ask_light"` (the
+ *     one-line check-in the user pre-drafts on the same screen).
+ * Mirrors createReviewSchema (tier, personId/threadId nullable, idempotencyKey
+ * injected by the runner config).
  */
 export const createPulseCheckSchema = z
   .object({
+    // Quick = 3 AI cards (lower coin cost), Deep = 5. Persisted to ai_tier.
+    tier: z.enum(["quick", "deep"]).default("quick"),
     personName: z.string().trim().min(1).max(200),
-    relationship: RELATIONSHIP_ENUM,
     whatFeelsOff: z.string().trim().min(1).max(2000),
-    whatChangedAndBefore: z.string().trim().min(1).max(2000),
-    whenItShifted: z.string().trim().min(1).max(2000),
-    feelingAndBody: z.object({
-      text: z.string().trim().min(1).max(2000),
-      bodyLocation: z.enum(BODY_LOCATION_PULSE_VALUES),
-    }),
-    theirsNotAboutYou: z.string().trim().min(1).max(2000),
+    whatChangedVsBefore: z.string().trim().min(1).max(2000),
     storyAndAlternative: z.object({
       story: z.string().trim().min(1).max(2000),
       alternative: z.string().trim().min(1).max(2000),
     }),
-    signalNoiseObservation: z.string().trim().min(1).max(1000),
-    nextMoveChip: z.enum(PULSE_NEXT_MOVE_VALUES),
+    // Two-sided falsifiable test (3–7 day window) — replaces the single-sided
+    // signalNoiseObservation.
+    signalTestConfirm: z.string().trim().min(1).max(1000),
+    signalTestDisconfirm: z.string().trim().min(1).max(1000),
+    nextMove: z.enum(PULSE_NEXT_MOVE_V2_VALUES),
+    // Conditional — required only for the move noted in the superRefine below.
+    checkWindow: z.enum(CHECK_WINDOW_VALUES).nullable().optional(),
     lightCheckQuestion: z.string().max(2000).nullable().optional(),
     personId: z.string().uuid().nullable().optional(),
     threadId: z.string().uuid().nullable().optional(),
   })
-  .refine(
-    (data) => {
-      const requires = data.nextMoveChip === "ask_clarifying" || data.nextMoveChip === "use_bys";
-      const has = typeof data.lightCheckQuestion === "string" && data.lightCheckQuestion.trim().length > 0;
-      return requires ? has : true;
-    },
-    {
-      message: "lightCheckQuestion required when nextMoveChip is ask_clarifying or use_bys",
-      path: ["lightCheckQuestion"],
-    },
-  );
+  .superRefine((data, ctx) => {
+    if (data.nextMove === "observe") {
+      const hasWindow = typeof data.checkWindow === "string";
+      if (!hasWindow) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "checkWindow required when nextMove is observe",
+          path: ["checkWindow"],
+        });
+      }
+    }
+    if (data.nextMove === "ask_light") {
+      const hasQuestion =
+        typeof data.lightCheckQuestion === "string" &&
+        data.lightCheckQuestion.trim().length > 0;
+      if (!hasQuestion) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "lightCheckQuestion required when nextMove is ask_light",
+          path: ["lightCheckQuestion"],
+        });
+      }
+    }
+  });
 
 /**
  * Review calibration block (3 chips, jsonb in DB). Stored as a structured
