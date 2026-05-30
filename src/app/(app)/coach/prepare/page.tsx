@@ -17,6 +17,12 @@ import {
 import { safeUUID } from "@/lib/utils";
 import { CONVERSATION_MOVES } from "@/types";
 import type { AiTier, ConversationMove, RelationshipDomain } from "@/types";
+import {
+  TierSelector,
+  GetFeedbackScreen,
+  useCoinBalance,
+  coinCostForTier,
+} from "@/components/coach/coin-ui";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "partner", label: "Partner" },
@@ -39,18 +45,6 @@ const CONVERSATION_MOVE_LABELS: Record<ConversationMove, string> = {
   decide: "Decide something together",
   pause: "Take a pause / cool down",
 };
-
-// Tier metadata. Coins are NOT debited yet (Slice B); these are display-only
-// cost constants so the selector reads the same as the future priced flow.
-const TIER_META: {
-  value: AiTier;
-  label: string;
-  cards: string;
-  coins: string;
-}[] = [
-  { value: "quick", label: "Quick", cards: "3 cards", coins: "4 coins" },
-  { value: "deep", label: "Deep", cards: "5 cards", coins: "6 coins" },
-];
 
 // Coins redesign Slice A 2026-05-29: lean 8-field Prepare across 3 pages.
 //   1 setup:   personName, relationship, conversationMove
@@ -302,10 +296,15 @@ export default function PreparePage() {
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
   const [prepareEntryId, setPrepareEntryId] = useState<string | null>(null);
-  // On a 403 (free Prepare already used) we show an inline upgrade panel
-  // instead of redirecting — a hard router.push would unmount the form and
-  // discard the user's whole multi-step entry at the exact upgrade moment.
-  const [gated, setGated] = useState(false);
+  // Save-first coins flow (Slice B Phase 2b). After the free save succeeds we
+  // land on the "Get AI feedback" screen instead of generating immediately.
+  const [awaitingGenerate, setAwaitingGenerate] = useState(false);
+  const [insufficient, setInsufficient] = useState<{
+    needed: number;
+    balance: number;
+  } | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  const { balance, refresh: refreshBalance } = useCoinBalance();
   const submitRef = useRef(false);
   const idempotencyKeyRef = useRef<string>("");
   if (!idempotencyKeyRef.current) {
@@ -328,7 +327,7 @@ export default function PreparePage() {
     if (pageIndex < totalPages - 1) {
       setPageIndex(pageIndex + 1);
     } else {
-      handleSubmit();
+      handleSave();
     }
   }
 
@@ -336,34 +335,85 @@ export default function PreparePage() {
     if (pageIndex > 0) setPageIndex(pageIndex - 1);
   }
 
-  async function handleSubmit() {
+  // Build the request body. The stable idempotencyKey ties the free save and
+  // the paid generate to ONE entry — the generate call reuses the saved row and
+  // only the coin debit is new.
+  function buildBody(generateAi: boolean) {
+    return {
+      tier,
+      personName: data.personName,
+      relationship: data.relationship,
+      conversationMove: data.conversationMove,
+      situation: data.situation,
+      fairestVersion: data.fairestVersion,
+      hiddenAskAndFloor: data.hiddenAskAndFloor,
+      opener: data.opener,
+      triggerPlan: data.triggerPlan,
+      personId: personId || null,
+      idempotencyKey: idempotencyKeyRef.current,
+      generateAi,
+    };
+  }
+
+  // Step 1 — free save. No coins, no AI. Lands on the Get-feedback screen.
+  async function handleSave() {
     if (submitRef.current) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
     try {
-      const body = {
-        tier,
-        personName: data.personName,
-        relationship: data.relationship,
-        conversationMove: data.conversationMove,
-        situation: data.situation,
-        fairestVersion: data.fairestVersion,
-        hiddenAskAndFloor: data.hiddenAskAndFloor,
-        opener: data.opener,
-        triggerPlan: data.triggerPlan,
-        personId: personId || null,
-        idempotencyKey: idempotencyKeyRef.current,
-      };
       const res = await fetch("/api/coach/prepare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(buildBody(false)),
       });
-      if (res.status === 403) {
-        // Free Prepare consumed. Keep the form mounted so the user's entry
-        // isn't lost — surface an inline upgrade panel instead of redirecting.
-        setGated(true);
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`);
+      }
+      const result = await res.json();
+      if (typeof result.prepareEntryId === "string") {
+        setPrepareEntryId(result.prepareEntryId);
+      }
+      setInsufficient(null);
+      setAwaitingGenerate(true);
+      refreshBalance();
+    } catch (err) {
+      console.error("prepare save failed", (err as Error)?.message);
+      setSubmitError("Could not save. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+      submitRef.current = false;
+    }
+  }
+
+  // Step 2 — paid generate. Reuses the saved entry's idempotencyKey; a 402 means
+  // the balance is short (entry already saved), surfaced inline on this screen.
+  async function handleGenerate() {
+    if (submitRef.current) return;
+    submitRef.current = true;
+    setSubmitting(true);
+    setGenerateError(null);
+    setSavedMessage(null);
+    try {
+      const res = await fetch("/api/coach/prepare", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildBody(true)),
+      });
+      if (res.status === 402) {
+        const j = (await res.json().catch(() => ({}))) as {
+          needed?: number;
+          balance?: number;
+          prepareEntryId?: string;
+        };
+        if (typeof j.prepareEntryId === "string") {
+          setPrepareEntryId(j.prepareEntryId);
+        }
+        setInsufficient({
+          needed: j.needed ?? coinCostForTier(tier),
+          balance: j.balance ?? 0,
+        });
+        setAwaitingGenerate(true);
         return;
       }
       if (!res.ok) {
@@ -374,16 +424,19 @@ export default function PreparePage() {
         setPrepareEntryId(result.prepareEntryId);
       }
       if (result.aiOutput) {
+        setAwaitingGenerate(false);
         setAiOutput(result.aiOutput as AiOutput);
       } else {
+        setAwaitingGenerate(false);
         setSavedMessage(
           result.message ??
             "Your entry is saved. Coaching feedback wasn't available this time.",
         );
       }
+      refreshBalance();
     } catch (err) {
-      console.error("prepare submit failed", (err as Error)?.message);
-      setSubmitError("Could not save. Check your connection and try again.");
+      console.error("prepare generate failed", (err as Error)?.message);
+      setGenerateError("Could not get feedback. Try again in a moment.");
     } finally {
       setSubmitting(false);
       submitRef.current = false;
@@ -393,7 +446,7 @@ export default function PreparePage() {
   function retryCoaching() {
     setSavedMessage(null);
     setAiOutput(null);
-    handleSubmit();
+    handleGenerate();
   }
 
   // --- Result screens ---
@@ -420,43 +473,6 @@ export default function PreparePage() {
     );
   }
 
-  if (savedMessage) {
-    return (
-      <EmptyOutputCard
-        onRetryCoaching={retryCoaching}
-        onBack={() => router.push("/coach")}
-        message={savedMessage}
-      />
-    );
-  }
-
-  if (gated) {
-    return (
-      <div className="relative flex min-h-[60vh] flex-col items-center justify-center px-5 text-center">
-        <PrepareBackground />
-        <h2 className="font-display text-[24px] leading-[1.15] text-ink">
-          You&rsquo;ve used your free Prepare
-        </h2>
-        <p className="mt-3 max-w-sm text-[14px] font-medium leading-[1.5] text-ink-soft">
-          Subscribe to keep getting coaching feedback. Your entry is still
-          here — tap below to go back to it anytime.
-        </p>
-        <button
-          onClick={() => router.push("/paywall")}
-          className="mt-6 flex h-12 w-full max-w-xs items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98]"
-        >
-          See plans
-        </button>
-        <button
-          onClick={() => setGated(false)}
-          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
-        >
-          Back to my entry
-        </button>
-      </div>
-    );
-  }
-
   if (submitting) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
@@ -468,6 +484,38 @@ export default function PreparePage() {
           </p>
         </div>
       </div>
+    );
+  }
+
+  if (awaitingGenerate) {
+    return (
+      <GetFeedbackScreen
+        background={<PrepareBackground />}
+        eyebrow={
+          <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
+            Prepare
+          </span>
+        }
+        title="Saved."
+        blurb="Your entry is saved — it's yours to keep. Get AI coaching feedback whenever you're ready."
+        tier={tier}
+        balance={balance}
+        insufficient={insufficient}
+        error={generateError}
+        actionLabel="Get AI feedback"
+        onGenerate={handleGenerate}
+        onBack={() => router.push("/coach")}
+      />
+    );
+  }
+
+  if (savedMessage) {
+    return (
+      <EmptyOutputCard
+        onRetryCoaching={retryCoaching}
+        onBack={() => router.push("/coach")}
+        message={savedMessage}
+      />
     );
   }
 
@@ -557,35 +605,10 @@ export default function PreparePage() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
 
-      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only
-          coin costs; nothing is debited until Slice B. */}
-      <div className="mb-4">
-        <div className="flex gap-2">
-          {TIER_META.map((t) => {
-            const active = tier === t.value;
-            return (
-              <button
-                key={t.value}
-                type="button"
-                onClick={() => setTier(t.value)}
-                aria-pressed={active}
-                className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-card-sm px-3 py-2 transition active:scale-[0.99] ${
-                  active
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                <span className="text-[14px] font-bold">{t.label}</span>
-                <span
-                  className={`text-[11px] font-medium ${active ? "text-white/80" : "text-ink-muted"}`}
-                >
-                  {t.cards} · {t.coins}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). The coins are
+          charged when the user taps "Get AI feedback" on the saved screen, not
+          here — saving the entry is free. */}
+      <TierSelector tier={tier} onChange={setTier} className="mb-4" />
 
       <CoachPage
         eyebrow="Prepare"
@@ -613,7 +636,7 @@ export default function PreparePage() {
           disabled={!canAdvance()}
           className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
-          {pageIndex === totalPages - 1 ? "Get Feedback" : "Next"}
+          {pageIndex === totalPages - 1 ? "Save entry (free)" : "Next"}
         </button>
       </div>
     </div>
