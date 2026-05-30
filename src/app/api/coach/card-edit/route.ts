@@ -75,18 +75,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // 4. Rate limit.
-  const rl = await rateLimit(`card-edit:min:${user.id}`, {
+  // 4. Rate limit — two buckets. 30/min for rapid Accept/Edit/Not-true
+  // tapping across a result screen's cards; 500/day to cap a compromised
+  // session per CLAUDE.md "Per-day rate limit ... extended to writes". The
+  // upsert is idempotent on the unique card key, so the day cap bounds
+  // abuse rather than legitimate row growth.
+  const rlMin = await rateLimit(`card-edit:min:${user.id}`, {
     limit: 30,
     windowMs: 60_000,
   });
-  if (!rl.allowed) {
+  if (!rlMin.allowed) {
     return NextResponse.json(
       { error: "Too many requests" },
       {
         status: 429,
         headers: {
-          "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)),
+          "Retry-After": String(Math.ceil((rlMin.resetAt - Date.now()) / 1000)),
+        },
+      },
+    );
+  }
+  const rlDay = await rateLimit(`card-edit:day:${user.id}`, {
+    limit: 500,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!rlDay.allowed) {
+    return NextResponse.json(
+      { error: "Daily limit reached" },
+      {
+        status: 429,
+        headers: {
+          "Retry-After": String(Math.ceil((rlDay.resetAt - Date.now()) / 1000)),
         },
       },
     );

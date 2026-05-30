@@ -71,10 +71,27 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // hardestMomentFeeling becomes optional in the user block (Quick skips
 // it; Full keeps it until Commit 5). aiVersionValue: Prepare 7 → 8,
 // others unchanged.
+// 2026-05-29 6.0.0: Coins redesign (Slice A + C lean slices). Major
+// output-shape rewrite across all three Coach modules:
+//   - Prepare: 5-card set → tier-aware {pressure_check, cleaner_opener,
+//     predicted_reaction (+ neutral_check_question, deeper_read on Deep)};
+//     lean 8-field input; aiVersionValue (ai_plan_version) 8 → 9.
+//   - Pulse Check: legacy 5-card → tier-aware SignalRead {signal_vs_noise,
+//     non_you_explanation, next_move_card (+ stop_checking_rule,
+//     pattern_projection_risk on Deep)}; ai_output_version 1 → 2.
+//   - Review: 4-base + repair-branch → tier-aware InteractionLearning
+//     {turning_point, pattern_data, recommended_move (+ their_likely_experience,
+//     repeat_stop_update on Deep)}; Repair extracted to its own module;
+//     ai_reflection_version 9 → 10.
+// Major bump because the per-module output schemas changed entirely. The
+// DB-side ai_*_version columns are the authoritative shape selectors;
+// this constant keeps payload_json.prompt_version distinguishable between
+// the SOT era (5.1.0) and the lean era so raw_records stay traceable to
+// the prompt regime that produced them.
 // Exported so tests can assert equality against the same constant the
 // builders stamp into prompt outputs — pinning a literal in tests next
 // to a moving constant is the canary trap CLAUDE.md warns about.
-export const PROMPT_VERSION = "5.1.0";
+export const PROMPT_VERSION = "6.0.0";
 
 const SHARED_RULES = `
 RULES:
