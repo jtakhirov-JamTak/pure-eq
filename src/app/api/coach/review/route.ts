@@ -24,6 +24,9 @@ export const runtime = "nodejs";
 
 const requestSchema = createReviewSchema.extend({
   idempotencyKey: z.string().uuid(),
+  // Slice B coins: false = free Save; true = paid Get-AI-feedback (default true
+  // in run-module for combined-submit back-compat).
+  generateAi: z.boolean().optional(),
 });
 
 type Input = z.infer<typeof createReviewSchema> & {
@@ -52,8 +55,6 @@ export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   requestSchema:
     requestSchema as unknown as CoachModuleConfig<Input, AiOutput>["requestSchema"],
   aiOutputSchema: reviewOutputSchema,
-  subscriptionGate: "free_one",
-  freeUsageField: "freeReviewUsed",
   personBehavior: "resolve",
   personDedup: "name_only",
   threadBehavior: "auto_link",

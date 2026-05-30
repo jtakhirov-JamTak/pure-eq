@@ -10,11 +10,11 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { verifyPersonOwnership } from "@/lib/verify-ownership";
-import { checkSubscription, reserveFreeUse } from "@/lib/subscription";
+import { spendCoins, refundCoins, costForTier, getBalance } from "@/lib/coins";
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { validateAIOutput } from "@/lib/ai/schemas";
-import type { ProfileType } from "@/types";
+import type { AiTier, ProfileType } from "@/types";
 import type { CoachModuleConfig } from "./types";
 
 const MAX_RETRIES = 1;
@@ -76,32 +76,19 @@ export async function runCoachModule<
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // 4. Subscription gate.
-  // - Admins: bypass.
-  // - Subscribed (hasAccess): always allow.
-  // - Otherwise, "free_one" modules allow one free use per module within
-  //   the 3-day free period. The actual atomic reservation happens at
-  //   step 9b (after idempotency check, before any writes), which closes
-  //   the parallel-request race. This gate is the cheap up-front filter.
+  // 4. Access model (Slice B coins). No up-front subscription/free-use gate:
+  //    - Saving an entry (generateAi:false) is always free.
+  //    - "Get AI feedback" (generateAi:true) reserves coins atomically right
+  //      before the Anthropic call (step 12), so the cost is charged only when
+  //      we actually generate, and the entry is always saved first regardless
+  //      of balance. Admins bypass the debit entirely.
+  //    generateAi defaults to TRUE so an un-migrated combined-submit client
+  //    (save + AI in one call) keeps working during the page migration window.
   const adminUser = isAdmin(user.email);
-  // Tracks whether this request needs to atomically reserve a free use.
-  // Admins and subscribed users skip the reservation entirely.
-  let needsReservation = false;
-  if (!adminUser) {
-    const access = await checkSubscription(user.id);
-    if (config.subscriptionGate === "free_one") {
-      const freeFieldUsed = access[config.freeUsageField];
-      const canUseFree = access.freePeriodActive && !freeFieldUsed;
-      if (!access.hasAccess && !canUseFree) {
-        return NextResponse.json({ error: "Subscription required" }, { status: 403 });
-      }
-      needsReservation = !access.hasAccess;
-    } else {
-      if (!access.hasAccess) {
-        return NextResponse.json({ error: "Subscription required" }, { status: 403 });
-      }
-    }
-  }
+  const generateAi = (input as { generateAi?: boolean }).generateAi ?? true;
+  const tier: AiTier =
+    (input as { tier?: AiTier }).tier === "deep" ? "deep" : "quick";
+  const coinCost = costForTier(tier);
 
   // 5. Rate limit — two buckets.
   const rlMin = await rateLimit(`${name}:min:${user.id}`, { limit: 10, windowMs: 60_000 });
@@ -326,22 +313,6 @@ export async function runCoachModule<
   if (existingRaw) {
     rawRecordId = existingRaw.raw_record_id;
   } else {
-    // 9b. Atomic free-use reservation — only on first attempt (not retries).
-    // Closes the race where N parallel first-attempts all see "free not
-    // used" at step 4 and all proceed. The UPDATE is atomic: only the
-    // first concurrent request flips free_X_used_at from null to a
-    // timestamp. Losers get a 403 here, before any writes happen.
-    //
-    // Does NOT revert on later failure. The idempotency key lets the
-    // user retry (hitting the existingRaw branch above), so a failed AI
-    // call doesn't burn a second free use.
-    if (needsReservation && config.subscriptionGate === "free_one") {
-      const result = await reserveFreeUse(user.id, config.freeUsageField);
-      if (result === "already_used") {
-        return NextResponse.json({ error: "Subscription required" }, { status: 403 });
-      }
-    }
-
     // Thread auto-create (write) stays inside idempotency guard.
     if (config.threadBehavior === "auto_create") {
       if (!effectiveThreadId && effectivePersonId && config.getThreadTitle) {
@@ -411,8 +382,14 @@ export async function runCoachModule<
   }
 
   let derivedEntryId: string;
+  // The AI output already persisted on this entry, if any. Non-null means a
+  // prior "Get AI feedback" succeeded — used below to short-circuit a repeat
+  // generate (no re-charge, no re-call).
+  let existingAiJson: unknown = null;
   if (derivedLookup.data) {
-    derivedEntryId = (derivedLookup.data as Record<string, string>)[config.derivedIdColumn];
+    const row = derivedLookup.data as Record<string, unknown>;
+    derivedEntryId = row[config.derivedIdColumn] as string;
+    existingAiJson = row[config.aiJsonColumn] ?? null;
   } else {
     const derivedRow = {
       user_id: user.id,
@@ -442,6 +419,65 @@ export async function runCoachModule<
       return NextResponse.json({ error: `Could not save ${name} entry` }, { status: 500 });
     }
     derivedEntryId = (derivedInsert.data as Record<string, string>)[config.derivedIdColumn];
+  }
+
+  // 11b. Save-vs-generate split (Slice B coins). The entry is now persisted
+  // (free). If the caller only asked to SAVE, stop here — no AI, no debit.
+  if (!generateAi) {
+    return NextResponse.json({
+      success: true,
+      saved: true,
+      aiOutput: null,
+      rawRecordId,
+      ...config.buildResponseExtras(derivedEntryId),
+    });
+  }
+
+  // Already generated for this entry (a prior "Get AI feedback" succeeded):
+  // return the cached output without re-charging or re-calling the model.
+  if (existingAiJson) {
+    return NextResponse.json({
+      success: true,
+      aiOutput: existingAiJson,
+      rawRecordId,
+      ...config.buildResponseExtras(derivedEntryId),
+      cached: true,
+    });
+  }
+
+  // 11c. Reserve coins for the generation (admins bypass). Keyed on the
+  // idempotencyKey so a double-tapped "Get AI feedback" never double-charges
+  // (reserve-at-start). On AI failure we refund below (release). On
+  // insufficient balance the entry is already saved — the client surfaces an
+  // inline top-up rather than losing the user's work.
+  let coinsCharged = false;
+  if (!adminUser) {
+    const reason = tier === "deep" ? "debit_deep" : "debit_quick";
+    const spend = await spendCoins(user.id, coinCost, reason, idempotencyKey);
+    if (spend === "insufficient") {
+      const balance = await getBalance(user.id);
+      return NextResponse.json(
+        {
+          error: "insufficient_coins",
+          needed: coinCost,
+          balance,
+          ...config.buildResponseExtras(derivedEntryId),
+        },
+        { status: 402 },
+      );
+    }
+    if (spend === "invalid") {
+      // Unexpected RPC failure (already logged + captured in spendCoins). The
+      // entry is saved; don't run a generation we couldn't charge for.
+      return NextResponse.json(
+        { error: "Could not start feedback. Try again in a moment." },
+        { status: 500 },
+      );
+    }
+    // 'ok' = freshly charged this request → refund on AI failure (below).
+    // 'already_applied' = a prior attempt charged under this key (retry after
+    // a failed+refunded run); proceed without a second charge.
+    coinsCharged = spend === "ok";
   }
 
   // 12. Call Claude. Reuses the prompt built before the idempotency branch.
@@ -502,6 +538,14 @@ export async function runCoachModule<
     Sentry.captureException(lastErr, {
       tags: { area: "coach", module: name, kind: lastFailureKind },
     });
+    // Release the reservation: the generation failed before any output was
+    // saved (reserve → refund). Only when we actually charged THIS request —
+    // an 'already_applied' retry must not trigger a spurious credit. The
+    // refund is idempotent (keyed off idempotencyKey), so a repeat failure on
+    // the same key won't stack credits.
+    if (coinsCharged) {
+      await refundCoins(user.id, coinCost, idempotencyKey);
+    }
   }
 
   // 13. Update derived row with AI output.
@@ -538,6 +582,9 @@ export async function runCoachModule<
     aiOutput,
     rawRecordId,
     ...config.buildResponseExtras(derivedEntryId),
+    // Net coins spent: the cost only when we charged AND produced output. A
+    // charged-then-failed run was refunded above, so it nets to 0.
+    coinsSpent: aiOutput && coinsCharged ? coinCost : 0,
     saveWarning,
     aiFailureKind: aiOutput ? undefined : lastFailureKind,
     message: aiOutput

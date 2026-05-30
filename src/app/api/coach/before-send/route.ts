@@ -15,6 +15,9 @@ const BYS_MODULE_NAME = "before_you_send" as const;
 
 const requestSchema = createBeforeYouSendSchema.extend({
   idempotencyKey: z.string().uuid(),
+  // Slice B coins: false = free Save (no AI, no debit); true = paid Get-AI-
+  // feedback. Defaults to true in run-module for combined-submit back-compat.
+  generateAi: z.boolean().optional(),
 });
 
 type Input = z.infer<typeof createBeforeYouSendSchema>;
@@ -27,8 +30,6 @@ export const beforeYouSendModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   moduleName: BYS_MODULE_NAME,
   requestSchema,
   aiOutputSchema: beforeYouSendOutputSchema,
-  subscriptionGate: "free_one",
-  freeUsageField: "freeBeforeYouSendUsed",
   // BYS is stateless — no person, no thread. runCoachModule skips both
   // resolution blocks when these flags are set.
   personBehavior: "skip",

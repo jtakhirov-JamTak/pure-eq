@@ -2,19 +2,14 @@ import type { z } from "zod";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import type { ProfileType } from "@/types";
-import type { FreeUsageField } from "@/lib/subscription";
 
 export type AppSupabase = SupabaseClient<Database>;
 
-/**
- * Subscription gate config — discriminated union so TypeScript requires
- * `freeUsageField` when `subscriptionGate === "free_one"`. Prevents the
- * "silent default to freePrepareUsed" footgun if a future module is
- * added without specifying which free-use column to check.
- */
-type SubscriptionGateConfig =
-  | { subscriptionGate: "free_one"; freeUsageField: FreeUsageField }
-  | { subscriptionGate: "required"; freeUsageField?: never };
+// Access model (Slice B coins): the per-module free_one subscription gate is
+// gone. AI generation is gated on a coin balance (Quick 4 / Deep 6), reserved
+// atomically in run-module right before the Anthropic call. Saving an entry
+// (generateAi:false) is always free; only "Get AI feedback" debits. Admins
+// bypass the debit. No `subscriptionGate` / `freeUsageField` on the config.
 
 interface BaseCoachModuleConfig<
   TInput extends Record<string, unknown>,
@@ -144,4 +139,4 @@ interface BaseCoachModuleConfig<
 export type CoachModuleConfig<
   TInput extends Record<string, unknown>,
   TAiOutput extends Record<string, unknown>,
-> = BaseCoachModuleConfig<TInput, TAiOutput> & SubscriptionGateConfig;
+> = BaseCoachModuleConfig<TInput, TAiOutput>;

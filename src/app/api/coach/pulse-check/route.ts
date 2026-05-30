@@ -32,7 +32,12 @@ import type { CoachModuleConfig } from "@/lib/coach/types";
 export const runtime = "nodejs";
 
 const requestSchema = createPulseCheckSchema.and(
-  z.object({ idempotencyKey: z.string().uuid() }),
+  z.object({
+    idempotencyKey: z.string().uuid(),
+    // Slice B coins: false = free Save; true = paid Get-AI-feedback (default
+    // true in run-module for combined-submit back-compat).
+    generateAi: z.boolean().optional(),
+  }),
 );
 
 type Input = z.infer<typeof createPulseCheckSchema>;
@@ -48,8 +53,6 @@ export const pulseCheckModuleConfig: CoachModuleConfig<Input, AiOutput> = {
     AiOutput
   >["requestSchema"],
   aiOutputSchema: pulseCheckOutputSchema,
-  subscriptionGate: "free_one",
-  freeUsageField: "freePulseCheckUsed",
   personBehavior: "resolve",
   // Lean form dropped the relationship step; dedupe by name only and resolve
   // relationship from the person row server-side (mirrors lean Review).

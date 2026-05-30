@@ -22,6 +22,9 @@ export const runtime = "nodejs";
 
 const requestSchema = createPrepareSchema.extend({
   idempotencyKey: z.string().uuid(),
+  // Slice B coins: false = free Save; true = paid Get-AI-feedback (default true
+  // in run-module for combined-submit back-compat).
+  generateAi: z.boolean().optional(),
 });
 
 type Input = z.infer<typeof createPrepareSchema>;
@@ -34,8 +37,6 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   moduleName: "prepare",
   requestSchema,
   aiOutputSchema: prepareOutputSchema,
-  subscriptionGate: "free_one",
-  freeUsageField: "freePrepareUsed",
   personBehavior: "resolve",
   personDedup: "name_and_relationship",
   threadBehavior: "auto_create",
