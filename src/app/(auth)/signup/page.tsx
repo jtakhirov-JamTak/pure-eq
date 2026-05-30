@@ -28,6 +28,10 @@ export default function SignupPage() {
       ("standalone" in window.navigator &&
         (window.navigator as Navigator & { standalone?: boolean })
           .standalone === true);
+    // One-shot client-only PWA detection: reads window after mount, so the
+    // effect-then-setState is intentional (a lazy useState initializer would
+    // run during SSR with no window and cause a hydration mismatch).
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsStandalone(Boolean(standalone));
   }, []);
 

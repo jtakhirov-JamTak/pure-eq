@@ -32,7 +32,6 @@ const MODULE_LABEL: Record<(typeof DELETABLE_TYPES)[number], string> = {
 };
 
 export default async function HistoryPage() {
-  const t0 = Date.now();
   const {
     data: { user },
   } = await getAuthUser();
@@ -110,8 +109,6 @@ export default async function HistoryPage() {
       MODULE_LABEL[r.record_type as keyof typeof MODULE_LABEL] ?? r.record_type,
     completedAt: r.completed_at ?? r.created_at,
   }));
-
-  console.log(`[perf] history ${Date.now() - t0}ms total=${totalCount}`);
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">

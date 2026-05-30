@@ -16,6 +16,21 @@ const eslintConfig = defineConfig([
     // Linting it surfaced ~76 errors for a static reference file.
     "design_handoff_pure_eq/**",
   ]),
+  {
+    // Underscore-prefixed args/vars are intentionally unused (e.g. a param
+    // kept for signature shape on a mock that a real impl will consume).
+    // Standard convention so they don't need one-off disable comments.
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

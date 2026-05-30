@@ -23,7 +23,6 @@ export async function GET(request: Request) {
     next.startsWith("/") &&
     !next.startsWith("//") &&
     !next.includes("\\") &&
-    // eslint-disable-next-line no-control-regex
     !/[\x00-\x1f]/.test(next)
       ? next
       : "/onboarding";

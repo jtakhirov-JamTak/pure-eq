@@ -106,6 +106,10 @@ export default async function InsightsPage() {
   let hasStaleCached = false;
 
   if (latest) {
+    // Async Server Component renders once per request — Date.now() here is
+    // genuine current-time logic (reflection staleness), not a client
+    // render-loop impurity the rule targets.
+    // eslint-disable-next-line react-hooks/purity
     const ageMs = Date.now() - new Date(latest.generated_at).getTime();
     const versionOk = latest.generator_version === GENERATOR_VERSION;
     const parsed = reflectionOutputSchema.safeParse(latest.ai_json);

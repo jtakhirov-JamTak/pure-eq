@@ -394,8 +394,8 @@ export default function BeforeYouSendPage() {
           Draft saved
         </h2>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          Your draft was saved, but coaching feedback isn't available for this
-          one.
+          Your draft was saved, but coaching feedback isn&apos;t available for
+          this one.
         </p>
         <button
           onClick={() => router.push("/coach")}
@@ -450,8 +450,8 @@ export default function BeforeYouSendPage() {
         Paste the draft. See how it <span className="italic">lands</span>.
       </h2>
       <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-        This isn't a proofreader. It's a gut-check on how the other person
-        will read it.
+        This isn&apos;t a proofreader. It&apos;s a gut-check on how the other
+        person will read it.
       </p>
 
       {prefillSource && (

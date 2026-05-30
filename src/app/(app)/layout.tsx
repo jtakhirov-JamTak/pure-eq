@@ -10,7 +10,6 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const t0 = Date.now();
   // getAuthUser is React.cache()-wrapped — shares the JWT validation
   // round trip with the page below.
   const {
@@ -43,7 +42,6 @@ export default async function AppLayout({
     }
   }
 
-  console.log(`[perf] (app) layout ${Date.now() - t0}ms u=${user.id.slice(0, 8)}`);
   return (
     <AppShell
       userEmail={user.email}
