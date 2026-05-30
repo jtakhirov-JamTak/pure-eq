@@ -223,38 +223,56 @@ describe("reviewOutputSchema", () => {
 });
 
 // ============================================================
-// beforeYouSendOutputSchema (NEW Coach redesign 2026-04-23)
+// beforeYouSendOutputSchema — tier-aware verdict (coins redesign 2026-05-30)
 // ============================================================
-const validBysSafe = {
+// Quick = 3 cards (how_this_will_land, thing_to_cut, check_in_question) + the
+// verdict; Deep adds 2 (what_its_missing, their_likely_reply). The two Deep
+// fields are .optional() so a Quick output validates without them.
+const validBysQuick = {
   mode: "normal",
   verdict: "safe",
   how_this_will_land:
     "She's likely to read this as you finally hearing her on the budget — the acknowledgement is concrete.",
-  what_its_missing:
-    "A specific next step would help — right now it ends without giving her something to respond to.",
   thing_to_cut:
     "You wrote: 'I get it now.' Cut this — she'll read 'now' as 'not before,' which lands as condescension.",
   check_in_question: "Am I asking her to forgive me, or am I asking her what she needs?",
 };
 
-const validBysDoNotSend = {
-  ...validBysSafe,
-  verdict: "do_not_send",
+const validBysDeep = {
+  ...validBysQuick,
+  what_its_missing:
+    "A specific next step would help — right now it ends without giving her something to respond to.",
+  their_likely_reply:
+    "She'll probably reply guarded but open — something like 'okay, let's talk tonight' rather than warmth.",
 };
 
 describe("beforeYouSendOutputSchema", () => {
-  it("parses a verdict=safe BYS output", () => {
-    expect(beforeYouSendOutputSchema.safeParse(validBysSafe).success).toBe(true);
+  it("parses a Quick verdict=safe BYS output (3 cards, no Deep fields)", () => {
+    expect(beforeYouSendOutputSchema.safeParse(validBysQuick).success).toBe(true);
+  });
+
+  it("parses a Deep BYS output (3 + 2 cards)", () => {
+    expect(beforeYouSendOutputSchema.safeParse(validBysDeep).success).toBe(true);
   });
 
   it("parses a verdict=risky BYS output", () => {
     expect(
-      beforeYouSendOutputSchema.safeParse({ ...validBysSafe, verdict: "risky" }).success,
+      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, verdict: "risky" }).success,
     ).toBe(true);
   });
 
   it("parses a verdict=do_not_send BYS output", () => {
-    expect(beforeYouSendOutputSchema.safeParse(validBysDoNotSend).success).toBe(true);
+    expect(
+      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, verdict: "do_not_send" })
+        .success,
+    ).toBe(true);
+  });
+
+  it("accepts a null thing_to_cut (nothing to cut)", () => {
+    expect(
+      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, thing_to_cut: null })
+        .success,
+    ).toBe(true);
   });
 
   it("parses a BYS refusal", () => {
@@ -270,12 +288,18 @@ describe("beforeYouSendOutputSchema", () => {
 
   it("rejects an unknown verdict value", () => {
     expect(
-      beforeYouSendOutputSchema.safeParse({ ...validBysSafe, verdict: "send_anyway" }).success,
+      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, verdict: "send_anyway" }).success,
     ).toBe(false);
   });
 
-  it("rejects a missing thing_to_cut", () => {
-    const { thing_to_cut: _omit, ...rest } = validBysSafe;
+  it("rejects a missing thing_to_cut (key required, value may be null)", () => {
+    const { thing_to_cut: _omit, ...rest } = validBysQuick;
+    void _omit;
+    expect(beforeYouSendOutputSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("rejects a missing check_in_question (Quick-required)", () => {
+    const { check_in_question: _omit, ...rest } = validBysQuick;
     void _omit;
     expect(beforeYouSendOutputSchema.safeParse(rest).success).toBe(false);
   });
@@ -283,8 +307,17 @@ describe("beforeYouSendOutputSchema", () => {
   it("rejects a how_this_will_land over 300 chars", () => {
     expect(
       beforeYouSendOutputSchema.safeParse({
-        ...validBysSafe,
+        ...validBysQuick,
         how_this_will_land: "a".repeat(301),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a their_likely_reply over 300 chars (Deep cap enforced when present)", () => {
+    expect(
+      beforeYouSendOutputSchema.safeParse({
+        ...validBysDeep,
+        their_likely_reply: "a".repeat(301),
       }).success,
     ).toBe(false);
   });

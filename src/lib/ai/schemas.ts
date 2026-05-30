@@ -132,12 +132,20 @@ export const reviewOutputSchema = z.discriminatedUnion("mode", [
 ]);
 
 // ============================================================
-// Before You Send — NEW (Coach redesign 2026-04-23)
+// Before You Send — tier-aware verdict cards (coins redesign 2026-05-30)
 // ============================================================
 // Stateless verdict-only flow. User pastes a draft message + selects
-// message_type; model returns a verdict (safe | risky | do_not_send)
-// and 4 short fields. `thing_to_cut` should QUOTE the user's actual
-// words verbatim — the prompt enforces this.
+// message_type + a Quick/Deep tier; model returns a verdict
+// (safe | risky | do_not_send) plus tier-aware cards:
+//   Quick tier = 3 cards (how_this_will_land, thing_to_cut, check_in_question).
+//   Deep tier  = those 3 + 2 more (what_its_missing, their_likely_reply).
+// The two Deep fields are .optional() — the prompt fills them only when tier ===
+// "deep", mirroring lean Prepare/Review/Pulse. what_its_missing was a Quick
+// field before the lean redesign; it moves to Deep so the Quick tier stays a
+// tight verdict + the single most important cut. `thing_to_cut` stays the lone
+// BYS ACTION_FIELDS member and should QUOTE the user's actual words verbatim —
+// the prompt enforces this. ai_verdict_version bumps 1 → 2; readers gate shape
+// on it.
 //
 // `do_not_send` triggers a red banner in the UI: "Do not send. This
 // message protects your ego more than the relationship."
@@ -145,8 +153,8 @@ export const reviewOutputSchema = z.discriminatedUnion("mode", [
 const beforeYouSendNormalShape = z.object({
   mode: z.literal("normal"),
   verdict: z.enum(["safe", "risky", "do_not_send"]),
+  // Quick tier (always required).
   how_this_will_land: z.string().trim().min(1).max(300),
-  what_its_missing: z.string().trim().min(1).max(300),
   // Action field — nullable per the editorial contract. Keeps the 300-char
   // cap (matching the other BYS fields) because the prompt instructs Claude
   // to emit the format `They wrote: "...". Cut this because…`, which needs
@@ -154,6 +162,9 @@ const beforeYouSendNormalShape = z.object({
   // fail schema validation. stripGeneric still nullifies filler phrasings.
   thing_to_cut: z.string().trim().min(1).max(300).nullable(),
   check_in_question: z.string().trim().min(1).max(300),
+  // Deep tier (populated only when tier === "deep").
+  what_its_missing: z.string().trim().min(1).max(300).optional(),
+  their_likely_reply: z.string().trim().min(1).max(300).optional(),
 });
 
 export const beforeYouSendOutputSchema = z.discriminatedUnion("mode", [

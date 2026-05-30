@@ -276,6 +276,9 @@ export const createReviewSchema = z.object({
 // Coach — Before You Send (NEW Coach redesign 2026-04-23)
 // ============================================================
 export const createBeforeYouSendSchema = z.object({
+  // Quick = 3 AI cards (lower coin cost), Deep = 5. Persisted to ai_tier.
+  // Mirrors createPulseCheckSchema / createReviewSchema.
+  tier: z.enum(["quick", "deep"]).default("quick"),
   draftText: z.string().trim().min(1).max(10000),
   messageType: z.enum(BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES),
   intentOptional: z.string().max(5000).nullable().optional(),

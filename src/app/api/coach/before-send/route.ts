@@ -20,7 +20,10 @@ const requestSchema = createBeforeYouSendSchema.extend({
 type Input = z.infer<typeof createBeforeYouSendSchema>;
 type AiOutput = z.infer<typeof beforeYouSendOutputSchema>;
 
-const config: CoachModuleConfig<Input, AiOutput> = {
+// Exported so vitest round-trip tests can call buildDerivedInsert /
+// buildPayloadFields directly and catch column-rename / version drift the
+// schema-only tests miss (same pattern as pulseCheckModuleConfig).
+export const beforeYouSendModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   moduleName: BYS_MODULE_NAME,
   requestSchema,
   aiOutputSchema: beforeYouSendOutputSchema,
@@ -34,9 +37,17 @@ const config: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "before_you_send_entry_id",
   aiJsonColumn: "ai_verdict_json",
   aiVersionColumn: "ai_verdict_version",
-  aiVersionValue: 1,
+  // Coins redesign BYS lean slice 2026-05-30: bump 1 → 2. The output shape
+  // changes from the fixed 4-field {verdict, how_this_will_land,
+  // what_its_missing, thing_to_cut, check_in_question} set to the tier-aware
+  // set — Quick = {verdict, how_this_will_land, thing_to_cut,
+  // check_in_question}; Deep adds {what_its_missing, their_likely_reply}.
+  // Readers MUST gate on ai_verdict_version when distinguishing shape —
+  // 2 = lean tiered, 1/NULL = legacy single-tier.
+  aiVersionValue: 2,
 
   buildPayloadFields: (input) => ({
+    tier: input.tier,
     draftText: input.draftText,
     messageType: input.messageType,
     intentOptional: input.intentOptional ?? null,
@@ -48,11 +59,13 @@ const config: CoachModuleConfig<Input, AiOutput> = {
     message_type: input.messageType,
     intent_optional: input.intentOptional ?? null,
     risk_context: input.riskContext ?? null,
+    ai_tier: input.tier,
   }),
 
   buildPrompt: (input, profile) =>
     buildBeforeYouSendPrompt({
       profile,
+      tier: input.tier,
       draftText: input.draftText,
       messageType: input.messageType,
       intentOptional: input.intentOptional ?? null,
@@ -65,5 +78,5 @@ const config: CoachModuleConfig<Input, AiOutput> = {
 };
 
 export async function POST(req: Request) {
-  return runCoachModule(req, config);
+  return runCoachModule(req, beforeYouSendModuleConfig);
 }

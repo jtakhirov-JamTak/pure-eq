@@ -3,11 +3,26 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
+import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { ACTION_FIELDS } from "@/lib/ai/schemas";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { safeUUID } from "@/lib/utils";
+import type { AiTier } from "@/types";
 import { createClient } from "@/lib/supabase/client";
+
+// Tier metadata. Coins are NOT debited yet (Slice B); these are display-only
+// cost constants so the selector reads the same as the future priced flow.
+// Mirrors the Pulse Check tier selector.
+const TIER_META: {
+  value: AiTier;
+  label: string;
+  cards: string;
+  coins: string;
+}[] = [
+  { value: "quick", label: "Quick", cards: "3 cards", coins: "4 coins" },
+  { value: "deep", label: "Deep", cards: "5 cards", coins: "6 coins" },
+];
 
 // Reject stashes older than this. sessionStorage is tab-scoped, not
 // account-scoped; a short window limits the cross-user bleed window to
@@ -52,10 +67,13 @@ type Prefill = {
 type AiNormal = {
   mode: "normal";
   verdict: "safe" | "risky" | "do_not_send";
+  // Quick tier (always present).
   how_this_will_land: string;
-  what_its_missing: string;
-  thing_to_cut: string;
+  thing_to_cut: string | null;
   check_in_question: string;
+  // Deep tier (present only when tier === "deep").
+  what_its_missing?: string;
+  their_likely_reply?: string;
 };
 
 type AiRefusal = {
@@ -67,11 +85,15 @@ type AiRefusal = {
 
 type AiOutput = AiNormal | AiRefusal;
 
+// Quick fields first, then the two Deep cards. The render filter drops any
+// field the model omitted (Quick output has no Deep keys), so a Quick verdict
+// shows 3 cards and a Deep verdict shows 5.
 const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
   { label: "How this will land", key: "how_this_will_land" },
-  { label: "What it's missing", key: "what_its_missing" },
   { label: "Thing to cut", key: "thing_to_cut" },
   { label: "Check-in question", key: "check_in_question" },
+  { label: "What it's missing", key: "what_its_missing" },
+  { label: "Their likely reply", key: "their_likely_reply" },
 ];
 
 const VERDICT_LABEL: Record<AiNormal["verdict"], string> = {
@@ -99,7 +121,7 @@ function RefusalCard({
   onBack: () => void;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <BysBackground />
       <h2
         className="font-display text-[28px] leading-[1.15] text-ink"
@@ -125,9 +147,13 @@ function RefusalCard({
 export default function BeforeYouSendPage() {
   const router = useRouter();
   const [draftText, setDraftText] = useState("");
+  const [tier, setTier] = useState<AiTier>("quick");
   const [messageType, setMessageType] = useState<MessageType>("conflict");
   const [intentOptional, setIntentOptional] = useState("");
   const [riskContext, setRiskContext] = useState("");
+  const [beforeYouSendEntryId, setBeforeYouSendEntryId] = useState<
+    string | null
+  >(null);
   // Banner copy variant — set when a fresh prefill loads. "repair" =
   // Review handoff; "pulse_check" = Pulse Check use_bys chip; null = none.
   const [prefillSource, setPrefillSource] = useState<
@@ -216,6 +242,7 @@ export default function BeforeYouSendPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          tier,
           draftText: textToCheck,
           messageType,
           intentOptional: intentOptional.trim() || null,
@@ -245,6 +272,15 @@ export default function BeforeYouSendPage() {
         throw new Error(`status ${res.status}`);
       }
       const result = await res.json();
+      // Capture the derived entry id so the result cards can attach
+      // Accept/Edit/Not-true edits via POST /api/coach/card-edit. A fresh
+      // id arrives on every pass (including "Check it again" rewrites), so
+      // the cards are keyed by it and remount per submission.
+      if (typeof result.beforeYouSendEntryId === "string") {
+        setBeforeYouSendEntryId(result.beforeYouSendEntryId);
+      } else {
+        setBeforeYouSendEntryId(null);
+      }
       if (result.aiOutput) {
         setAiOutput(result.aiOutput as AiOutput);
         // Seed the rewrite box with the text we just checked so the user
@@ -304,7 +340,7 @@ export default function BeforeYouSendPage() {
     if (aiOutput.mode === "normal") {
       const verdict = aiOutput.verdict;
       return (
-        <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
           <BysBackground />
           <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
             Before you send
@@ -325,13 +361,29 @@ export default function BeforeYouSendPage() {
             </div>
           )}
 
-          <div className="mt-5 space-y-3">
+          <p className="mt-4 text-[13px] font-medium leading-[1.5] text-ink-soft">
+            Keep each card, edit it in your words, or mark it not true.
+          </p>
+          <div className="mt-3 space-y-3">
             {RESULT_FIELDS.filter(({ key }) => {
               const v = aiOutput[key];
               return typeof v === "string" && v.trim().length > 0;
             }).map(({ label, key }) => {
               const isAction = ACTION_FIELDS.has(key);
-              return (
+              const text = aiOutput[key] as string;
+              // Key by entry id so a "Check it again" rewrite (fresh id)
+              // remounts the cards instead of carrying a stale edit verdict.
+              return beforeYouSendEntryId ? (
+                <EditableCard
+                  key={`${beforeYouSendEntryId}.${key}`}
+                  label={label}
+                  value={text}
+                  cardKey={key}
+                  entryTable="before_you_send_entries"
+                  entryId={beforeYouSendEntryId}
+                  isAction={isAction}
+                />
+              ) : (
                 <div
                   key={key}
                   className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
@@ -340,7 +392,7 @@ export default function BeforeYouSendPage() {
                     {label}
                   </p>
                   <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                    {aiOutput[key]}
+                    {text}
                   </p>
                 </div>
               );
@@ -385,7 +437,7 @@ export default function BeforeYouSendPage() {
     }
     // Unknown output shape — fall through to saved-message state.
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
         <BysBackground />
         <h2
           className="font-display text-[28px] leading-[1.15] text-ink"
@@ -409,7 +461,7 @@ export default function BeforeYouSendPage() {
 
   if (savedMessage) {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
         <BysBackground />
         <h2
           className="font-display text-[28px] leading-[1.15] text-ink"
@@ -437,7 +489,7 @@ export default function BeforeYouSendPage() {
   }
 
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <BysBackground />
 
       <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
@@ -453,6 +505,34 @@ export default function BeforeYouSendPage() {
         This isn&apos;t a proofreader. It&apos;s a gut-check on how the other
         person will read it.
       </p>
+
+      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). Display-only coin
+          costs; nothing is debited until Slice B. */}
+      <div className="mt-5 flex gap-2">
+        {TIER_META.map((t) => {
+          const active = tier === t.value;
+          return (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => setTier(t.value)}
+              aria-pressed={active}
+              className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-card-sm px-3 py-2 transition active:scale-[0.99] ${
+                active
+                  ? "bg-brand text-white shadow-cta"
+                  : "bg-surface text-ink shadow-soft"
+              }`}
+            >
+              <span className="text-[14px] font-bold">{t.label}</span>
+              <span
+                className={`text-[11px] font-medium ${active ? "text-white/80" : "text-ink-muted"}`}
+              >
+                {t.cards} · {t.coins}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       {prefillSource && (
         <div className="mt-5 rounded-card-sm bg-surface p-3 shadow-soft">

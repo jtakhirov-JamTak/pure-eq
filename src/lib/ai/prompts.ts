@@ -414,6 +414,7 @@ Generate coaching feedback as the JSON object specified above. Honor the PULSE C
 // ============================================================
 export function buildBeforeYouSendPrompt(params: {
   profile: ProfileType;
+  tier: "quick" | "deep";
   draftText: string;
   messageType: BeforeYouSendMessageType;
   intentOptional: string | null;
@@ -423,8 +424,17 @@ export function buildBeforeYouSendPrompt(params: {
   // draftText alone. Empty/null → render nothing.
   riskContext?: string | null;
 }) {
+  const isDeep = params.tier === "deep";
   const isRepairOrApology =
     params.messageType === "apology" || params.messageType === "repair";
+
+  // Deep tier appends two cards after the always-required Quick set. Quick is
+  // told to return ONLY the Quick fields (mirrors lean Prepare/Review/Pulse).
+  const deepFields = isDeep
+    ? `,
+  "what_its_missing": "string, max 300 chars — name what acknowledgement, ownership, or context the message lacks",
+  "their_likely_reply": "string, max 300 chars — forecast the recipient's most likely ACTUAL reply to this exact draft (their probable words/tone, not a category). Ground it in how the message lands; hedge ('They'll probably…')."`
+    : "";
 
   const repairExtraRule = isRepairOrApology
     ? `
@@ -460,11 +470,10 @@ NORMAL MODE:
   "mode": "normal",
   "verdict": "safe | risky | do_not_send",
   "how_this_will_land": "string, max 300 chars — name the likely felt experience on the recipient's side, specific not generic",
-  "what_its_missing": "string, max 300 chars — name what acknowledgement, ownership, or context the message lacks",
   "thing_to_cut": "string OR null, max 300 chars — QUOTE their actual words from the draft (in the format: 'They wrote: \\"...\\". Cut this because…'). Return null if nothing in the draft needs cutting.",
-  "check_in_question": "string, max 300 chars — one question the user should ask themselves before sending"
+  "check_in_question": "string, max 300 chars — one question the user should ask themselves before sending"${deepFields}
 }
-
+${isDeep ? "" : "Return ONLY the Quick fields above — do NOT include what_its_missing or their_likely_reply.\n"}
 REFUSAL MODE (safety trigger per SAFETY_FLOOR):
 {
   "mode": "refusal",
@@ -474,7 +483,7 @@ REFUSAL MODE (safety trigger per SAFETY_FLOOR):
 }
 
 verdict guidance:
-- "safe" — message is calibrated, names impact appropriately, doesn't escalate. Still surface what could be tightened in how_this_will_land/what_its_missing.
+- "safe" — message is calibrated, names impact appropriately, doesn't escalate. Still surface what could be tightened in how_this_will_land${isDeep ? "/what_its_missing" : ""}.
 - "risky" — at least one of the internal checks fires. Will likely produce a worse outcome than not sending.
 - "do_not_send" — the message would actively damage the relationship. Use sparingly but firmly.`,
     user: `USER COMMUNICATION PROFILE: ${params.profile}
@@ -494,7 +503,11 @@ ${params.draftText}
 
 Evaluate the draft and return the JSON object specified above. When quoting in thing_to_cut, copy the exact words from the draft.${
       params.riskContext && params.riskContext.trim().length > 0
-        ? " Treat the risk-context line as the user's own pre-flag — let it sharpen how_this_will_land and what_its_missing."
+        ? " Treat the risk-context line as the user's own pre-flag — let it sharpen how this will land and what to cut."
+        : ""
+    }${
+      isDeep
+        ? " Because this is a Deep request, also return what_its_missing and their_likely_reply."
         : ""
     }`,
   };

@@ -9,11 +9,23 @@ import { describe, it, expect } from "vitest";
 import { reviewModuleConfig } from "@/app/api/coach/review/route";
 import { prepareModuleConfig } from "@/app/api/coach/prepare/route";
 import { pulseCheckModuleConfig } from "@/app/api/coach/pulse-check/route";
+import { beforeYouSendModuleConfig } from "@/app/api/coach/before-send/route";
 
 // Helper types matching the parsed-input shapes the route configs expect.
 type ReviewInput = Parameters<typeof reviewModuleConfig.buildDerivedInsert>[0];
 type PrepareInput = Parameters<typeof prepareModuleConfig.buildDerivedInsert>[0];
 type PulseInput = Parameters<typeof pulseCheckModuleConfig.buildDerivedInsert>[0];
+type BysInput = Parameters<
+  typeof beforeYouSendModuleConfig.buildDerivedInsert
+>[0];
+
+const baseBysInput: BysInput = {
+  tier: "deep",
+  draftText: "I get it now — can we talk tonight?",
+  messageType: "repair",
+  intentOptional: "I want her to feel heard, not cornered.",
+  riskContext: "We fought about this yesterday.",
+} as BysInput;
 
 const basePulseInput: PulseInput = {
   tier: "deep",
@@ -252,6 +264,44 @@ describe("pulseCheckModuleConfig.buildPayloadFields — lean field passthrough",
   });
 });
 
+describe("beforeYouSendModuleConfig.buildDerivedInsert — tier column mapping", () => {
+  it("maps BYS fields to the right DB columns + persists ai_tier", () => {
+    const insert = beforeYouSendModuleConfig.buildDerivedInsert(
+      baseBysInput,
+    ) as Record<string, unknown>;
+
+    expect(insert.draft_text).toBe(baseBysInput.draftText);
+    expect(insert.message_type).toBe("repair");
+    expect(insert.intent_optional).toBe(baseBysInput.intentOptional);
+    expect(insert.risk_context).toBe(baseBysInput.riskContext);
+    expect(insert.ai_tier).toBe("deep");
+  });
+
+  it("writes null for omitted optional inputs", () => {
+    const insert = beforeYouSendModuleConfig.buildDerivedInsert({
+      tier: "quick",
+      draftText: "Quick draft.",
+      messageType: "ask",
+    } as BysInput) as Record<string, unknown>;
+    expect(insert.intent_optional).toBe(null);
+    expect(insert.risk_context).toBe(null);
+    expect(insert.ai_tier).toBe("quick");
+  });
+});
+
+describe("beforeYouSendModuleConfig.buildPayloadFields — field passthrough", () => {
+  it("passes through tier + every input to the raw payload", () => {
+    const payload = beforeYouSendModuleConfig.buildPayloadFields(
+      baseBysInput,
+    ) as Record<string, unknown>;
+    expect(payload.tier).toBe("deep");
+    expect(payload.draftText).toBe(baseBysInput.draftText);
+    expect(payload.messageType).toBe("repair");
+    expect(payload.intentOptional).toBe(baseBysInput.intentOptional);
+    expect(payload.riskContext).toBe(baseBysInput.riskContext);
+  });
+});
+
 // Sanity: aiVersionValue and module names are pinned to the documented
 // SOT-follow-up values. A drift here lands legacy rows under the new
 // version, breaking generator_version reads downstream.
@@ -272,6 +322,14 @@ describe("module configs — pinned identity", () => {
     expect(pulseCheckModuleConfig.aiVersionValue).toBe(2);
     expect(pulseCheckModuleConfig.moduleName).toBe("pulse_check");
     expect(pulseCheckModuleConfig.derivedTable).toBe("pulse_check_entries");
+  });
+
+  it("before_you_send.aiVersionValue is 2 (coins lean-tier marker)", () => {
+    expect(beforeYouSendModuleConfig.aiVersionValue).toBe(2);
+    expect(beforeYouSendModuleConfig.moduleName).toBe("before_you_send");
+    expect(beforeYouSendModuleConfig.derivedTable).toBe(
+      "before_you_send_entries",
+    );
   });
 });
 
