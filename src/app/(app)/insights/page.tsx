@@ -2,17 +2,17 @@
 //
 // /insights renders:
 //   1. StyleBox — profile from the 9-question quiz
-//   2. Weekly reflection — auto-generated once per 7 days; client kicks
-//      POST /api/insights/generate on mount when no fresh row exists.
+//   2. Weekly reflection — costs coins (Slice B3). When a fresh row exists in
+//      the 7-day window it renders directly (free); otherwise ReflectionKickoff
+//      shows an explicit "Generate · N coins" button that POSTs on tap.
 //   3. Open conversations — list of active threads, if any exist.
 //
 // Cost-wise, loading this page repeatedly inside a 7-day window is free:
-// the API endpoint's idempotency short-circuit returns the cached row
-// without calling Claude.
+// viewing a cached reflection never calls Claude or charges coins. Only an
+// explicit tap on the Generate button (on cache miss) spends coins.
 import Link from "next/link";
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { requirePaidAccessPage } from "@/lib/require-access";
 import {
   PROFILE_DESCRIPTIONS,
   PROFILE_AVATAR_CLASSES,
@@ -38,7 +38,10 @@ export default async function InsightsPage() {
 
   const supabase = await createClient();
 
-  await requirePaidAccessPage(user);
+  // Slice B3: Insights is no longer subscription-gated — any logged-in user can
+  // open it. Generating a weekly reflection costs coins (charged on tap inside
+  // ReflectionKickoff → /api/insights/generate); viewing an already-generated
+  // reflection inside the 7-day window is free.
 
   const [profile, latestReflectionRes, threadsRes, personsRes] = await Promise.all([
     getLatestProfile(supabase, user.id),
@@ -95,7 +98,8 @@ export default async function InsightsPage() {
   );
 
   // Decide whether the server-side row is fresh enough to render directly,
-  // or whether we should delegate to ReflectionKickoff (which auto-POSTs).
+  // or whether we should delegate to ReflectionKickoff (which shows the
+  // explicit "Generate · N coins" button on cache miss).
   // "Fresh" = within the 7-day idempotency window AND generator_version
   // matches the current code — a bumped generator_version is a re-compute
   // signal (symmetric read-side guard per Playbook §16.17).

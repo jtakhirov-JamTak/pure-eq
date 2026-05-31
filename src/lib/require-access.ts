@@ -9,9 +9,15 @@
 // (requireToolsAccessPage / requireToolsAccessApi / hasToolsAccess) and the
 // Coach paywall backstop were retired — Tools, History, Threads, export, and
 // manual Coach flows are now free (login-only). AI feedback is coin-gated at the
-// API instead. The ONLY remaining caller of these paid gates is Insights
-// (page + /api/insights/generate), which stays paid-only until the B3 coin
-// debit replaces it. `checkSubscription` + `user_subscriptions` stay dormant.
+// API instead.
+//
+// As of Slice B3 (2026-05-30) the LAST paid caller — Insights — moved to a coin
+// debit too, so `requirePaidAccessPage` / `requirePaidAccessApi` (and the
+// `checkSubscription` + `user_subscriptions` they read) now have NO live caller.
+// They're kept dormant, NOT deleted (founder decision: don't drop subscription
+// infra until coins are proven in production). If a future surface needs a
+// non-coin paid gate, reuse these rather than re-inlining the isAdmin +
+// checkSubscription + redirect/403 block.
 //
 //   page (throws redirect)      api (returns 403 | null)
 //   requirePaidAccessPage       requirePaidAccessApi

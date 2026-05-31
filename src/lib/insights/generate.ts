@@ -79,7 +79,7 @@ type GenerateOutcome =
   | { status: "cached"; row: WeeklyReflectionRow }
   | { status: "created"; row: WeeklyReflectionRow }
   | { status: "profile_missing" }
-  | { status: "rate_limited"; resetAt: number };
+  | { status: "insufficient_coins"; balance: number; needed: number };
 
 export class ReflectionGenerationError extends Error {
   constructor(
@@ -91,7 +91,8 @@ export class ReflectionGenerationError extends Error {
       | "banned_phrase"
       | "api_error"
       | "insert_failed"
-      | "db_read_failed",
+      | "db_read_failed"
+      | "coin_charge_failed",
   ) {
     super(message);
     this.name = "ReflectionGenerationError";
@@ -100,12 +101,41 @@ export class ReflectionGenerationError extends Error {
 
 export interface GenerateOptions {
   /**
-   * Called after cache miss but BEFORE the LLM call. Lets the caller
-   * gate expensive generation via rate limit without decrementing the
-   * bucket on cheap cache hits. Return `allowed: false` to get a
-   * `{status:"rate_limited", resetAt}` outcome from generateReflection.
+   * Called after cache miss, immediately BEFORE the LLM call — the cost gate
+   * (Slice B3: weekly reflection costs coins). Kept as a
+   * caller-supplied callback for the same reason as checkRateLimit: the
+   * generator stays ignorant of the coins economy (no coins import here), and
+   * cache hits never reach this point so a re-visit inside the 7-day window is
+   * never charged. Mirrors run-module.ts reserve-at-start semantics.
+   *   - "charged" + fresh:true  → THIS call debited the coins. Proceed;
+   *                      onChargedGenerationFailed below refunds if generation
+   *                      fails AFTER this point.
+   *   - "charged" + fresh:false → a prior/concurrent attempt under the same
+   *                      spend key already paid (spend_coins → 'already_applied').
+   *                      Proceed, but DO NOT refund on failure — we'd be
+   *                      reversing the OTHER request's charge. Mirrors
+   *                      run-module.ts (`coinsCharged = spend === 'ok'`).
+   *   - "insufficient" → balance too low; generateReflection returns
+   *                      {status:"insufficient_coins"} WITHOUT calling the LLM.
+   *   - "error"        → unexpected charge failure (DB hiccup); we throw rather
+   *                      than generate something we couldn't charge for (fail
+   *                      closed, same stance as coins.ts).
    */
-  checkRateLimit?: () => Promise<{ allowed: boolean; resetAt: number }>;
+  reserveCoins?: () => Promise<
+    | { result: "charged"; fresh: boolean }
+    | { result: "insufficient"; balance: number; needed: number }
+    | { result: "error" }
+  >;
+
+  /**
+   * Compensating refund hook. Called when a charged generation does NOT deliver
+   * a usable reflection: an AI/insert failure (the LLM never produced output),
+   * OR a refusal ("not enough patterns this week") — charging 20 coins to be
+   * told there isn't enough data yet is a bad deal, so we release it. The
+   * refusal row is still persisted (so the cache short-circuit prevents a
+   * re-charge that same week), but the coins are returned.
+   */
+  onChargedGenerationFailed?: () => Promise<void>;
 }
 
 /**
@@ -415,162 +445,213 @@ export async function generateReflection(
     behavioralContext,
   });
 
-  // Rate-limit gate lives here — AFTER the cache miss, BEFORE the LLM call.
-  // Placement is load-bearing: counting cache hits would lock a paid user
-  // out of their own fresh reflection after N refreshes. Only actual LLM
-  // calls decrement the bucket.
-  if (options.checkRateLimit) {
-    const rl = await options.checkRateLimit();
-    if (!rl.allowed) {
-      return { status: "rate_limited", resetAt: rl.resetAt };
+  // Coin reserve (Slice B3) — AFTER the cache miss, BEFORE the LLM call. A
+  // cache hit returns long before this line, so re-visiting /insights inside
+  // the 7-day window is never charged. Reserve-at-start (not finalize-on-
+  // success) so a user below the price can't trigger an Opus generation we
+  // then fail to bill. (Per-minute flood protection lives at the route entry,
+  // before this function is even called — the weekly cost-limit was retired in
+  // B3 since the coin debit is now the cost gate.)
+  let coinsCharged = false;
+  if (options.reserveCoins) {
+    const reserve = await options.reserveCoins();
+    if (reserve.result === "insufficient") {
+      return {
+        status: "insufficient_coins",
+        balance: reserve.balance,
+        needed: reserve.needed,
+      };
     }
-  }
-
-  // Call Claude. Fresh Anthropic client — NOT shared with Coach's Sonnet
-  // setup, and NOT going through runCoachModule (see file header).
-  const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
-  const t0 = Date.now();
-  let textBlock: string;
-  try {
-    const message = await anthropic.messages.create({
-      model: MODEL,
-      max_tokens: MAX_TOKENS,
-      thinking: { type: "disabled" },
-      // output_config omitted — Opus defaults on the current SDK perform
-      // well for this task; we can tighten to effort=high if blind evals
-      // show benefit. Sonnet's pinned effort=high is a separate config
-      // per model-scope rule.
-      system: prompt.system,
-      messages: [{ role: "user", content: prompt.user }],
-    });
-    const block = message.content.find((b) => b.type === "text");
-    if (!block || block.type !== "text") {
-      throw new ReflectionGenerationError("no text block in response", "no_text");
+    if (reserve.result === "error") {
+      // Charge failed unexpectedly (DB hiccup) — fail closed rather than
+      // generate a reflection we couldn't bill for. Route maps to 500.
+      throw new ReflectionGenerationError(
+        "coin charge failed",
+        "coin_charge_failed",
+      );
     }
-    textBlock = block.text;
-  } catch (err) {
-    if (err instanceof ReflectionGenerationError) throw err;
-    throw new ReflectionGenerationError(
-      err instanceof Error ? err.message : "anthropic call failed",
-      "api_error",
-    );
+    // Only refund on failure if THIS call actually debited (fresh). An
+    // 'already_applied' spend (fresh:false) means a concurrent/prior request
+    // under the same key paid — refunding here would reverse THAT request's
+    // charge while it still returns a reflection (free generation). Same guard
+    // as run-module.ts's `coinsCharged = spend === "ok"`.
+    coinsCharged = reserve.fresh;
   }
-  const aiDurationMs = Date.now() - t0;
 
-  const raw = textBlock.replace(/```json\n?|```/g, "").trim();
-  let parsedJson: unknown;
+  // From here on a charge may be live. Wrap generation + persist in a try so any
+  // THROW (LLM failure, schema/banned-phrase, insert failure) refunds before
+  // propagating. Early `return`s exit cleanly without refund — the 23505 race
+  // winner returns "cached" with a real row and intentionally keeps the charge
+  // (the user got a reflection; only one of two racing requests charges under
+  // the per-attempt key). A refusal downgrade refunds explicitly below (it
+  // returns, not throws) since the user got told "not enough data", not a
+  // reflection.
   try {
-    parsedJson = JSON.parse(raw);
-  } catch {
-    throw new ReflectionGenerationError("AI output was not JSON", "json_parse");
-  }
+    // Call Claude. Fresh Anthropic client — NOT shared with Coach's Sonnet
+    // setup, and NOT going through runCoachModule (see file header).
+    const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
+    const t0 = Date.now();
+    let textBlock: string;
+    try {
+      const message = await anthropic.messages.create({
+        model: MODEL,
+        max_tokens: MAX_TOKENS,
+        thinking: { type: "disabled" },
+        // output_config omitted — Opus defaults on the current SDK perform
+        // well for this task; we can tighten to effort=high if blind evals
+        // show benefit. Sonnet's pinned effort=high is a separate config
+        // per model-scope rule.
+        system: prompt.system,
+        messages: [{ role: "user", content: prompt.user }],
+      });
+      const block = message.content.find((b) => b.type === "text");
+      if (!block || block.type !== "text") {
+        throw new ReflectionGenerationError("no text block in response", "no_text");
+      }
+      textBlock = block.text;
+    } catch (err) {
+      if (err instanceof ReflectionGenerationError) throw err;
+      throw new ReflectionGenerationError(
+        err instanceof Error ? err.message : "anthropic call failed",
+        "api_error",
+      );
+    }
+    const aiDurationMs = Date.now() - t0;
 
-  const validated = reflectionOutputSchema.safeParse(parsedJson);
-  if (!validated.success) {
-    throw new ReflectionGenerationError(
-      `AI output failed schema: ${validated.error.issues[0]?.message ?? "unknown"}`,
-      "schema_mismatch",
-    );
-  }
+    const raw = textBlock.replace(/```json\n?|```/g, "").trim();
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(raw);
+    } catch {
+      throw new ReflectionGenerationError("AI output was not JSON", "json_parse");
+    }
 
-  let aiOutput: ReflectionOutput = validated.data;
+    const validated = reflectionOutputSchema.safeParse(parsedJson);
+    if (!validated.success) {
+      throw new ReflectionGenerationError(
+        `AI output failed schema: ${validated.error.issues[0]?.message ?? "unknown"}`,
+        "schema_mismatch",
+      );
+    }
 
-  // Banned-phrase check on all string leaves. validateAIOutput walks the
-  // top-level keys only — the reflection shape nests prose under theme,
-  // observation, summary, message_to_user, AND evidence[*].quote. The quote
-  // walk matters: the model can select a verbatim passage from the user's
-  // own text that contains a banned clinical phrase. We drop the observation
-  // (not just the evidence item) so the <2 → refusal path still engages.
-  try {
-    if (aiOutput.mode === "reflection") {
-      validateAIOutput({ summary: aiOutput.summary });
-      aiOutput = {
-        ...aiOutput,
-        observations: aiOutput.observations.filter((obs) => {
-          try {
-            validateAIOutput({ theme: obs.theme, observation: obs.observation });
-            for (const ev of obs.evidence) {
-              validateAIOutput({ quote: ev.quote });
+    let aiOutput: ReflectionOutput = validated.data;
+
+    // Banned-phrase check on all string leaves. validateAIOutput walks the
+    // top-level keys only — the reflection shape nests prose under theme,
+    // observation, summary, message_to_user, AND evidence[*].quote. The quote
+    // walk matters: the model can select a verbatim passage from the user's
+    // own text that contains a banned clinical phrase. We drop the observation
+    // (not just the evidence item) so the <2 → refusal path still engages.
+    try {
+      if (aiOutput.mode === "reflection") {
+        validateAIOutput({ summary: aiOutput.summary });
+        aiOutput = {
+          ...aiOutput,
+          observations: aiOutput.observations.filter((obs) => {
+            try {
+              validateAIOutput({ theme: obs.theme, observation: obs.observation });
+              for (const ev of obs.evidence) {
+                validateAIOutput({ quote: ev.quote });
+              }
+              return true;
+            } catch {
+              return false;
             }
-            return true;
-          } catch {
-            return false;
-          }
-        }),
-      };
-    } else {
-      validateAIOutput({ message_to_user: aiOutput.message_to_user });
+          }),
+        };
+      } else {
+        validateAIOutput({ message_to_user: aiOutput.message_to_user });
+      }
+    } catch (err) {
+      throw new ReflectionGenerationError(
+        err instanceof Error ? err.message : "banned phrase",
+        "banned_phrase",
+      );
     }
+
+    // Post-process: verify quotes substring-match their cited sources. If any
+    // observation has an unverifiable quote, drop the whole observation. If
+    // fewer than 2 observations survive (counting banned-phrase drops above),
+    // convert to a refusal — we can't serve a partial reflection.
+    if (aiOutput.mode === "reflection") {
+      const lookup = buildEntryLookup(rawRecords);
+      const filtered = verifyQuotes(aiOutput, lookup);
+      if (filtered.observations.length < 2) {
+        aiOutput = {
+          mode: "refusal",
+          refusal_reason: "out_of_scope",
+          message_to_user:
+            "I could not ground enough patterns in your own words this week. Keep using Coach and Tools for another week or two and come back.",
+          suggested_resource: "none",
+        };
+        // A refusal isn't a sellable reflection — release the hold (Slice B3).
+        // The refusal row is still persisted below so the 7-day cache short-
+        // circuit prevents a re-charge this week. Clear coinsCharged so the
+        // outer catch can't refund a second time if the INSERT then throws
+        // (the refund is idempotent on its ref_key anyway, but be explicit).
+        if (coinsCharged) {
+          await options.onChargedGenerationFailed?.();
+          coinsCharged = false;
+        }
+      } else {
+        aiOutput = filtered;
+      }
+    }
+
+    // Persist. Fail loudly on INSERT error — migration 0018 lesson.
+    const insertPayload: WeeklyReflectionInsert = {
+      user_id: userId,
+      period_start: periodStart,
+      period_end: periodEnd,
+      input_entry_count: input.entries.length,
+      input_window_days: INPUT_WINDOW_DAYS,
+      generator_version: GENERATOR_VERSION,
+      prompt_version: prompt.prompt_version,
+      ai_json: aiOutput,
+      ai_duration_ms: aiDurationMs,
+    };
+
+    const insertRes = await supabase
+      .from("weekly_reflections")
+      .insert(insertPayload)
+      .select("*")
+      .single();
+
+    if (insertRes.error || !insertRes.data) {
+      // Unique-violation (PG 23505) = a concurrent request won the race at the
+      // same (user_id, date, generator_version) triple (migration 0031). Two
+      // parallel POSTs both missing the cache produce one LLM charge + one
+      // INSERT, not two. Return the winner's row as "cached". A same-day row
+      // at a DIFFERENT generator_version cannot 23505 here — the index keys
+      // off version, so a fresh v_new INSERT coexists with a stale v_old row.
+      if (insertRes.error?.code === "23505") {
+        const winner = await readCachedReflection(supabase, userId);
+        if (winner) return { status: "cached", row: winner };
+        // Fell through the cache read — ai_json failed Zod validation on the
+        // winning row (legacy shape, hand edit). Fail loudly rather than
+        // silently serve a blank reflection.
+      }
+      throw new ReflectionGenerationError(
+        `weekly_reflections insert failed: ${insertRes.error?.message ?? "no row returned"}`,
+        "insert_failed",
+      );
+    }
+
+    // Freshly-written row — ai_json is the Zod-validated aiOutput we just
+    // inserted, so narrowing here is safe (not a blind jsonb read).
+    return {
+      status: "created",
+      row: { ...insertRes.data, ai_json: aiOutput },
+    };
   } catch (err) {
-    throw new ReflectionGenerationError(
-      err instanceof Error ? err.message : "banned phrase",
-      "banned_phrase",
-    );
-  }
-
-  // Post-process: verify quotes substring-match their cited sources. If any
-  // observation has an unverifiable quote, drop the whole observation. If
-  // fewer than 2 observations survive (counting banned-phrase drops above),
-  // convert to a refusal — we can't serve a partial reflection.
-  if (aiOutput.mode === "reflection") {
-    const lookup = buildEntryLookup(rawRecords);
-    const filtered = verifyQuotes(aiOutput, lookup);
-    if (filtered.observations.length < 2) {
-      aiOutput = {
-        mode: "refusal",
-        refusal_reason: "out_of_scope",
-        message_to_user:
-          "I could not ground enough patterns in your own words this week. Keep using Coach and Tools for another week or two and come back.",
-        suggested_resource: "none",
-      };
-    } else {
-      aiOutput = filtered;
+    // Any throw past the coin reserve means a charged generation failed to
+    // deliver — refund the hold (release) before propagating. Idempotent on
+    // the spend key, so a refusal that already refunded + cleared coinsCharged
+    // won't double-refund. db_read/profile failures occur BEFORE the reserve,
+    // so coinsCharged is false there and no phantom coins are created.
+    if (coinsCharged) {
+      await options.onChargedGenerationFailed?.();
     }
+    throw err;
   }
-
-  // Persist. Fail loudly on INSERT error — migration 0018 lesson.
-  const insertPayload: WeeklyReflectionInsert = {
-    user_id: userId,
-    period_start: periodStart,
-    period_end: periodEnd,
-    input_entry_count: input.entries.length,
-    input_window_days: INPUT_WINDOW_DAYS,
-    generator_version: GENERATOR_VERSION,
-    prompt_version: prompt.prompt_version,
-    ai_json: aiOutput,
-    ai_duration_ms: aiDurationMs,
-  };
-
-  const insertRes = await supabase
-    .from("weekly_reflections")
-    .insert(insertPayload)
-    .select("*")
-    .single();
-
-  if (insertRes.error || !insertRes.data) {
-    // Unique-violation (PG 23505) = a concurrent request won the race at the
-    // same (user_id, date, generator_version) triple (migration 0031). Two
-    // parallel POSTs both missing the cache produce one LLM charge + one
-    // INSERT, not two. Return the winner's row as "cached". A same-day row
-    // at a DIFFERENT generator_version cannot 23505 here — the index keys
-    // off version, so a fresh v_new INSERT coexists with a stale v_old row.
-    if (insertRes.error?.code === "23505") {
-      const winner = await readCachedReflection(supabase, userId);
-      if (winner) return { status: "cached", row: winner };
-      // Fell through the cache read — ai_json failed Zod validation on the
-      // winning row (legacy shape, hand edit). Fail loudly rather than
-      // silently serve a blank reflection.
-    }
-    throw new ReflectionGenerationError(
-      `weekly_reflections insert failed: ${insertRes.error?.message ?? "no row returned"}`,
-      "insert_failed",
-    );
-  }
-
-  // Freshly-written row — ai_json is the Zod-validated aiOutput we just
-  // inserted, so narrowing here is safe (not a blind jsonb read).
-  return {
-    status: "created",
-    row: { ...insertRes.data, ai_json: aiOutput },
-  };
 }
