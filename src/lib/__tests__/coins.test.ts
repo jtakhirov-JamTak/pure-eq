@@ -13,7 +13,7 @@ import {
   SIGNUP_GRANT_COINS,
   SIGNUP_GRANT_REF_KEY,
 } from "@/types";
-import { costForTier } from "@/lib/coins";
+import { costForTier, generationSpendKey } from "@/lib/coins";
 
 describe("coin cost table — founder-final pricing", () => {
   it("prices Quick at 4 and Deep at 6", () => {
@@ -29,6 +29,20 @@ describe("coin cost table — founder-final pricing", () => {
   it("costForTier maps the AI tier to its coin cost", () => {
     expect(costForTier("quick")).toBe(4);
     expect(costForTier("deep")).toBe(6);
+  });
+});
+
+describe("generationSpendKey — per-attempt debit key (retry-leak fix)", () => {
+  it("scopes the debit to the attempt so retries get a distinct key", () => {
+    expect(generationSpendKey("abc", 0)).toBe("abc:gen:0");
+    expect(generationSpendKey("abc", 1)).toBe("abc:gen:1");
+    // Same entry, different attempt → different key → a genuine retry re-charges
+    // instead of colliding with the original debit and generating free.
+    expect(generationSpendKey("abc", 0)).not.toBe(generationSpendKey("abc", 1));
+  });
+
+  it("is stable for the same entry+attempt so a double-tap collapses to one charge", () => {
+    expect(generationSpendKey("xyz", 2)).toBe(generationSpendKey("xyz", 2));
   });
 });
 

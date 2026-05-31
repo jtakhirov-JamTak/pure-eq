@@ -112,16 +112,66 @@ export async function grantCoins(
 }
 
 /**
+ * Per-attempt spend ref_key for a generation. The entry's idempotencyKey is
+ * stable across save → generate → retry → double-tap, so keying the debit on it
+ * directly caused the retry leak: after a failed+refunded generation the debit
+ * row still occupied `idempotencyKey`, so a same-key retry hit 'already_applied'
+ * and generated FREE. Scoping the spend to `:gen:<attempt>` gives each genuine
+ * retry its own key (fresh charge) while a concurrent double-tap of the SAME
+ * attempt still collapses on the unique (user, ref_key) index (one charge).
+ */
+export function generationSpendKey(
+  idempotencyKey: string,
+  attempt: number,
+): string {
+  return `${idempotencyKey}:gen:${attempt}`;
+}
+
+/**
+ * Next generation-attempt index for an entry = how many prior attempts have been
+ * refunded. Each failed-and-refunded generation leaves exactly one refund row
+ * (`:gen:<n>:refund`), so counting them gives the next free attempt index.
+ *
+ * Counts REFUNDS, not debits, on purpose: a refund only exists after a failure
+ * completes, so two concurrent double-taps both see the same count and target
+ * the same `:gen:<n>` key (the unique index dedups them to one charge). Counting
+ * in-flight debits instead would let a double-tap pick different indices and
+ * double-charge. Fails to 0 on a DB error (worst case: reuses the original key →
+ * the pre-fix behavior, never an over-charge).
+ */
+export async function nextGenerationAttempt(
+  userId: string,
+  idempotencyKey: string,
+): Promise<number> {
+  const service = createServiceClient();
+  const { data, error } = await service
+    .from("coin_transactions")
+    .select("transaction_id")
+    .eq("user_id", userId)
+    .eq("reason", "refund")
+    .like("ref_key", `${idempotencyKey}:gen:%:refund`);
+  if (error) {
+    console.error("coins: nextGenerationAttempt failed", error.code);
+    Sentry.captureException(error, {
+      tags: { area: "coins", kind: "attempt_count_failed" },
+    });
+    return 0;
+  }
+  return data?.length ?? 0;
+}
+
+/**
  * Compensating refund when a paid generation fails before its output is saved
- * (reserve → release). Keyed off the original idempotencyKey + ':refund' so the
- * refund itself is idempotent and never collides with the original debit row.
+ * (reserve → release). Takes the SAME per-attempt spendKey the debit used, so
+ * the refund row is `:gen:<attempt>:refund` — idempotent, never collides with
+ * the debit, and counted by nextGenerationAttempt to advance the next retry.
  */
 export async function refundCoins(
   userId: string,
   amount: number,
-  idempotencyKey: string,
+  spendKey: string,
 ): Promise<CoinGrantResult> {
-  return grantCoins(userId, amount, "refund", `${idempotencyKey}:refund`);
+  return grantCoins(userId, amount, "refund", `${spendKey}:refund`);
 }
 
 /**

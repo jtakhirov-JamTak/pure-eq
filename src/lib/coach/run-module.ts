@@ -10,7 +10,14 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { verifyPersonOwnership } from "@/lib/verify-ownership";
-import { spendCoins, refundCoins, costForTier, getBalance } from "@/lib/coins";
+import {
+  spendCoins,
+  refundCoins,
+  costForTier,
+  getBalance,
+  nextGenerationAttempt,
+  generationSpendKey,
+} from "@/lib/coins";
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { validateAIOutput } from "@/lib/ai/schemas";
@@ -445,15 +452,21 @@ export async function runCoachModule<
     });
   }
 
-  // 11c. Reserve coins for the generation (admins bypass). Keyed on the
-  // idempotencyKey so a double-tapped "Get AI feedback" never double-charges
-  // (reserve-at-start). On AI failure we refund below (release). On
-  // insufficient balance the entry is already saved — the client surfaces an
-  // inline top-up rather than losing the user's work.
+  // 11c. Reserve coins for the generation (admins bypass). Keyed on a
+  // per-attempt spend key (`idempotencyKey:gen:<n>`) so a double-tapped "Get AI
+  // feedback" never double-charges (reserve-at-start, unique index dedups the
+  // same attempt) WHILE a genuine retry after a failed+refunded generation gets
+  // a fresh key and charges again — closing the retry leak where a same-key
+  // retry hit 'already_applied' and generated free. On AI failure we refund the
+  // same spend key below (release). On insufficient balance the entry is already
+  // saved — the client surfaces an inline top-up rather than losing the work.
   let coinsCharged = false;
+  let spendKey: string | null = null;
   if (!adminUser) {
+    const attempt = await nextGenerationAttempt(user.id, idempotencyKey);
+    spendKey = generationSpendKey(idempotencyKey, attempt);
     const reason = tier === "deep" ? "debit_deep" : "debit_quick";
-    const spend = await spendCoins(user.id, coinCost, reason, idempotencyKey);
+    const spend = await spendCoins(user.id, coinCost, reason, spendKey);
     if (spend === "insufficient") {
       const balance = await getBalance(user.id);
       return NextResponse.json(
@@ -541,10 +554,11 @@ export async function runCoachModule<
     // Release the reservation: the generation failed before any output was
     // saved (reserve → refund). Only when we actually charged THIS request —
     // an 'already_applied' retry must not trigger a spurious credit. The
-    // refund is idempotent (keyed off idempotencyKey), so a repeat failure on
-    // the same key won't stack credits.
-    if (coinsCharged) {
-      await refundCoins(user.id, coinCost, idempotencyKey);
+    // refund is idempotent (keyed off the per-attempt spendKey), so a repeat
+    // failure on the same key won't stack credits, and the refund row is what
+    // nextGenerationAttempt counts to advance the next retry's key.
+    if (coinsCharged && spendKey) {
+      await refundCoins(user.id, coinCost, spendKey);
     }
   }
 
