@@ -1,34 +1,12 @@
-// Pure EQ domain — replace in fork.
-// IMPORTANT: This page MUST stay outside the (app) route group.
-// Moving it inside (app) would create an infinite redirect loop:
-// (app)/layout → /paywall → (app)/layout → /paywall → ...
+// Pure EQ domain — coins redesign Slice B2.
+//
+// The subscription paywall is retired (coins model). This route is kept only as
+// a thin forwarder so any lingering redirect target (Insights' requirePaidAccess
+// until B3, stale Tools branches) lands on the coins purchase page instead of a
+// dead route. MUST stay outside the (app) route group — see git history; an
+// (app) placement risked a redirect loop with the old layout backstop.
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
-import { checkSubscription } from "@/lib/subscription";
-import { isAdmin } from "@/lib/admin";
-import { PaywallContent } from "./paywall-content";
 
-export default async function PaywallPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  // Not logged in — middleware should have caught this, but be safe.
-  if (!user) {
-    redirect("/login");
-  }
-
-  // Admin never sees paywall.
-  if (isAdmin(user.email)) {
-    redirect("/coach");
-  }
-
-  // Already subscribed — send to app.
-  const access = await checkSubscription(user.id);
-  if (access.hasAccess) {
-    redirect("/coach");
-  }
-
-  return <PaywallContent />;
+export default function PaywallPage() {
+  redirect("/coins");
 }

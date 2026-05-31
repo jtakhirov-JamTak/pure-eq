@@ -9,6 +9,7 @@
 // pricing, copy, and balance-fetch logic can't drift between them.
 
 import { useCallback, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { COIN_COSTS } from "@/types";
 import type { AiTier } from "@/types";
 
@@ -109,8 +110,7 @@ export function TierSelector({
  * The post-save screen: the entry is persisted (free), and the user chooses
  * whether to spend coins on AI feedback. Handles three inline sub-states:
  *   - ready        → "Get AI feedback · N coins" CTA
- *   - insufficient → coins-short panel (message + Back; no purchase link until
- *                    the /coins page ships in Slice B2)
+ *   - insufficient → coins-short panel (message + "Get coins" link to /coins + Back)
  *   - error        → generic generate failure, with the CTA still available
  * The spinner during generation is owned by each page's existing `submitting`
  * branch, so this screen is only shown when NOT generating.
@@ -174,8 +174,14 @@ export function GetFeedbackScreen({
             {insufficient.balance}.
           </p>
           <p className="mt-1.5 text-[13px] font-medium leading-[1.5] text-ink-soft">
-            Your entry is saved. Come back to it once you&rsquo;ve topped up.
+            Your entry is saved. Top up and come back to it any time.
           </p>
+          <Link
+            href="/coins"
+            className="mt-3 inline-flex h-11 items-center justify-center rounded-pill bg-brand px-5 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+          >
+            Get coins
+          </Link>
         </div>
       ) : (
         <button

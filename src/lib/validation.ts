@@ -416,9 +416,10 @@ export const createPersonSchema = z.object({
   relationshipSubtype: z.string().max(200).nullable().optional(),
 });
 
-// Subscribe (v0 mock — no payment fields yet)
-export const subscribeSchema = z.object({
-  plan: z.enum(["monthly", "annual"]),
+// Coins purchase — Stripe one-time checkout (Slice B2). `pack` is one of the
+// founder-final coin packs; the server maps it to a Stripe Price ID.
+export const checkoutSchema = z.object({
+  pack: z.enum(["booster", "starter", "builder", "master"]),
 });
 
 // Outcome tracking — Review

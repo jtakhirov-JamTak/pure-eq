@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Clock, LogOut, Settings } from "lucide-react";
+import { Clock, Coins, LogOut, Settings } from "lucide-react";
 import { Wordmark } from "./brand/Wordmark";
 
 const TABS = [
@@ -101,6 +101,14 @@ export function AppShell({
                 onClick={() => setMenuOpen(false)}
               />
               <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-[20px] bg-surface py-1 shadow-card">
+                <Link
+                  href="/coins"
+                  onClick={() => setMenuOpen(false)}
+                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-tint"
+                >
+                  <Coins className="h-4 w-4" />
+                  Coins
+                </Link>
                 <Link
                   href="/history"
                   onClick={() => setMenuOpen(false)}

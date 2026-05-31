@@ -27,11 +27,12 @@ import type { User } from "@supabase/supabase-js";
 import { checkSubscription } from "@/lib/subscription";
 import { isAdmin } from "@/lib/admin";
 
-/** Page-level paid-only gate. Redirects to /paywall on deny. */
+/** Page-level paid-only gate. Redirects to /coins on deny (the subscription
+ * paywall is retired; /paywall itself now forwards to /coins). */
 export async function requirePaidAccessPage(user: User): Promise<void> {
   if (isAdmin(user.email)) return;
   const access = await checkSubscription(user.id);
-  if (!access.hasAccess) redirect("/paywall");
+  if (!access.hasAccess) redirect("/coins");
 }
 
 /**

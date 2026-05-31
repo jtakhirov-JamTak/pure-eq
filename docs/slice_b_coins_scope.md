@@ -11,8 +11,10 @@ both dead).
 - **Costs coins:** Quick AI = 4, Deep AI = 6, Weekly Insights = 20, Monthly
   Report = 80.
 - **Signup grant:** 50 coins, once.
-- **Buy (all ONE-TIME, no auto-renew):** Top-up $5/50, 1-Month EQ Pack $50/750,
-  3-Month EQ Builder Pack $100/1500, optional EQ Builder Plus $129/2000.
+- **Buy (all ONE-TIME, no auto-renew) — FINAL lineup, created in Stripe 2026-05-30:**
+  Booster Pack $4.99/50, EQ Starter Pack $19.99/250, EQ Skill Builder Pack
+  $49.99/750, EQ Skill Master Pack $99.99/1500. (Supersedes the earlier
+  $5/$50/$100/$129 set; the $129/2000 premium tier was dropped.)
 - **Coins never expire.** Balance is a plain integer.
 
 ## What this REPLACES

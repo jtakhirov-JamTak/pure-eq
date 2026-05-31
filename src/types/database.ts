@@ -430,6 +430,24 @@ export type Database = {
           },
         ]
       }
+      payment_webhook_events: {
+        Row: {
+          event_id: string
+          received_at: string
+          type: string
+        }
+        Insert: {
+          event_id: string
+          received_at?: string
+          type: string
+        }
+        Update: {
+          event_id?: string
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
       persons: {
         Row: {
           created_at: string

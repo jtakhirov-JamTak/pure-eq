@@ -121,7 +121,8 @@ export const checkSubscription = cache(async (userId: string): Promise<Subscript
   let status = row.status as SubscriptionStatus;
 
   // Lazy trial expiry: legacy trial_active rows are expired past trial_ends_at.
-  // New rows do not use trial_* columns (createSubscription activates directly).
+  // No new rows are created any more (subscriptions retired for the coins model);
+  // this only ever touches dormant legacy rows.
   // Uses service role since RLS pins `status` against user-initiated writes.
   if (status === "trial_active" && row.trial_ends_at) {
     const expired = new Date(row.trial_ends_at) < new Date();
@@ -236,66 +237,8 @@ export async function reserveFreeUse(
   return u2 ? "reserved" : "already_used";
 }
 
-/**
- * Create a subscription (v0 mock). In production, this will be
- * replaced by Stripe webhook handling.
- *
- * TODO(stripe): When Stripe ships, this endpoint must NOT be callable
- * directly by the user. Only the Stripe webhook should set status='active'
- * after verifying a successful checkout session. Cancelled → active
- * must require a new Stripe checkout, not a re-POST to this endpoint.
- */
-export async function createSubscription(
-  userId: string,
-  _plan: "monthly" | "annual",
-): Promise<{ success: boolean }> {
-  const nowIso = new Date().toISOString();
-
-  // Service role: RLS pins status/role/free_*_used_at against user writes.
-  // Only the server can promote a row to status='active'.
-  const service = createServiceClient();
-
-  const { data: existing } = await service
-    .from("user_subscriptions")
-    .select("subscription_id, status")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existing) {
-    if (existing.status === "active") {
-      return { success: true };
-    }
-    // Clear stale trial_ends_at so legacy trial_active rows don't keep
-    // reporting a trial end date after being promoted to 'active'.
-    const { error } = await service
-      .from("user_subscriptions")
-      .update({
-        status: "active",
-        activated_at: nowIso,
-        trial_ends_at: null,
-        updated_at: nowIso,
-      })
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("subscription: activate update failed", error.code);
-      return { success: false };
-    }
-  } else {
-    const { error } = await service
-      .from("user_subscriptions")
-      .insert({
-        user_id: userId,
-        status: "active",
-        activated_at: nowIso,
-      });
-
-    // 23505 = unique constraint violation — another request beat us. That's fine.
-    if (error && error.code !== "23505") {
-      console.error("subscription: activate insert failed", error.code);
-      return { success: false };
-    }
-  }
-
-  return { success: true };
-}
+// createSubscription (the v0 subscribe mock) was removed in Slice B2 — the coins
+// model replaced subscriptions. Purchased coins are granted only by the Stripe
+// webhook (src/app/api/payments/webhook). user_subscriptions stays DORMANT (read
+// by checkSubscription for the legacy Insights gate until B3); nothing writes
+// status='active' any more.
