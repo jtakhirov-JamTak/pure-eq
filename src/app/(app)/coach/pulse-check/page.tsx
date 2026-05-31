@@ -25,7 +25,6 @@ import {
 import type { AiTier, PulseNextMove, CheckWindow } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import {
-  TierSelector,
   GetFeedbackScreen,
   useCoinBalance,
   coinCostForTier,
@@ -533,6 +532,11 @@ export default function PulseCheckPage() {
         title="Saved."
         blurb="Your pulse check is saved — it's yours to keep. Get an AI read whenever you're ready."
         tier={tier}
+        onTierChange={(t) => {
+          setTier(t);
+          setInsufficient(null);
+          setGenerateError(null);
+        }}
         balance={balance}
         insufficient={insufficient}
         error={generateError}
@@ -680,11 +684,6 @@ export default function PulseCheckPage() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PulseBackground />
 
-      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). The coins are
-          charged when the user taps "Get your read" on the saved screen, not
-          here — saving the pulse check is free. */}
-      <TierSelector tier={tier} onChange={setTier} className="mb-4" />
-
       <CoachPage
         eyebrow="Pulse Check"
         eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"
@@ -712,7 +711,7 @@ export default function PulseCheckPage() {
           disabled={!canAdvance()}
           className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
-          {pageIndex === totalPages - 1 ? "Save pulse check (free)" : "Next"}
+          {pageIndex === totalPages - 1 ? "Save pulse check" : "Next"}
         </button>
       </div>
     </div>

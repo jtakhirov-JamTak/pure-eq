@@ -130,6 +130,22 @@ export async function POST(req: Request) {
       },
     });
 
+    if (result.status === "insufficient_entries") {
+      // Not enough Coach entries yet to ground a reflection. Defense-in-depth:
+      // the /insights page already hides the Generate button below the
+      // threshold, so this only fires on a direct/crafted POST or a race where
+      // entries dropped below the bar between page render and tap. No charge
+      // happened (the gate runs before the coin reserve).
+      return NextResponse.json(
+        {
+          error: "insufficient_entries",
+          count: result.count,
+          needed: result.needed,
+        },
+        { status: 409 },
+      );
+    }
+
     if (result.status === "insufficient_coins") {
       return NextResponse.json(
         {

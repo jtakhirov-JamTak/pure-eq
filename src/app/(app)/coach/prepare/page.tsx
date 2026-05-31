@@ -18,7 +18,6 @@ import { safeUUID } from "@/lib/utils";
 import { CONVERSATION_MOVES } from "@/types";
 import type { AiTier, ConversationMove, RelationshipDomain } from "@/types";
 import {
-  TierSelector,
   GetFeedbackScreen,
   useCoinBalance,
   coinCostForTier,
@@ -499,6 +498,11 @@ export default function PreparePage() {
         title="Saved."
         blurb="Your entry is saved — it's yours to keep. Get AI coaching feedback whenever you're ready."
         tier={tier}
+        onTierChange={(t) => {
+          setTier(t);
+          setInsufficient(null);
+          setGenerateError(null);
+        }}
         balance={balance}
         insufficient={insufficient}
         error={generateError}
@@ -605,11 +609,6 @@ export default function PreparePage() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <PrepareBackground />
 
-      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). The coins are
-          charged when the user taps "Get AI feedback" on the saved screen, not
-          here — saving the entry is free. */}
-      <TierSelector tier={tier} onChange={setTier} className="mb-4" />
-
       <CoachPage
         eyebrow="Prepare"
         pageIndex={pageIndex}
@@ -636,7 +635,7 @@ export default function PreparePage() {
           disabled={!canAdvance()}
           className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
-          {pageIndex === totalPages - 1 ? "Save entry (free)" : "Next"}
+          {pageIndex === totalPages - 1 ? "Save entry" : "Next"}
         </button>
       </div>
     </div>

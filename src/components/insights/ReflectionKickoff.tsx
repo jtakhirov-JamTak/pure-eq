@@ -83,6 +83,18 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         return;
       }
 
+      // Not enough Coach entries yet (server gate). Normally the page hides the
+      // button below the threshold, so this only lands on a race or a page-load
+      // count read that failed open. Show a clear, non-alarming message.
+      if (res.status === 409 && data?.error === "insufficient_entries") {
+        const needed = typeof data.needed === "number" ? data.needed : 5;
+        setState({
+          phase: "error",
+          message: `You need at least ${needed} Coach entries before your first reflection. Keep using Prepare, Review, Repair, and Pulse Check.`,
+        });
+        return;
+      }
+
       if (!res.ok) {
         setState({
           phase: "error",

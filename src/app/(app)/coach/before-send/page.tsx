@@ -11,7 +11,6 @@ import { safeUUID } from "@/lib/utils";
 import type { AiTier } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import {
-  TierSelector,
   GetFeedbackScreen,
   useCoinBalance,
   coinCostForTier,
@@ -557,6 +556,11 @@ export default function BeforeYouSendPage() {
         title="Draft saved."
         blurb="Your draft is saved. Get a verdict on how it'll land whenever you're ready."
         tier={tier}
+        onTierChange={(t) => {
+          setTier(t);
+          setInsufficient(null);
+          setGenerateError(null);
+        }}
         balance={balance}
         insufficient={insufficient}
         error={generateError}
@@ -613,11 +617,6 @@ export default function BeforeYouSendPage() {
         This isn&apos;t a proofreader. It&apos;s a gut-check on how the other
         person will read it.
       </p>
-
-      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). The coins are
-          charged when the user taps "Get verdict" on the saved screen, not
-          here — saving the draft is free. */}
-      <TierSelector tier={tier} onChange={setTier} className="mt-5" />
 
       {prefillSource && (
         <div className="mt-5 rounded-card-sm bg-surface p-3 shadow-soft">
@@ -705,7 +704,7 @@ export default function BeforeYouSendPage() {
         disabled={!draftText.trim()}
         className="mt-7 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
       >
-        Save draft (free)
+        Save draft
       </button>
     </div>
   );

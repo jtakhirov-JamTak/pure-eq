@@ -21,7 +21,6 @@ import { safeUUID } from "@/lib/utils";
 import { REVIEW_NEXT_MOVE_VALUES } from "@/types";
 import type { AiTier, ReviewNextMove } from "@/types";
 import {
-  TierSelector,
   GetFeedbackScreen,
   useCoinBalance,
   coinCostForTier,
@@ -490,6 +489,11 @@ export default function ReviewPage() {
         title="Saved."
         blurb="Your reflection is saved — it's yours to keep. Get AI coaching feedback whenever you're ready."
         tier={tier}
+        onTierChange={(t) => {
+          setTier(t);
+          setInsufficient(null);
+          setGenerateError(null);
+        }}
         balance={balance}
         insufficient={insufficient}
         error={generateError}
@@ -574,11 +578,6 @@ export default function ReviewPage() {
     <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
       <ReviewBackground />
 
-      {/* Tier selector — Quick (3 cards) vs Deep (5 cards). The coins are
-          charged when the user taps "Get AI feedback" on the saved screen, not
-          here — saving the reflection is free. */}
-      <TierSelector tier={tier} onChange={setTier} className="mb-4" />
-
       <CoachPage
         eyebrow="Review"
         eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"
@@ -606,7 +605,7 @@ export default function ReviewPage() {
           disabled={!canAdvance()}
           className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
         >
-          {pageIndex === totalPages - 1 ? "Save reflection (free)" : "Next"}
+          {pageIndex === totalPages - 1 ? "Save reflection" : "Next"}
         </button>
       </div>
     </div>

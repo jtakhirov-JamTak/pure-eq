@@ -26,6 +26,8 @@ import { SkyBackground } from "@/components/brand/SkyBackground";
 import {
   GENERATOR_VERSION,
   IDEMPOTENCY_WINDOW_MS,
+  MIN_ENTRIES_FOR_REFLECTION,
+  REFLECTION_GATE_RECORD_TYPES,
 } from "@/lib/insights/generate";
 import { reflectionOutputSchema } from "@/lib/ai/schemas";
 import { captureServerRead } from "@/lib/read-capture";
@@ -43,7 +45,8 @@ export default async function InsightsPage() {
   // ReflectionKickoff → /api/insights/generate); viewing an already-generated
   // reflection inside the 7-day window is free.
 
-  const [profile, latestReflectionRes, threadsRes, personsRes] = await Promise.all([
+  const [profile, latestReflectionRes, threadsRes, personsRes, entryCountRes] =
+    await Promise.all([
     getLatestProfile(supabase, user.id),
     supabase
       .from("weekly_reflections")
@@ -65,6 +68,17 @@ export default async function InsightsPage() {
       .eq("user_id", user.id)
       .eq("is_active", true)
       .limit(100),
+    // All-time count of completed entries across the four reflective modules —
+    // the gate for the first weekly reflection. head:true = COUNT only, no rows.
+    // The server re-counts in generateReflection (the real gate); this drives
+    // the locked vs. generate UI state.
+    supabase
+      .from("raw_records")
+      .select("raw_record_id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .in("record_type", [...REFLECTION_GATE_RECORD_TYPES])
+      .eq("is_complete", true)
+      .is("deleted_at", null),
   ]);
 
   if (latestReflectionRes.error) {
@@ -88,6 +102,21 @@ export default async function InsightsPage() {
       new Error("persons_read_failed"),
     );
   }
+  if (entryCountRes.error) {
+    captureServerRead(
+      "insights",
+      "entry_count_read",
+      new Error("entry_count_read_failed"),
+    );
+  }
+
+  // Gate the first reflection on a minimum number of reflective-module entries.
+  // Fail OPEN on a count error (show the generate path) — the server re-counts
+  // and is the authoritative gate, so a transient count failure shouldn't hide
+  // the feature from an eligible user.
+  const eligibleEntryCount = entryCountRes.count ?? 0;
+  const canGenerate =
+    !!entryCountRes.error || eligibleEntryCount >= MIN_ENTRIES_FOR_REFLECTION;
 
   const primary = profile?.primary_profile as ProfileType | undefined;
   const secondary = profile?.secondary_profile as ProfileType | null;
@@ -166,8 +195,29 @@ export default async function InsightsPage() {
           reflection={freshReflection.reflection}
           generatedAt={freshReflection.generatedAt}
         />
-      ) : (
+      ) : canGenerate ? (
         <ReflectionKickoff hasStaleCached={hasStaleCached} />
+      ) : (
+        <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
+          <h2 className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+            Your weekly reflection
+          </h2>
+          <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
+            Your first reflection unlocks after{" "}
+            {MIN_ENTRIES_FOR_REFLECTION} Coach entries — enough to ground a read
+            of your patterns in your own words. Keep using Prepare, Review,
+            Repair, and Pulse Check.
+          </p>
+          <p className="mt-3 text-[13px] font-semibold text-ink">
+            {eligibleEntryCount} of {MIN_ENTRIES_FOR_REFLECTION} entries
+          </p>
+          <Link
+            href="/coach"
+            className="mt-4 inline-flex h-11 items-center justify-center rounded-pill bg-brand px-5 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+          >
+            Go to Coach
+          </Link>
+        </div>
       )}
 
       {threads.length > 0 && (

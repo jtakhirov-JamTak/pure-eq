@@ -61,7 +61,7 @@ export function useCoinBalance() {
 }
 
 // ---------------------------------------------------------------------------
-// Tier selector (form top)
+// Tier selector (rendered inside the post-save Get-feedback screen)
 // ---------------------------------------------------------------------------
 
 export function TierSelector({
@@ -121,6 +121,7 @@ export function GetFeedbackScreen({
   title,
   blurb,
   tier,
+  onTierChange,
   balance,
   insufficient,
   error,
@@ -133,6 +134,12 @@ export function GetFeedbackScreen({
   title: string;
   blurb: string;
   tier: AiTier;
+  /**
+   * When provided, the Quick/Deep selector renders on THIS post-save screen so
+   * the depth (and its coin cost) is chosen after the entry is written, not up
+   * front. Omit to hide the selector (e.g. a module with a single fixed tier).
+   */
+  onTierChange?: (tier: AiTier) => void;
   balance: number | null;
   insufficient: { needed: number; balance: number } | null;
   error?: string | null;
@@ -164,6 +171,14 @@ export function GetFeedbackScreen({
           </span>
           .
         </p>
+      )}
+
+      {/* Depth is chosen here, after the entry is saved — not at the top of the
+          form. Switching tiers updates the CTA cost below; the caller's
+          onTierChange clears any insufficient-coins state so a switch to the
+          cheaper tier re-enables the button. */}
+      {onTierChange && (
+        <TierSelector tier={tier} onChange={onTierChange} className="mt-5" />
       )}
 
       {insufficient ? (

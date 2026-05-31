@@ -70,6 +70,22 @@ let lastReviewAggregateCaptureAt = 0;
 export const IDEMPOTENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const INPUT_WINDOW_DAYS = 28;
 
+// Minimum number of completed Coach entries (all-time, across Prepare, Review,
+// Repair, Pulse Check) required before the FIRST weekly reflection can be
+// generated. Below this there isn't enough material to ground a reflection in
+// the user's own words, so /insights shows a locked "N of 5" state and the
+// server refuses to generate. Tools (Overwhelmed/Triggered) and Before-You-Send
+// deliberately do NOT count — the gate is scoped to the four reflective modules.
+// Enforced server-side here AND mirrored in the page UI (single source: the
+// constant + record-type list below).
+export const MIN_ENTRIES_FOR_REFLECTION = 5;
+export const REFLECTION_GATE_RECORD_TYPES = [
+  "prepare",
+  "review",
+  "repair",
+  "pulse_check",
+] as const;
+
 const MODEL = "claude-opus-4-7";
 const MAX_TOKENS = 1500;
 const ANTHROPIC_TIMEOUT_MS = 45_000;
@@ -79,6 +95,7 @@ type GenerateOutcome =
   | { status: "cached"; row: WeeklyReflectionRow }
   | { status: "created"; row: WeeklyReflectionRow }
   | { status: "profile_missing" }
+  | { status: "insufficient_entries"; count: number; needed: number }
   | { status: "insufficient_coins"; balance: number; needed: number };
 
 export class ReflectionGenerationError extends Error {
@@ -245,6 +262,34 @@ function buildEntryLookup(
 }
 
 /**
+ * Count the user's all-time completed, non-deleted entries across the four
+ * reflective Coach modules (Prepare/Review/Repair/Pulse Check). This is the
+ * gate for the first weekly reflection (MIN_ENTRIES_FOR_REFLECTION). Throws
+ * db_read_failed on query error so the caller fails CLOSED (no generation,
+ * no charge) rather than generating on a bad count. `head: true` makes this a
+ * COUNT-only query — no rows transferred.
+ */
+export async function countReflectionEligibleEntries(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("raw_records")
+    .select("raw_record_id", { count: "exact", head: true })
+    .eq("user_id", userId)
+    .in("record_type", [...REFLECTION_GATE_RECORD_TYPES])
+    .eq("is_complete", true)
+    .is("deleted_at", null);
+  if (error) {
+    throw new ReflectionGenerationError(
+      `raw_records count failed: ${error.message}`,
+      "db_read_failed",
+    );
+  }
+  return count ?? 0;
+}
+
+/**
  * Fetch the latest fresh+current-version row for this user, validate its
  * ai_json shape, and return it — or null if no usable cache exists.
  *
@@ -309,6 +354,22 @@ export async function generateReflection(
   const cachedRow = await readCachedReflection(supabase, userId);
   if (cachedRow) {
     return { status: "cached", row: cachedRow };
+  }
+
+  // Entry-count gate: the first reflection requires at least
+  // MIN_ENTRIES_FOR_REFLECTION completed entries across the four reflective
+  // modules. Checked AFTER the cache short-circuit (an already-generated
+  // reflection still renders even if entries were later deleted below the
+  // threshold) and BEFORE the profile read + coin reserve, so a user below the
+  // bar is never charged. Mirrored in the /insights page UI; this is the
+  // un-bypassable half.
+  const eligibleEntries = await countReflectionEligibleEntries(supabase, userId);
+  if (eligibleEntries < MIN_ENTRIES_FOR_REFLECTION) {
+    return {
+      status: "insufficient_entries",
+      count: eligibleEntries,
+      needed: MIN_ENTRIES_FOR_REFLECTION,
+    };
   }
 
   // Fetch profile.

@@ -72,6 +72,14 @@ interface FakeConfig {
   profile?: { data: unknown; error: unknown };
   entries?: { data: unknown; error: unknown };
   insert?: { data: unknown; error: unknown };
+  /**
+   * Drives the entry-count gate (countReflectionEligibleEntries). The count
+   * query and the windowed entries read both hit raw_records in this fake, so
+   * the result object carries both `.count` (gate) and `.data` (entries).
+   * Defaults to 5 — at/above MIN_ENTRIES_FOR_REFLECTION — so the coin-path
+   * tests below clear the gate without each having to set it.
+   */
+  entryCount?: number;
 }
 
 // Minimal chainable Supabase fake. Each `.from(table)` returns a fresh closure
@@ -81,9 +89,11 @@ interface FakeConfig {
 //   .single()      → insert result (weekly_reflections insert)
 //   await chain    → list result keyed by table (persons / raw_records / …)
 function makeFakeSupabase(cfg: FakeConfig): SupabaseClient<Database> {
-  const lists: Record<string, { data: unknown; error: unknown }> = {
+  const lists: Record<string, { data?: unknown; error: unknown; count?: number }> = {
     persons: { data: [], error: null },
-    raw_records: cfg.entries ?? { data: [], error: null },
+    // `count` clears (or, when entryCount < 5, triggers) the entry-count gate;
+    // `data` feeds the windowed entries read. Same object serves both queries.
+    raw_records: { count: cfg.entryCount ?? 5, ...(cfg.entries ?? { data: [], error: null }) },
     before_you_send_entries: { data: [], error: null },
     review_entries: { data: [], error: null },
   };
@@ -288,6 +298,34 @@ describe("generateReflection — coin charge (Slice B3)", () => {
     ).rejects.toBeInstanceOf(ReflectionGenerationError);
 
     expect(onChargedGenerationFailed).not.toHaveBeenCalled();
+  });
+
+  it("returns insufficient_entries WITHOUT reserving coins or calling the LLM when below the gate", async () => {
+    // Entry-count gate: fewer than MIN_ENTRIES_FOR_REFLECTION reflective-module
+    // entries → no profile read, no coin reserve, no LLM. The gate runs after
+    // the cache miss and before any charge, so a below-bar user is never billed.
+    const reserveCoins = vi.fn();
+    const onChargedGenerationFailed = vi.fn();
+
+    const supabase = makeFakeSupabase({
+      cached: { data: null, error: null },
+      profile: PROFILE_OK,
+      entries: ENTRIES_OK,
+      entryCount: 3,
+    });
+
+    const out = await generateReflection(supabase, "user-1", {
+      reserveCoins,
+      onChargedGenerationFailed,
+    });
+
+    expect(out.status).toBe("insufficient_entries");
+    if (out.status === "insufficient_entries") {
+      expect(out.count).toBe(3);
+      expect(out.needed).toBe(5);
+    }
+    expect(reserveCoins).not.toHaveBeenCalled();
+    expect(anthropicMock.create).not.toHaveBeenCalled();
   });
 
   it("throws coin_charge_failed (no LLM) when the reserve errors", async () => {
