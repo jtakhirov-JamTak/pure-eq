@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
-import { requirePaidAccessApi } from "@/lib/require-access";
 
 export const runtime = "nodejs";
 
@@ -24,10 +23,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Paid-only surface.
-  const gate = await requirePaidAccessApi(user);
-  if (gate) return gate;
-
+  // Coins redesign Phase 3: enumerating your own threads is free (login-only).
   const rl = await rateLimit(`threads:get:${user.id}`, { limit: 30, windowMs: 60_000 });
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });

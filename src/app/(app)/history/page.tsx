@@ -1,7 +1,6 @@
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
-import { requirePaidAccessPage } from "@/lib/require-access";
 import { HistoryList, type HistoryEntry } from "./history-list";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { captureServerRead } from "@/lib/read-capture";
@@ -39,8 +38,7 @@ export default async function HistoryPage() {
 
   const supabase = await createClient();
 
-  await requirePaidAccessPage(user);
-
+  // Coins redesign Phase 3: viewing your own history is free (login-only).
   const countQueries = DELETABLE_TYPES.map((t) =>
     supabase
       .from("raw_records")

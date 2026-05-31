@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { requirePaidAccessPage } from "@/lib/require-access";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 import { captureServerRead } from "@/lib/read-capture";
 
@@ -33,8 +32,7 @@ export default async function ThreadsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  await requirePaidAccessPage(user);
-
+  // Coins redesign Phase 3: viewing your own threads is free (login-only).
   const [threadsRes, personsRes] = await Promise.all([
     supabase
       .from("conversation_threads")

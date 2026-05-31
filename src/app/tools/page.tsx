@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { hasToolsAccess } from "@/lib/require-access";
-import { ToolsHubLocked } from "./tools-hub-locked";
 import { SkyBackground } from "@/components/brand/SkyBackground";
 
 export default async function ToolsPage() {
@@ -12,10 +10,8 @@ export default async function ToolsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  if (!(await hasToolsAccess(user))) {
-    return <ToolsHubLocked />;
-  }
-
+  // Coins redesign Phase 3: Tools are free (login-only). The old 7-day Tools
+  // free-window + locked-hub card are retired.
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
       <SkyBackground variant="tools-hub" />

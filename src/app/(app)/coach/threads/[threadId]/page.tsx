@@ -1,7 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { requirePaidAccessPage } from "@/lib/require-access";
 import ThreadStatusSelector from "./thread-status-selector";
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
@@ -22,9 +21,7 @@ export default async function ThreadDetailPage({
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  // Paid-only surface.
-  await requirePaidAccessPage(user);
-
+  // Coins redesign Phase 3: viewing your own thread is free (login-only).
   // Fetch thread (RLS ensures user ownership).
   const { data: thread } = await supabase
     .from("conversation_threads")

@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/supabase/server";
-import { checkSubscription } from "@/lib/subscription";
-import { isAdmin } from "@/lib/admin";
 import { AppShell } from "@/components/app-shell";
 import { readFirstName } from "@/lib/user-metadata";
 
@@ -21,26 +19,11 @@ export default async function AppLayout({
     redirect("/login");
   }
 
-  // Admin bypass: admins skip the subscription gate entirely.
-  if (!isAdmin(user.email)) {
-    // Coach backstop: redirect to paywall only when the user has exhausted
-    // every Coach free use (Prepare + Review + Before-You-Send + Pulse
-    // Check) OR the free period has elapsed. Until then, the individual
-    // Coach surfaces rely on their API-side `free_one` reservations — so
-    // a user with 3 of 4 free uses burned can still reach the 4th. Other
-    // paid surfaces (/insights, /history, /coach/threads*, /coach/repair)
-    // gate themselves via requirePaidAccessPage.
-    const access = await checkSubscription(user.id);
-    const allCoachFreeUsed =
-      access.freePrepareUsed &&
-      access.freeReviewUsed &&
-      access.freeBeforeYouSendUsed &&
-      access.freePulseCheckUsed;
-    const freePeriodExpired = !access.freePeriodActive;
-    if (!access.hasAccess && (allCoachFreeUsed || freePeriodExpired)) {
-      redirect("/paywall");
-    }
-  }
+  // Coins redesign Slice B Phase 3 (2026-05-30): the old Coach paywall backstop
+  // is retired. Manual Coach flows (saving entries) are free; AI feedback is
+  // coin-gated at the API (run-module spends coins only on generateAi:true).
+  // So this layout is now an auth gate only. Insights still self-gates its page
+  // via requirePaidAccessPage until the B3 coin-debit lands.
 
   return (
     <AppShell

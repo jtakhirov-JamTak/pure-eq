@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { createOverwhelmedSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
-import { requireToolsAccessApi } from "@/lib/require-access";
 
 export const runtime = "nodejs";
 
@@ -50,10 +49,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // 2b. Tools gate: admin OR paid OR within 7-day Tools window.
-  const toolsGate = await requireToolsAccessApi(user);
-  if (toolsGate) return toolsGate;
-
+  // 2b. Coins redesign Phase 3: Tools are free (login-only); no access gate.
   // 3. Rate limit — minute bucket blocks burst, day bucket blocks row exhaustion.
   const rlMin = await rateLimit(`overwhelmed:min:${user.id}`, {
     limit: 10,

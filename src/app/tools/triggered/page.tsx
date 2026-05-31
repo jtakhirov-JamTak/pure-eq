@@ -1,7 +1,6 @@
 // Pure EQ domain — replace in fork.
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { requireToolsAccessPage } from "@/lib/require-access";
 import TriggeredClient from "./triggered-client";
 
 export default async function TriggeredPage() {
@@ -10,6 +9,6 @@ export default async function TriggeredPage() {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
-  await requireToolsAccessPage(user);
+  // Coins redesign Phase 3: Tools are free (login-only).
   return <TriggeredClient />;
 }
