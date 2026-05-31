@@ -32,11 +32,16 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // Public routes — no auth required
+  // Public routes — no auth required.
+  // /api/payments/webhook MUST be here: Stripe calls it server-to-server with no
+  // login cookie, and its Stripe signature IS the auth. Without this exclusion
+  // the !user check below 307-redirects the webhook to /login, Stripe doesn't
+  // follow redirects, and purchases never credit. (Coins B2 fix.)
   const publicRoutes = ["/", "/login", "/signup", "/onboarding"];
-  const isPublicRoute = publicRoutes.some(
-    (route) => pathname === route || pathname.startsWith("/api/auth")
-  );
+  const isPublicRoute =
+    publicRoutes.some((route) => pathname === route) ||
+    pathname.startsWith("/api/auth") ||
+    pathname === "/api/payments/webhook";
 
   // If not authenticated and trying to access protected route → redirect to login
   if (!user && !isPublicRoute) {
