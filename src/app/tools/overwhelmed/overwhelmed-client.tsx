@@ -4,13 +4,21 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { CountdownTimer, unlockAudio } from "@/components/countdown-timer";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import {
   BodySilhouette,
   type BodyRegion,
 } from "@/components/brand/BodySilhouette";
-import { StepDots } from "@/components/brand/StepDots";
-import { safeUUID } from "@/lib/utils";
+import {
+  FlowScreen,
+  FlowHeader,
+  FlowFooter,
+} from "@/components/ui/flow-screen";
+import { SelectableRow } from "@/components/ui/selectable";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
+import { Card } from "@/components/ui/card";
+import { cn, safeUUID } from "@/lib/utils";
 
 const AFTER_FEELINGS = [
   "Calmer",
@@ -38,7 +46,45 @@ type Step =
 
 type Mode = "idle" | "submitting" | "success" | "error";
 
-const OverwhelmedBackground = () => <SkyBackground variant="stormy" />;
+// Reading screen (intro/success/error) — scrollable, renders inside the app
+// shell over the body's Storm gradient.
+function ReadingScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-10">
+      <StormBackground />
+      {children}
+    </div>
+  );
+}
+
+// 1–5 rating row. Tapping a number records it and advances (set-then-advance,
+// the safe pattern — no submit in the same tick).
+function RatingRow({
+  value,
+  onPick,
+}: {
+  value: number | null;
+  onPick: (n: number) => void;
+}) {
+  return (
+    <div className="flex gap-2">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button
+          key={n}
+          onClick={() => onPick(n)}
+          className={cn(
+            "flex h-14 flex-1 items-center justify-center rounded-[14px] text-[22px] font-medium transition active:scale-[0.97]",
+            value === n
+              ? "bg-accent text-accent-text shadow-cta"
+              : "border border-hairline bg-surface text-ink",
+          )}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function OverwhelmedClient() {
   const router = useRouter();
@@ -112,68 +158,64 @@ export default function OverwhelmedClient() {
     const delta =
       beforeRating && afterRating ? beforeRating - afterRating : null;
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <OverwhelmedBackground />
-        <h2
-          className="font-display text-[30px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.7px" }}
+      <ReadingScreen>
+        <Kicker className="text-accent-ink">Overwhelmed · Complete</Kicker>
+        <h1
+          className="mt-3 text-[26px] font-medium leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
         >
-          Exercise <span className="italic">complete</span>
-        </h2>
+          Exercise complete
+        </h1>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your regulation entry has been saved.
         </p>
         {delta !== null && delta > 0 && (
           <p className="mt-2 text-[13px] font-medium text-ink-soft">
-            Your overwhelm went from {beforeRating} to {afterRating} — a{" "}
-            {delta}-point drop.
+            Your overwhelm went from {beforeRating} to {afterRating} — a {delta}
+            -point drop.
           </p>
         )}
-        <button
-          onClick={() => router.push("/tools")}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        <PrimaryButton onClick={() => router.push("/tools")} className="mt-8">
           Done
-        </button>
-      </div>
+        </PrimaryButton>
+      </ReadingScreen>
     );
   }
 
   if (mode === "error") {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <OverwhelmedBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <h1
+          className="text-[24px] font-medium leading-[1.18] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
           Save failed
-        </h2>
+        </h1>
         <p className="mt-3 text-[14px] font-medium text-danger">
           {submitError || "Something went wrong."}
         </p>
-        <button
+        <PrimaryButton
           onClick={() => afterFeeling && handleSubmit(afterFeeling)}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+          className="mt-8"
         >
           Try again
-        </button>
-        <button
+        </PrimaryButton>
+        <SecondaryButton
           onClick={() => router.push("/tools")}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+          className="mt-3 w-full"
         >
           Back to Tools
-        </button>
-      </div>
+        </SecondaryButton>
+      </ReadingScreen>
     );
   }
 
   if (mode === "submitting") {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
-        <OverwhelmedBackground />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
             Saving your entry…
           </p>
@@ -184,18 +226,15 @@ export default function OverwhelmedClient() {
 
   if (step === "intro") {
     return (
-      <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <OverwhelmedBackground />
-        <span className="inline-block rounded-pill bg-brand-deep px-3 py-1 text-[11px] font-bold uppercase tracking-[1.2px] text-white">
-          Overwhelmed
-        </span>
-        <h2
-          className="mt-3 font-display text-[32px] leading-[1.1] text-ink"
-          style={{ letterSpacing: "-0.9px" }}
+      <ReadingScreen>
+        <Kicker className="text-accent-ink">Overwhelmed</Kicker>
+        <h1
+          className="mt-3 text-[28px] font-medium leading-[1.1] text-ink"
+          style={{ letterSpacing: "-0.7px" }}
         >
           Settle the <span className="italic">storm</span>.
-        </h2>
-        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+        </h1>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           A short regulation exercise to help you calm your body and reduce the
           grip of intense emotion.
         </p>
@@ -203,191 +242,152 @@ export default function OverwhelmedClient() {
           {["Feel", "Label", "Validate", "Regulate", "Move"].map((name, i) => (
             <div
               key={name}
-              className="flex items-center gap-3 rounded-card-xs bg-surface px-4 py-2.5 shadow-soft"
+              className="flex items-center gap-3 rounded-card-sm border border-hairline bg-surface px-4 py-2.5"
             >
-              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-surface-tint text-[12px] font-bold text-brand-deep">
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-accent-soft text-[12px] font-bold text-accent-ink">
                 {i + 1}
               </span>
               <span className="text-[14px] font-semibold text-ink">{name}</span>
             </div>
           ))}
         </div>
-        <button
+        <PrimaryButton
           onClick={() => {
             unlockAudio();
             setStep("before-rating");
           }}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+          className="mt-8"
         >
           Start
-        </button>
-        <button
+        </PrimaryButton>
+        <SecondaryButton
           onClick={() => router.push("/tools")}
-          className="mt-3 inline-flex min-h-11 w-full items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
+          className="mt-3 w-full"
         >
           Back to Tools
-        </button>
-      </div>
+        </SecondaryButton>
+      </ReadingScreen>
     );
   }
 
-  return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <OverwhelmedBackground />
+  // --- Wizard steps (FlowScreen full-screen takeover) ---
+  const header = (onBack: () => void) => (
+    <FlowHeader
+      onBack={onBack}
+      eyebrow="Overwhelmed"
+      counter={`${stepIndex} / ${totalSteps}`}
+      dots={null}
+    />
+  );
+  const backOnly = (onBack: () => void) => (
+    <SecondaryButton onClick={onBack} className="w-full">
+      Back
+    </SecondaryButton>
+  );
 
-      <div className="flex items-center justify-between">
-        <span className="inline-block rounded-pill bg-brand-deep px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white">
-          Overwhelmed
-        </span>
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          {stepIndex} / {totalSteps}
-        </p>
-      </div>
-      <div className="mt-3">
-        <StepDots current={stepIndex - 1} total={totalSteps} />
-      </div>
+  if (step === "before-rating") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("intro"))}
+        footer={backOnly(() => setStep("intro"))}
+        title="How overwhelmed do you feel right now?"
+        helper="1 = slightly, 5 = very"
+      >
+        <RatingRow
+          value={beforeRating}
+          onPick={(n) => {
+            setBeforeRating(n);
+            setStep("feel");
+          }}
+        />
+      </FlowScreen>
+    );
+  }
 
-      {step === "before-rating" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            How overwhelmed do you feel <span className="italic">right now</span>?
-          </h2>
-          <p className="mt-2 text-[13px] font-medium text-ink-soft">
-            1 = slightly, 5 = very
-          </p>
-          <div className="mt-5 flex gap-2">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                onClick={() => {
-                  setBeforeRating(n);
-                  setStep("feel");
-                }}
-                className={`flex h-14 flex-1 items-center justify-center rounded-card-sm font-display text-[22px] transition active:scale-[0.97] ${
-                  beforeRating === n
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
+  if (step === "feel") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("before-rating"))}
+        footer={
+          <FlowFooter
+            onBack={() => setStep("before-rating")}
+            primaryLabel="Next"
+            onPrimary={() => setStep("label")}
+          />
+        }
+        title="Where do you feel it in your body?"
+        helper="31 seconds. Just notice — no fixing."
+      >
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto">
+          <BodySilhouette selected={bodyLocation} onChange={setBodyLocation} />
+          <CountdownTimer durationSeconds={31} onComplete={() => {}} label="Body scan" />
         </div>
-      )}
+      </FlowScreen>
+    );
+  }
 
-      {step === "feel" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            Where do you <span className="italic">feel it</span> in your body?
-          </h2>
-          <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
-            31 seconds. Just notice — no fixing.
-          </p>
-          <div className="mt-5">
-            <BodySilhouette
-              selected={bodyLocation}
-              onChange={setBodyLocation}
-            />
-          </div>
-          <div className="mt-5">
-            <CountdownTimer
-              durationSeconds={31}
-              onComplete={() => {}}
-              label="Body scan"
-            />
-          </div>
-          <button
-            onClick={() => setStep("label")}
-            className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-          >
-            Next
-          </button>
+  if (step === "label") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("feel"))}
+        footer={
+          <FlowFooter
+            onBack={() => setStep("feel")}
+            primaryLabel="Next"
+            onPrimary={() => feelingLabel.trim() && setStep("validate")}
+            primaryDisabled={!feelingLabel.trim()}
+          />
+        }
+        title="Label"
+        helper={'Complete this sentence: "I feel ___ because ___."'}
+      >
+        <div key="label" className="flex min-h-0 flex-1 flex-col">
+          <VoiceInput
+            value={feelingLabel}
+            onChange={setFeelingLabel}
+            fill
+            placeholder="I feel... because..."
+          />
         </div>
-      )}
+      </FlowScreen>
+    );
+  }
 
-      {step === "label" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
+  if (step === "validate") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("label"))}
+        footer={
+          <FlowFooter
+            onBack={() => setStep("label")}
+            primaryLabel="Done"
+            onPrimary={() => setStep("regulate")}
+          />
+        }
+        title="Validate"
+        helper="Slowly say to yourself 3 times:"
+      >
+        <Card className="mt-2">
+          <p
+            className="text-center text-[20px] font-medium italic leading-[1.3] text-accent-ink"
+            style={{ letterSpacing: "-0.3px" }}
           >
-            Label
-          </h2>
-          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Complete this sentence: &quot;I feel ___ because ___.&quot;
+            &quot;It makes sense to feel this way right now.&quot;
           </p>
-          <div className="mt-5">
-            <VoiceInput
-              key={step}
-              value={feelingLabel}
-              onChange={setFeelingLabel}
-              rows={3}
-              placeholder="I feel... because..."
-            />
-          </div>
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={() => setStep("feel")}
-              className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setStep("validate")}
-              disabled={!feelingLabel.trim()}
-              className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+        </Card>
+      </FlowScreen>
+    );
+  }
 
-      {step === "validate" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            Validate
-          </h2>
-          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Slowly say to yourself 3 times:
-          </p>
-          <div className="mt-5 rounded-card bg-surface p-6 shadow-card">
-            <p
-              className="text-center font-display text-[20px] italic leading-[1.3] text-brand-deep"
-              style={{ letterSpacing: "-0.3px" }}
-            >
-              &quot;It makes sense to feel this way right now.&quot;
-            </p>
-          </div>
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={() => setStep("label")}
-              className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-            >
-              Back
-            </button>
-            <button
-              onClick={() => setStep("regulate")}
-              className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-
-      {step === "regulate" && (
-        <div className="mt-5 flex flex-col items-center">
+  if (step === "regulate") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("validate"))}
+        footer={backOnly(() => setStep("validate"))}
+        title="In for 4, hold 4, out for 6."
+        helper="You don't need to do this perfectly. Just slowly."
+      >
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center">
           <div className="w-full">
             <CountdownTimer
               durationSeconds={61}
@@ -395,100 +395,67 @@ export default function OverwhelmedClient() {
               breathingMode
             />
           </div>
-          <div className="mt-2 text-center">
-            <h2
-              className="font-display text-[22px] leading-[1.25] text-ink"
-              style={{ letterSpacing: "-0.4px" }}
-            >
-              In for 4, hold 4,{" "}
-              <span className="italic">out for 6</span>.
-            </h2>
-            <p className="mt-1.5 max-w-[260px] text-[13px] font-medium text-ink-soft">
-              You don&apos;t need to do this perfectly. Just slowly.
-            </p>
-          </div>
         </div>
-      )}
+      </FlowScreen>
+    );
+  }
 
-      {step === "move" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            Move
-          </h2>
-          <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Take one small action to shift your state — walk, stretch, drink
-            water, tidy up, or step outside.
-          </p>
-          <div className="mt-5">
-            <CountdownTimer
-              durationSeconds={121}
-              onComplete={() => setStep("after-rating")}
-              label="Movement break"
-            />
-          </div>
+  if (step === "move") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("regulate"))}
+        footer={backOnly(() => setStep("regulate"))}
+        title="Move"
+        helper="Take one small action to shift your state — walk, stretch, drink water, tidy up, or step outside."
+      >
+        <div className="flex min-h-0 flex-1 flex-col justify-center">
+          <CountdownTimer
+            durationSeconds={121}
+            onComplete={() => setStep("after-rating")}
+            label="Movement break"
+          />
         </div>
-      )}
+      </FlowScreen>
+    );
+  }
 
-      {step === "after-rating" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
-          >
-            How overwhelmed do you feel <span className="italic">now</span>?
-          </h2>
-          <p className="mt-2 text-[13px] font-medium text-ink-soft">
-            1 = slightly, 5 = very
-          </p>
-          <div className="mt-5 flex gap-2">
-            {[1, 2, 3, 4, 5].map((n) => (
-              <button
-                key={n}
-                onClick={() => {
-                  setAfterRating(n);
-                  setStep("close");
-                }}
-                className={`flex h-14 flex-1 items-center justify-center rounded-card-sm font-display text-[22px] transition active:scale-[0.97] ${
-                  afterRating === n
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+  if (step === "after-rating") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("move"))}
+        footer={backOnly(() => setStep("move"))}
+        title="How overwhelmed do you feel now?"
+        helper="1 = slightly, 5 = very"
+      >
+        <RatingRow
+          value={afterRating}
+          onPick={(n) => {
+            setAfterRating(n);
+            setStep("close");
+          }}
+        />
+      </FlowScreen>
+    );
+  }
 
-      {step === "close" && (
-        <div className="mt-5">
-          <h2
-            className="font-display text-[26px] leading-[1.12] text-ink"
-            style={{ letterSpacing: "-0.5px" }}
+  // close
+  return (
+    <FlowScreen
+      header={header(() => setStep("after-rating"))}
+      footer={backOnly(() => setStep("after-rating"))}
+      title="How do you feel now?"
+    >
+      <div className="space-y-2">
+        {AFTER_FEELINGS.map((feeling) => (
+          <SelectableRow
+            key={feeling}
+            selected={afterFeeling === feeling}
+            onClick={() => handleSubmit(feeling)}
           >
-            How do you feel now?
-          </h2>
-          <div className="mt-5 space-y-2">
-            {AFTER_FEELINGS.map((feeling) => (
-              <button
-                key={feeling}
-                onClick={() => handleSubmit(feeling)}
-                className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
-                  afterFeeling === feeling
-                    ? "bg-brand text-white shadow-cta"
-                    : "bg-surface text-ink shadow-soft"
-                }`}
-              >
-                {feeling}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+            {feeling}
+          </SelectableRow>
+        ))}
+      </div>
+    </FlowScreen>
   );
 }

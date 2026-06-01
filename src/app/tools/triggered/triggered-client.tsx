@@ -3,10 +3,17 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { GradientSlider } from "@/components/brand/GradientSlider";
-import { StepDots } from "@/components/brand/StepDots";
-import { safeUUID } from "@/lib/utils";
+import {
+  FlowScreen,
+  FlowHeader,
+  FlowFooter,
+} from "@/components/ui/flow-screen";
+import { SelectableRow } from "@/components/ui/selectable";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
+import { cn, safeUUID } from "@/lib/utils";
 
 const EMOTIONS = [
   "Angry",
@@ -71,7 +78,16 @@ const STEPS = [
   },
 ];
 
-const TriggeredBackground = () => <SkyBackground variant="calm" />;
+// Reading screen (intro/success/error) — scrollable, renders inside the app
+// shell over the body's Storm gradient.
+function ReadingScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-10">
+      <StormBackground />
+      {children}
+    </div>
+  );
+}
 
 export default function TriggeredClient() {
   const router = useRouter();
@@ -139,61 +155,57 @@ export default function TriggeredClient() {
 
   if (submitError && !submitting) {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <TriggeredBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <h1
+          className="text-[24px] font-medium leading-[1.18] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
           Save failed
-        </h2>
+        </h1>
         <p className="mt-3 text-[14px] font-medium text-danger">{submitError}</p>
-        <button
+        <PrimaryButton
           onClick={() => afterFeeling && handleSubmit(afterFeeling)}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+          className="mt-8"
         >
           Try again
-        </button>
-        <button
+        </PrimaryButton>
+        <SecondaryButton
           onClick={() => router.push("/tools")}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+          className="mt-3 w-full"
         >
           Back to Tools
-        </button>
-      </div>
+        </SecondaryButton>
+      </ReadingScreen>
     );
   }
 
   if (success) {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <TriggeredBackground />
-        <h2
-          className="font-display text-[30px] leading-[1.12] text-ink"
-          style={{ letterSpacing: "-0.7px" }}
+      <ReadingScreen>
+        <Kicker className="text-accent-ink">Triggered · Saved</Kicker>
+        <h1
+          className="mt-3 text-[24px] font-medium leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
-          Trigger log <span className="italic">saved</span>.
-        </h2>
+          Trigger log saved.
+        </h1>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your trigger entry has been saved. Over time, these entries help
           surface patterns in how you respond to difficult moments.
         </p>
-        <button
-          onClick={() => router.push("/tools")}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        <PrimaryButton onClick={() => router.push("/tools")} className="mt-8">
           Done
-        </button>
-      </div>
+        </PrimaryButton>
+      </ReadingScreen>
     );
   }
 
   if (submitting) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
-        <TriggeredBackground />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-trigger" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
             Saving your entry…
           </p>
@@ -204,95 +216,75 @@ export default function TriggeredClient() {
 
   if (step === -1) {
     return (
-      <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <TriggeredBackground />
-        <span
-          className="inline-block rounded-pill px-3 py-1 text-[11px] font-bold uppercase tracking-[1.2px] text-white"
-          style={{ backgroundColor: "var(--color-trigger)" }}
-        >
-          Triggered
-        </span>
-        <h2
-          className="mt-3 font-display text-[32px] leading-[1.1] text-ink"
-          style={{ letterSpacing: "-0.9px" }}
+      <ReadingScreen>
+        <Kicker className="text-accent-ink">Triggered</Kicker>
+        <h1
+          className="mt-3 text-[28px] font-medium leading-[1.1] text-ink"
+          style={{ letterSpacing: "-0.7px" }}
         >
           Catch the <span className="italic">spark</span>.
-        </h2>
-        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
+        </h1>
+        <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Log a trigger in real time so you can understand your pattern, calm
           down, and see the situation more clearly.
         </p>
-        <p className="mt-2 text-[13px] font-medium text-ink-soft">
+        <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
           This entry will also be used to generate coaching insights over time.
         </p>
-        <button
-          onClick={() => setStep(0)}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        <PrimaryButton onClick={() => setStep(0)} className="mt-8">
           Start
-        </button>
-        <button
+        </PrimaryButton>
+        <SecondaryButton
           onClick={() => router.push("/tools")}
-          className="mt-3 inline-flex min-h-11 w-full items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70"
+          className="mt-3 w-full"
         >
           Back to Tools
-        </button>
-      </div>
+        </SecondaryButton>
+      </ReadingScreen>
     );
   }
 
+  // Close step — pick an after-feeling; tapping submits (no Next button).
   if (step === STEPS.length) {
     return (
-      <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        <TriggeredBackground />
-        <div className="flex items-center justify-between">
-          <span
-            className="inline-block rounded-pill px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white"
-            style={{ backgroundColor: "var(--color-trigger)" }}
+      <FlowScreen
+        header={
+          <FlowHeader
+            onBack={() => setStep(STEPS.length - 1)}
+            eyebrow="Triggered"
+            counter={`${step + 1} / ${totalSteps}`}
+            dots={null}
+          />
+        }
+        footer={
+          <SecondaryButton
+            onClick={() => setStep(STEPS.length - 1)}
+            className="w-full"
           >
-            Triggered
-          </span>
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-            {step + 1} / {totalSteps}
-          </p>
+            Back
+          </SecondaryButton>
+        }
+        title="How do you feel now?"
+      >
+        <div className="flex min-h-0 flex-1 flex-col">
+          {submitError && (
+            <p className="mb-3 shrink-0 text-[13px] font-medium text-danger">
+              {submitError}
+            </p>
+          )}
+          <div className="space-y-2">
+            {AFTER_FEELINGS.map((feeling) => (
+              <SelectableRow
+                key={feeling}
+                selected={afterFeeling === feeling}
+                onClick={() => handleSubmit(feeling)}
+              >
+                {feeling}
+              </SelectableRow>
+            ))}
+          </div>
         </div>
-        <div className="mt-3">
-          <StepDots current={step} total={totalSteps} />
-        </div>
-
-        <h2
-          className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
-          style={{ letterSpacing: "-0.5px" }}
-        >
-          How do you feel now?
-        </h2>
-        {submitError && (
-          <p className="mt-2 text-[13px] font-medium text-danger">
-            {submitError}
-          </p>
-        )}
-        <div className="mt-5 space-y-2">
-          {AFTER_FEELINGS.map((feeling) => (
-            <button
-              key={feeling}
-              onClick={() => handleSubmit(feeling)}
-              className={`flex h-12 w-full items-center rounded-card-sm px-4 text-[14px] font-semibold transition active:scale-[0.99] ${
-                afterFeeling === feeling
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
-            >
-              {feeling}
-            </button>
-          ))}
-        </div>
-        <button
-          onClick={() => setStep(STEPS.length - 1)}
-          className="mt-6 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-        >
-          Back
-        </button>
-      </div>
+      </FlowScreen>
     );
   }
 
@@ -308,50 +300,52 @@ export default function TriggeredClient() {
     }
   }
 
+  function handleBack() {
+    if (step > 0) setStep(step - 1);
+    else setStep(-1);
+  }
+
+  const nextDisabled =
+    (currentStep.type === "textarea" && !value.trim()) ||
+    (currentStep.type === "emotion" && !data.emotion?.trim()) ||
+    (currentStep.type === "urge" && !data.urge?.trim());
+
   return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(2rem,env(safe-area-inset-bottom))]">
-      <TriggeredBackground />
-
-      <div className="flex items-center justify-between">
-        <span
-          className="inline-block rounded-pill px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-white"
-          style={{ backgroundColor: "var(--color-trigger)" }}
-        >
-          Triggered
-        </span>
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          {step + 1} / {totalSteps}
-        </p>
-      </div>
-      <div className="mt-3">
-        <StepDots current={step} total={totalSteps} />
-      </div>
-
-      <h2
-        className="mt-5 font-display text-[26px] leading-[1.12] text-ink"
-        style={{ letterSpacing: "-0.5px" }}
+    <FlowScreen
+      header={
+        <FlowHeader
+          onBack={handleBack}
+          eyebrow="Triggered"
+          counter={`${step + 1} / ${totalSteps}`}
+          dots={null}
+        />
+      }
+      footer={
+        <FlowFooter
+          onBack={handleBack}
+          primaryLabel="Next"
+          onPrimary={handleNext}
+          primaryDisabled={nextDisabled}
+        />
+      }
+      title={currentStep.title}
+      helper={currentStep.prompt ?? undefined}
+    >
+      <div
+        key={currentStep.key}
+        className="flex min-h-0 flex-1 flex-col"
       >
-        {currentStep.title}
-      </h2>
-      {currentStep.prompt && (
-        <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-          {currentStep.prompt}
-        </p>
-      )}
-
-      <div className="mt-5">
         {currentStep.type === "textarea" && (
           <VoiceInput
-            key={currentStep.key}
             value={value}
             onChange={(next) => setFieldValue(currentStep.key, next)}
-            rows={4}
+            fill
             placeholder="Type or tap the mic to speak..."
           />
         )}
 
         {currentStep.type === "emotion" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
             <div className="flex flex-wrap gap-2">
               {EMOTIONS.map((emo) => {
                 const on = data.emotion === emo;
@@ -359,22 +353,13 @@ export default function TriggeredClient() {
                   <button
                     key={emo}
                     type="button"
-                    onClick={() =>
-                      setFieldValue("emotion", on ? "" : emo)
-                    }
-                    className={`min-h-11 rounded-pill px-4 text-[13px] font-bold transition active:scale-[0.97] ${
+                    onClick={() => setFieldValue("emotion", on ? "" : emo)}
+                    className={cn(
+                      "min-h-11 rounded-pill px-4 text-[13px] font-semibold transition active:scale-[0.97]",
                       on
-                        ? "text-white"
-                        : "bg-surface text-ink shadow-soft"
-                    }`}
-                    style={
-                      on
-                        ? {
-                            backgroundColor: "var(--color-trigger)",
-                            boxShadow: "0 8px 18px rgba(243,148,35,0.50)",
-                          }
-                        : undefined
-                    }
+                        ? "bg-accent text-accent-text"
+                        : "border border-hairline bg-surface text-ink",
+                    )}
                   >
                     {emo}
                   </button>
@@ -382,7 +367,6 @@ export default function TriggeredClient() {
               })}
             </div>
             <VoiceInput
-              key={currentStep.key}
               value={data.emotion || ""}
               onChange={(next) => setFieldValue("emotion", next)}
               rows={2}
@@ -391,48 +375,27 @@ export default function TriggeredClient() {
             <GradientSlider
               value={emotionIntensity}
               onChange={setEmotionIntensity}
-              accentColor="var(--color-trigger)"
+              accentColor="var(--color-accent)"
             />
           </div>
         )}
 
         {currentStep.type === "urge" && (
-          <div className="space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
             <VoiceInput
-              key={currentStep.key}
               value={data.urge || ""}
               onChange={(next) => setFieldValue("urge", next)}
-              rows={2}
+              rows={3}
               placeholder="What was your urge?"
             />
             <GradientSlider
               value={urgeIntensity}
               onChange={setUrgeIntensity}
-              accentColor="var(--color-trigger)"
+              accentColor="var(--color-accent)"
             />
           </div>
         )}
       </div>
-
-      <div className="mt-6 flex gap-3">
-        <button
-          onClick={() => setStep(step - 1)}
-          className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-        >
-          Back
-        </button>
-        <button
-          onClick={handleNext}
-          disabled={
-            (currentStep.type === "textarea" && !value.trim()) ||
-            (currentStep.type === "emotion" && !data.emotion?.trim()) ||
-            (currentStep.type === "urge" && !data.urge?.trim())
-          }
-          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-        >
-          Next
-        </button>
-      </div>
-    </div>
+    </FlowScreen>
   );
 }
