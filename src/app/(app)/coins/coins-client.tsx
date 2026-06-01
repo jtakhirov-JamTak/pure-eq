@@ -6,7 +6,8 @@
 // never here.
 
 import { useState } from "react";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
+import { Card } from "@/components/ui/card";
 
 type PackView = {
   key: string;
@@ -53,10 +54,10 @@ export function CoinsClient({
 
   return (
     <div className="relative min-h-full px-5 pt-6 pb-[max(8rem,env(safe-area-inset-bottom))]">
-      <SkyBackground variant="calm" />
+      <StormBackground />
 
       <h1
-        className="font-display text-[28px] leading-[1.15] text-ink"
+        className="font-display text-[28px] font-medium leading-[1.15] text-ink"
         style={{ letterSpacing: "-0.6px" }}
       >
         Coins
@@ -76,7 +77,7 @@ export function CoinsClient({
       </p>
 
       {purchaseState === "success" && (
-        <div className="mt-4 rounded-card-sm bg-surface p-4 shadow-soft">
+        <Card className="mt-4">
           <p className="text-[14px] font-semibold leading-[1.5] text-ink">
             Payment received — thank you.
           </p>
@@ -84,14 +85,14 @@ export function CoinsClient({
             Your coins land within a few seconds. Refresh this page if the
             balance above hasn&rsquo;t updated yet.
           </p>
-        </div>
+        </Card>
       )}
       {purchaseState === "cancelled" && (
-        <div className="mt-4 rounded-card-sm bg-surface p-4 shadow-soft">
+        <Card className="mt-4">
           <p className="text-[14px] font-medium leading-[1.5] text-ink-soft">
             Checkout cancelled — you haven&rsquo;t been charged.
           </p>
-        </div>
+        </Card>
       )}
 
       <div className="mt-6 flex flex-col gap-3">
@@ -99,9 +100,9 @@ export function CoinsClient({
           const inFlight = submitting === pack.key;
           const disabled = submitting !== null;
           return (
-            <div
+            <Card
               key={pack.key}
-              className="flex items-center justify-between gap-3 rounded-card-sm bg-surface p-4 shadow-soft"
+              className="flex items-center justify-between gap-3"
             >
               <div className="min-w-0">
                 <p className="text-[16px] font-bold text-ink">{pack.name}</p>
@@ -113,15 +114,15 @@ export function CoinsClient({
                 onClick={() => buy(pack.key)}
                 disabled={disabled}
                 aria-label={`Buy ${pack.name} for ${pack.priceLabel}`}
-                className="flex h-12 min-w-[104px] items-center justify-center rounded-pill bg-brand px-5 text-[14px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-50"
+                className="flex h-12 min-w-[104px] items-center justify-center rounded-pill bg-accent px-5 text-[14px] font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-50"
               >
                 {inFlight ? (
-                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent-text/30 border-t-accent-text" />
                 ) : (
                   pack.priceLabel
                 )}
               </button>
-            </div>
+            </Card>
           );
         })}
       </div>
