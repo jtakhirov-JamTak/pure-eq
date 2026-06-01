@@ -46,6 +46,10 @@ export function FlowScreen({
   // (no document.body on the server / hydration mismatch).
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
+    // Intentional mount gate: flip to client-only on first mount so the portal
+    // (which needs document.body) never renders on the server. The one extra
+    // render is the whole point — safe to ignore the set-state-in-effect rule.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     // Hide the AppShell chrome (top bar + bottom tab bar) while the flow is
     // open. The overlay is a full-screen takeover; the tab bar otherwise pokes
