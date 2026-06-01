@@ -6,6 +6,8 @@ import { reflectionOutputSchema, type ReflectionOutput } from "@/lib/ai/schemas"
 import { COIN_COSTS } from "@/types";
 import { useCoinBalance } from "@/components/coach/coin-ui";
 import { ReflectionCard } from "./ReflectionCard";
+import { Card } from "@/components/ui/card";
+import { Kicker } from "@/components/ui/kicker";
 
 // Kind values sent by the API route (from ReflectionGenerationError.kind).
 // Map each to a short human label so a silent writer regression is
@@ -177,14 +179,12 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
     );
   } else if (state.phase === "generating") {
     body = (
-      <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
-        <h2 className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          Your weekly reflection
-        </h2>
+      <Card className="mt-4 p-5">
+        <Kicker>Your weekly reflection</Kicker>
         <div className="mt-3 flex items-center gap-3">
           <div
             aria-hidden="true"
-            className="h-4 w-4 animate-spin rounded-full border-2 border-brand border-t-transparent"
+            className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
           />
           <p className="text-[13px] font-medium text-ink-soft">
             Reading your last 4 weeks…
@@ -193,14 +193,12 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         <p className="mt-2 text-[12px] font-medium text-ink-muted">
           This can take up to a minute.
         </p>
-      </div>
+      </Card>
     );
   } else if (state.phase === "insufficient") {
     body = (
-      <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
-        <h2 className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          Your weekly reflection
-        </h2>
+      <Card className="mt-4 p-5">
+        <Kicker>Your weekly reflection</Kicker>
         <p className="mt-2 text-[14px] font-semibold leading-[1.5] text-ink">
           You need {state.needed} {state.needed === 1 ? "coin" : "coins"} for
           this — you have {state.balance}.
@@ -210,18 +208,16 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         </p>
         <Link
           href="/coins"
-          className="mt-3 inline-flex h-11 items-center justify-center rounded-pill bg-brand px-5 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+          className="mt-3 inline-flex h-11 items-center justify-center rounded-pill bg-accent px-5 text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
         >
           Get coins
         </Link>
-      </div>
+      </Card>
     );
   } else if (state.phase === "error") {
     body = (
-      <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
-        <h2 className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          Your weekly reflection
-        </h2>
+      <Card className="mt-4 p-5">
+        <Kicker>Your weekly reflection</Kicker>
         <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
           Something went wrong generating this week&apos;s reflection —
           we&apos;ve been notified. You weren&apos;t charged. Try again in a
@@ -234,19 +230,17 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         ) : null}
         <button
           onClick={generate}
-          className="mt-4 flex h-12 w-full items-center justify-center rounded-pill bg-brand text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+          className="mt-4 flex h-12 w-full items-center justify-center rounded-pill bg-accent text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
         >
           Try again · {COST} coins
         </button>
-      </div>
+      </Card>
     );
   } else {
     // idle — the explicit CTA.
     body = (
-      <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
-        <h2 className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          Your weekly reflection
-        </h2>
+      <Card className="mt-4 p-5">
+        <Kicker>Your weekly reflection</Kicker>
         <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
           {hasStaleCached
             ? "Your previous reflection is no longer current. Generate a fresh read of your last 4 weeks."
@@ -263,11 +257,11 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         )}
         <button
           onClick={generate}
-          className="mt-4 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98]"
+          className="mt-4 flex h-14 w-full items-center justify-center rounded-pill bg-accent text-[15px] font-bold text-accent-text shadow-cta transition active:scale-[0.98]"
         >
           Generate this week&apos;s reflection · {COST} coins
         </button>
-      </div>
+      </Card>
     );
   }
 

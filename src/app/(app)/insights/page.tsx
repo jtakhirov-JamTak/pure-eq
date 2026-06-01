@@ -22,7 +22,9 @@ import type { ProfileType } from "@/types";
 import { StyleBox } from "@/components/insights/StyleBox";
 import { ReflectionCard } from "@/components/insights/ReflectionCard";
 import { ReflectionKickoff } from "@/components/insights/ReflectionKickoff";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
+import { Card } from "@/components/ui/card";
+import { Kicker } from "@/components/ui/kicker";
 import {
   GENERATOR_VERSION,
   IDEMPOTENCY_WINDOW_MS,
@@ -158,14 +160,12 @@ export default async function InsightsPage() {
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
-      <SkyBackground variant="calm" />
+      <StormBackground />
 
       <div className="pt-2">
-        <span className="inline-block rounded-pill bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
-          Insights
-        </span>
+        <Kicker className="text-accent-ink">Insights</Kicker>
         <h1
-          className="mt-2.5 font-display text-[32px] leading-[1.08] text-ink"
+          className="mt-2.5 font-display text-[32px] font-medium leading-[1.08] text-ink"
           style={{ letterSpacing: "-1px" }}
         >
           Your <span className="italic">patterns</span> are who you are.
@@ -180,14 +180,12 @@ export default async function InsightsPage() {
           avatarColorClass={PROFILE_AVATAR_CLASSES[primary]}
         />
       ) : (
-        <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-            Your style
-          </p>
+        <Card className="mt-4 p-5">
+          <Kicker>Your style</Kicker>
           <p className="mt-2 text-[13px] font-medium text-ink-soft">
             Complete onboarding to see your profile here.
           </p>
-        </div>
+        </Card>
       )}
 
       {freshReflection ? (
@@ -198,10 +196,8 @@ export default async function InsightsPage() {
       ) : canGenerate ? (
         <ReflectionKickoff hasStaleCached={hasStaleCached} />
       ) : (
-        <div className="mt-4 rounded-card-sm bg-surface p-5 shadow-soft">
-          <h2 className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-            Your weekly reflection
-          </h2>
+        <Card className="mt-4 p-5">
+          <Kicker>Your weekly reflection</Kicker>
           <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
             Your first reflection unlocks after{" "}
             {MIN_ENTRIES_FOR_REFLECTION} Coach entries — enough to ground a read
@@ -213,19 +209,17 @@ export default async function InsightsPage() {
           </p>
           <Link
             href="/coach"
-            className="mt-4 inline-flex h-11 items-center justify-center rounded-pill bg-brand px-5 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+            className="mt-4 inline-flex h-11 items-center justify-center rounded-pill bg-accent px-5 text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
           >
             Go to Coach
           </Link>
-        </div>
+        </Card>
       )}
 
       {threads.length > 0 && (
         <div className="mt-4">
-          <span className="inline-block rounded-pill bg-brand px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
-            Open conversations
-          </span>
-          <ul className="mt-2.5 divide-y divide-hair rounded-card-xs bg-surface px-4 shadow-soft">
+          <Kicker className="text-accent-ink">Open conversations</Kicker>
+          <ul className="mt-2.5 divide-y divide-hairline rounded-card border border-hairline bg-surface px-4">
             {threads.map((thread) => {
               const personName = thread.person_id
                 ? (personMap.get(thread.person_id) ?? "Someone")
@@ -238,12 +232,12 @@ export default async function InsightsPage() {
                   >
                     <span
                       aria-hidden="true"
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-brand"
+                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
                     />
                     <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
                       {personName}
                     </span>
-                    <span className="shrink-0 text-[11px] font-medium text-ink-muted capitalize">
+                    <span className="shrink-0 text-[11px] font-medium text-ink-soft capitalize">
                       {thread.status === "stabilizing" ? "stabilizing" : "open"}
                     </span>
                   </Link>
