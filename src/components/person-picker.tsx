@@ -382,10 +382,10 @@ export function PersonPicker({
           disabled={disabled || transcribing}
           autoComplete="off"
           autoCapitalize="words"
-          className={`w-full rounded-xl border px-4 py-3 pr-24 text-base text-zinc-900 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+          className={`w-full rounded-[14px] border px-4 py-3 pr-24 text-base text-ink placeholder:text-ink-muted focus:outline-none ${
             selectedPersonId
-              ? "border-indigo-300 bg-indigo-50"
-              : "border-zinc-200 bg-white"
+              ? "border-accent bg-accent-soft"
+              : "border-hairline bg-surface focus:border-accent"
           }`}
         />
         {/* Right-side buttons: mic + clear */}
@@ -399,12 +399,12 @@ export function PersonPicker({
               aria-label={recording ? "Stop recording" : "Start voice input"}
               className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors ${
                 recording
-                  ? "bg-red-500 text-white"
-                  : "text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+                  ? "bg-danger text-white"
+                  : "text-accent-ink hover:bg-accent-soft"
               } disabled:opacity-50`}
             >
               {transcribing ? (
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-700" />
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
               ) : recording ? (
                 <span className="h-3 w-3 rounded-sm bg-white" />
               ) : (
@@ -440,7 +440,7 @@ export function PersonPicker({
                 onChange("");
                 setSuggestions([]);
               }}
-              className="flex h-11 w-11 items-center justify-center rounded-full text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-ink-soft hover:bg-surface-tint hover:text-ink"
               aria-label="Clear selection"
             >
               <svg
@@ -462,7 +462,7 @@ export function PersonPicker({
           {/* Search loading indicator */}
           {loading && !selectedPersonId && !recording && !transcribing && (
             <div className="flex h-10 w-10 items-center justify-center">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-indigo-500" />
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
             </div>
           )}
         </div>
@@ -470,11 +470,11 @@ export function PersonPicker({
 
       {/* Voice feedback */}
       {voiceError && (
-        <p className="mt-2 text-sm text-red-600">{voiceError}</p>
+        <p className="mt-2 text-sm text-danger">{voiceError}</p>
       )}
       {recording && !voiceError && (
-        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-red-600">
-          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-red-500" />
+        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-danger">
+          <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-danger" />
           Recording… {voiceSecondsLeft}s remaining
         </p>
       )}
@@ -489,7 +489,7 @@ export function PersonPicker({
             onClick={handleRedoClick}
             disabled={disabled}
             aria-label="Redo voice input"
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-full border border-hairline bg-surface px-4 py-2 text-sm font-medium text-ink-soft active:opacity-80 disabled:opacity-50"
           >
             <svg
               className="h-4 w-4"
@@ -512,20 +512,20 @@ export function PersonPicker({
       {showDropdown && suggestions.length > 0 && (
         <ul
           ref={dropdownRef}
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-xl border border-zinc-200 bg-white shadow-lg"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-[14px] border border-hairline bg-surface shadow-card"
         >
           {suggestions.map((person) => (
             <li key={person.person_id}>
               <button
                 type="button"
                 onClick={() => handleSelect(person)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-zinc-50 active:bg-zinc-100"
+                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-tint active:bg-surface-tint"
                 style={{ minHeight: "44px" }}
               >
-                <span className="text-base font-medium text-zinc-900">
+                <span className="text-base font-medium text-ink">
                   {person.display_name}
                 </span>
-                <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs text-zinc-500">
+                <span className="rounded-full bg-surface-tint px-2 py-0.5 text-xs text-ink-soft">
                   {RELATIONSHIP_LABELS[person.relationship_domain] ??
                     person.relationship_domain}
                 </span>

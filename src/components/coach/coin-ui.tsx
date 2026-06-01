@@ -83,15 +83,15 @@ export function TierSelector({
             type="button"
             onClick={() => onChange(t.value)}
             aria-pressed={active}
-            className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-card-sm px-3 py-2 transition active:scale-[0.99] ${
+            className={`flex min-h-12 flex-1 flex-col items-center justify-center rounded-[14px] px-3 py-2 transition active:scale-[0.99] ${
               active
-                ? "bg-brand text-white shadow-cta"
-                : "bg-surface text-ink shadow-soft"
+                ? "bg-accent text-accent-text shadow-cta"
+                : "border border-hairline bg-surface text-ink"
             }`}
           >
-            <span className="text-[14px] font-bold">{t.label}</span>
+            <span className="text-[14px] font-semibold">{t.label}</span>
             <span
-              className={`text-[11px] font-medium ${active ? "text-white/80" : "text-ink-muted"}`}
+              className={`text-[11px] font-medium ${active ? "text-accent-text/70" : "text-ink-soft"}`}
             >
               {t.cards} · {t.coins}
             </span>
@@ -153,12 +153,12 @@ export function GetFeedbackScreen({
     <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
       {background}
       {eyebrow}
-      <h2
-        className="mt-3 font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+      <h1
+        className="mt-3 text-[24px] font-medium leading-[1.15] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
         {title}
-      </h2>
+      </h1>
       <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
         {blurb}
       </p>
@@ -182,7 +182,7 @@ export function GetFeedbackScreen({
       )}
 
       {insufficient ? (
-        <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+        <div className="mt-5 rounded-card border border-hairline bg-surface p-4">
           <p className="text-[14px] font-semibold leading-[1.5] text-ink">
             You need {insufficient.needed}{" "}
             {insufficient.needed === 1 ? "coin" : "coins"} for this — you have{" "}
@@ -193,7 +193,7 @@ export function GetFeedbackScreen({
           </p>
           <Link
             href="/coins"
-            className="mt-3 inline-flex h-11 items-center justify-center rounded-pill bg-brand px-5 text-[14px] font-bold text-white shadow-cta active:scale-[0.98]"
+            className="mt-3 inline-flex h-11 items-center justify-center rounded-[14px] bg-accent px-5 text-[14px] font-semibold text-accent-text shadow-cta active:scale-[0.98]"
           >
             Get coins
           </Link>
@@ -201,7 +201,7 @@ export function GetFeedbackScreen({
       ) : (
         <button
           onClick={onGenerate}
-          className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98]"
+          className="mt-6 flex h-14 w-full items-center justify-center rounded-[14px] bg-accent text-[15px] font-semibold text-accent-text shadow-cta transition active:scale-[0.98]"
         >
           {actionLabel} · {cost} {cost === 1 ? "coin" : "coins"}
         </button>
@@ -213,7 +213,7 @@ export function GetFeedbackScreen({
 
       <button
         onClick={onBack}
-        className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+        className="mt-3 flex h-12 w-full items-center justify-center rounded-[14px] border border-hairline bg-surface text-[14px] font-semibold text-ink active:opacity-80"
       >
         Back to Coach
       </button>

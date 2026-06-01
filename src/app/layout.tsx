@@ -1,26 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Fraunces, Fredoka } from "next/font/google";
+import { Hanken_Grotesk, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const dmSans = DM_Sans({
+// Storm theme type system: Hanken Grotesk for body + headings (headings at
+// weight 500, not bold), IBM Plex Mono for the uppercase kicker/labels/timers
+// that are the signature of the system.
+const hanken = Hanken_Grotesk({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
-  variable: "--font-dm-sans",
-  display: "swap",
-});
-
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
   style: ["normal", "italic"],
-  variable: "--font-fraunces",
+  variable: "--font-hanken",
   display: "swap",
 });
 
-const fredoka = Fredoka({
+const plexMono = IBM_Plex_Mono({
   subsets: ["latin"],
-  weight: ["700"],
-  variable: "--font-fredoka",
+  weight: ["500"],
+  variable: "--font-plex-mono",
   display: "swap",
 });
 
@@ -29,7 +25,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#D6EEFF",
+  themeColor: "#0F1825",
 };
 
 export const metadata: Metadata = {
@@ -60,7 +56,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`h-full antialiased ${dmSans.variable} ${fraunces.variable} ${fredoka.variable}`}
+      className={`h-full antialiased ${hanken.variable} ${plexMono.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col font-sans">{children}</body>

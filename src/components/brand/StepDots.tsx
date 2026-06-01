@@ -16,8 +16,8 @@ export function StepDots({ current, total }: Props) {
             style={{
               width: isCurrent ? 22 : 5,
               backgroundColor: isPastOrCurrent
-                ? "var(--color-brand)"
-                : "rgba(14,39,72,0.20)",
+                ? "var(--color-accent)"
+                : "var(--color-hairline-strong)",
             }}
           />
         );

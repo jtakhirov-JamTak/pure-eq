@@ -1,70 +1,103 @@
 @import "tailwindcss";
 
+/* Storm theme — dark navy + sky-blue. The page background is a gradient
+   (radial sky glow over a vertical navy fall-off); --foreground is the
+   primary ink. --bg-solid is the flat fallback used for the `background`
+   color utility + the PWA chrome color. */
 :root {
-  --background: #ffffff;
-  --foreground: #0e2748;
+  --background: radial-gradient(
+      120% 78% at 72% -8%,
+      rgba(86, 168, 242, 0.16),
+      rgba(86, 168, 242, 0) 54%
+    ),
+    linear-gradient(180deg, #182739 0%, #0f1825 100%);
+  --bg-solid: #0f1825;
+  --foreground: #eaf1f8;
 }
 
 /* ============================================================
-   Design tokens — Tailwind 4 @theme inline block
+   Design tokens — Tailwind 4 @theme inline block (Storm)
    ============================================================
-   All tokens are auto-promoted to utilities by Tailwind 4:
-   --color-brand     → bg-brand, text-brand, border-brand, …
-   --radius-card     → rounded-card
-   --shadow-card     → shadow-card
-   --font-display    → font-display
-   Reference: https://tailwindcss.com/docs/theme (v4 docs)
+   Tokens auto-promote to utilities:
+   --color-accent → bg-accent/text-accent/border-accent, etc.
+   The legacy names (brand/ink/surface/…) are retained and remapped to
+   Storm values so existing utility classes restyle app-wide without a
+   per-file sweep. New surfaces should prefer the explicit Storm names
+   (accent / accent-soft / accent-ink / accent-text / hairline).
    ============================================================ */
 @theme inline {
-  /* Colors — sky/ink/warm palette from design handoff */
-  --color-background: var(--background);
+  /* Base */
+  --color-background: var(--bg-solid);
   --color-foreground: var(--foreground);
-  --color-sky-hi: #d6eeff;
-  --color-sky-mid: #a9d9ff;
-  --color-brand: #4fb0ff;
-  --color-brand-deep: #2a86e3;
-  --color-ink: #0e2748;
-  --color-ink-soft: #4a5e82;
-  /* SOT 2026-05-08 fix3 → 2026-05-17 followup: #6a7da3 cleared AA on
-     white (~4.6:1) but the page indicator + step labels sit at the top of
-     pages where the sky-hi gradient (#d6eeff) is brightest — contrast
-     dropped to ~3.4:1 there, still failing AA. Darkened to #4f6390 which
-     measures ~4.9:1 on sky-hi and ~5.8:1 on white. Stays distinctly
-     lighter than ink-soft (#4a5e82) so the visual hierarchy is preserved.
-     CLAUDE.md rule: zinc-500 minimum for body/label, zinc-600 for xs. */
-  --color-ink-muted: #4f6390;
-  --color-surface: #ffffff;
-  --color-surface-tint: #eef8ff;
-  --color-warm: #ffd166;
-  --color-warm-soft: #fff1ca;
-  --color-hair: rgba(14, 39, 72, 0.08);
-  --color-danger: #d95f5f;
-  --color-trigger: #f39423;
 
-  /* Fonts — indirect through next/font CSS variables */
-  --font-sans: var(--font-dm-sans), Inter, -apple-system, system-ui, sans-serif;
-  --font-display: var(--font-fraunces), "DM Serif Display", Georgia, serif;
-  --font-brand: var(--font-fredoka), var(--font-dm-sans), sans-serif;
+  /* Surfaces */
+  --color-surface: #1e2a3b;
+  --color-surface-tint: #24344a;
+
+  /* Ink */
+  --color-ink: #eaf1f8;
+  --color-ink-soft: #9db0c6;
+  --color-ink-muted: #647688;
+
+  /* Accent (Sky) — the scarce resource: primary action + active/selected */
+  --color-accent: #56a8f2;
+  --color-accent-soft: rgba(86, 168, 242, 0.16);
+  --color-accent-ink: #8fc6f8;
+  --color-accent-text: #0b1521;
+
+  /* Legacy brand aliases → accent, so older bg-brand/text-brand stay live */
+  --color-brand: #56a8f2;
+  --color-brand-deep: #3b86c9;
+
+  /* Secondary accent (warm) */
+  --color-warm: #d9a05a;
+  --color-warm-soft: rgba(217, 160, 90, 0.16);
+
+  /* Status */
+  --color-positive: #5fb98c;
+  --color-caution: #d9a05a;
+  --color-danger: #e0796b;
+  --color-trigger: #d9a05a;
+
+  /* Hairlines */
+  --color-hair: rgba(208, 224, 244, 0.1);
+  --color-hairline: rgba(208, 224, 244, 0.1);
+  --color-hairline-strong: rgba(208, 224, 244, 0.16);
+
+  /* Fonts — indirect through next/font CSS variables.
+     Headings use the same Hanken Grotesk family at weight 500 (no serif
+     display face in Storm); the mono kicker is IBM Plex Mono. */
+  --font-sans: var(--font-hanken), Inter, -apple-system, system-ui, sans-serif;
+  --font-display: var(--font-hanken), Inter, -apple-system, system-ui, sans-serif;
+  --font-brand: var(--font-hanken), Inter, system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
 
   /* Radii */
-  --radius-card: 28px;
-  --radius-card-sm: 22px;
-  --radius-card-xs: 20px;
+  --radius-card: 18px;
+  --radius-card-sm: 16px;
+  --radius-card-xs: 13px;
+  --radius-input: 14px;
   --radius-pill: 100px;
   --radius-tile: 14px;
 
-  /* Shadows */
-  --shadow-card: 0 14px 30px rgba(20, 60, 130, 0.14);
-  --shadow-soft: 0 4px 12px rgba(20, 60, 130, 0.08);
-  --shadow-cta: 0 10px 24px rgba(79, 176, 255, 0.6);
-  --shadow-dark: 0 16px 36px rgba(14, 39, 72, 0.4);
+  /* Shadows — Storm keeps surfaces flat (hairline borders). Shadows are
+     reserved for the floating primary button + raised menus/bezel. */
+  --shadow-card: 0 18px 40px rgba(0, 0, 0, 0.4);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.28);
+  --shadow-cta: 0 10px 24px rgba(86, 168, 242, 0.28);
+  --shadow-dark: 0 16px 36px rgba(0, 0, 0, 0.45);
+}
+
+html {
+  background: var(--bg-solid);
 }
 
 body {
   background: var(--background);
+  background-attachment: fixed;
   color: var(--foreground);
   font-family:
-    var(--font-dm-sans), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    var(--font-hanken), Inter, -apple-system, BlinkMacSystemFont, "Segoe UI",
     Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
@@ -138,12 +171,25 @@ input[type="radio"] {
   }
 }
 
+/* Voice-wave bars — gentle infinite alternate scaleY. Each bar offsets its
+   delay via an inline style so the 9 bars ripple rather than pulse in unison.
+   Frozen under prefers-reduced-motion by the global block below. */
+@keyframes voicewave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
 .animate-fade-in {
   animation: fade-in 150ms ease-out;
 }
 
 /* Coach result-card entrance. action-in runs 100ms after card-in so the
-   navy action row lands with mild conclusion feel. Global
+   accent action row lands with mild conclusion feel. Global
    prefers-reduced-motion block below collapses both to ~0ms. */
 @keyframes card-in {
   from {

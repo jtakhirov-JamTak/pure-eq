@@ -31,7 +31,7 @@ function TabLabel({
       className={cn(
         "flex h-full w-full items-center justify-center rounded-[22px] text-[13px] font-bold tracking-[-0.1px] transition-colors duration-200",
         showActive
-          ? "bg-brand text-white shadow-cta"
+          ? "bg-accent text-accent-text shadow-cta"
           : "text-ink-soft hover:text-ink",
       )}
     >
@@ -89,7 +89,7 @@ export function AppShell({
             type="button"
             aria-label="Open menu"
             onClick={() => setMenuOpen((v) => !v)}
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-surface text-[14px] font-bold text-ink shadow-soft transition active:scale-95"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-hairline bg-surface text-[14px] font-bold text-ink transition active:scale-95"
           >
             {avatarInitial(firstName, userEmail)}
           </button>
@@ -100,7 +100,7 @@ export function AppShell({
                 className="fixed inset-0 z-40"
                 onClick={() => setMenuOpen(false)}
               />
-              <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-[20px] bg-surface py-1 shadow-card">
+              <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-[16px] border border-hairline bg-surface py-1 shadow-card">
                 <Link
                   href="/coins"
                   onClick={() => setMenuOpen(false)}
@@ -145,7 +145,7 @@ export function AppShell({
 
       {/* Bottom tab bar — 48px pill with blur */}
       <nav
-        className="fixed bottom-[max(env(safe-area-inset-bottom),1rem)] left-0 right-0 z-30 mx-5 flex gap-1 rounded-pill border border-white/80 bg-white/90 p-1.5 shadow-soft backdrop-blur-[18px]"
+        className="fixed bottom-[max(env(safe-area-inset-bottom),1rem)] left-0 right-0 z-30 mx-5 flex gap-1 rounded-pill border border-hairline bg-surface/85 p-1.5 shadow-card backdrop-blur-[18px]"
         aria-label="Primary"
       >
         {TABS.map((tab) => {

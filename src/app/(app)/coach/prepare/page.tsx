@@ -6,11 +6,21 @@ import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
-import { SkyBackground } from "@/components/brand/SkyBackground";
-import { CoachPage } from "@/components/coach/coach-page";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { TextareaIfThen } from "@/components/coach/steps/textarea-if-then";
 import {
-  pageCanAdvance,
+  FlowScreen,
+  FlowHeader,
+  FlowFooter,
+} from "@/components/ui/flow-screen";
+import { ProgressDots } from "@/components/ui/progress-dots";
+import { SelectableRow } from "@/components/ui/selectable";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
+import { Card } from "@/components/ui/card";
+import {
+  flattenVisibleSteps,
+  questionCanAdvance,
   type PageDef,
   type StepDef,
 } from "@/lib/coach/page-flow";
@@ -49,6 +59,8 @@ const CONVERSATION_MOVE_LABELS: Record<ConversationMove, string> = {
 //   1 setup:   personName, relationship, conversationMove
 //   2 context: situation (facts), fairestVersion
 //   3 plan:    hiddenAskAndFloor, opener, triggerPlan
+// Redesign §5: the 3 pages stay as the progress MODEL (3 section dots); the
+// user advances one question at a time across the 8 flattened questions.
 const PREPARE_PAGES: PageDef[] = [
   {
     pageKey: "setup",
@@ -147,7 +159,16 @@ const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
   { label: "A deeper read", key: "deeper_read" },
 ];
 
-const PrepareBackground = () => <SkyBackground variant="calm" />;
+// Reading screen (results/refusal/saved) — scrollable, renders inside the app
+// shell over the body's Storm gradient.
+function ReadingScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-10">
+      <StormBackground />
+      {children}
+    </div>
+  );
+}
 
 function NormalResultCard({
   output,
@@ -163,17 +184,14 @@ function NormalResultCard({
     return typeof v === "string" && v.trim().length > 0;
   });
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <PrepareBackground />
-      <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
-        Prepare
-      </span>
-      <h2
-        className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <Kicker className="text-accent-ink">Prepare · Complete</Kicker>
+      <h1
+        className="mt-3 text-[24px] font-medium leading-[1.15] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
-        Your <span className="italic">feedback</span>.
-      </h2>
+        Your feedback.
+      </h1>
       <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
         Keep each card, edit it in your words, or mark it not true.
       </p>
@@ -190,27 +208,19 @@ function NormalResultCard({
               entryId={entryId}
             />
           ) : (
-            <div
-              key={key}
-              className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
-            >
-              <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                {label}
-              </p>
+            <Card key={key} className="animate-card-in">
+              <Kicker>{label}</Kicker>
               <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
                 {text}
               </p>
-            </div>
+            </Card>
           );
         })}
       </div>
-      <button
-        onClick={onBack}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      <PrimaryButton onClick={onBack} className="mt-8">
         Done
-      </button>
-    </div>
+      </PrimaryButton>
+    </ReadingScreen>
   );
 }
 
@@ -222,26 +232,22 @@ function RefusalCard({
   onBack: () => void;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <PrepareBackground />
-      <h2
-        className="font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <h1
+        className="text-[24px] font-medium leading-[1.18] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
         A note before you go further.
-      </h2>
-      <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+      </h1>
+      <Card className="mt-5">
         <p className="text-[14px] font-medium leading-[1.55] text-ink">
           {output.message_to_user}
         </p>
-      </div>
-      <button
-        onClick={onBack}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      </Card>
+      <PrimaryButton onClick={onBack} className="mt-8">
         Back to Coach
-      </button>
-    </div>
+      </PrimaryButton>
+    </ReadingScreen>
   );
 }
 
@@ -255,37 +261,30 @@ function EmptyOutputCard({
   message?: string;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <PrepareBackground />
-      <h2
-        className="font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <h1
+        className="text-[24px] font-medium leading-[1.18] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
         Entry saved
-      </h2>
+      </h1>
       <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
         {message ??
           "Your entry is saved, but no coaching feedback is available to show for this one."}
       </p>
-      <button
-        onClick={onRetryCoaching}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      <PrimaryButton onClick={onRetryCoaching} className="mt-8">
         Try again for coaching feedback
-      </button>
-      <button
-        onClick={onBack}
-        className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-      >
+      </PrimaryButton>
+      <SecondaryButton onClick={onBack} className="mt-3 w-full">
         Back to Coach
-      </button>
-    </div>
+      </SecondaryButton>
+    </ReadingScreen>
   );
 }
 
 export default function PreparePage() {
   const router = useRouter();
-  const [pageIndex, setPageIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
   const [tier, setTier] = useState<AiTier>("quick");
   // State is keyed by field name (all lean fields are flat strings/enums).
   const [data, setData] = useState<Record<string, unknown>>({});
@@ -310,28 +309,33 @@ export default function PreparePage() {
     idempotencyKeyRef.current = safeUUID();
   }
 
-  const totalPages = PREPARE_PAGES.length;
-  const currentPage = PREPARE_PAGES[pageIndex];
+  // One-question-per-screen sequence (redesign §5). Recomputed from `data`
+  // each render so conditional Qs (none in Prepare today) would enter/leave
+  // automatically; clamp the index when the list could shrink.
+  const steps = flattenVisibleSteps(PREPARE_PAGES, data);
+  const safeIndex = Math.min(stepIndex, steps.length - 1);
+  const current = steps[safeIndex];
+  const isLastStep = safeIndex === steps.length - 1;
+  const canAdvance = questionCanAdvance(current.q, data);
 
   function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
   }
 
-  function canAdvance(): boolean {
-    return pageCanAdvance(currentPage, data);
-  }
-
   function handleNext() {
-    if (!canAdvance()) return;
-    if (pageIndex < totalPages - 1) {
-      setPageIndex(pageIndex + 1);
+    if (!questionCanAdvance(current.q, data)) return;
+    // Terminal-button branching keys off whether a later visible step exists,
+    // not an index constant (CLAUDE.md dynamic-STEPS rule).
+    if (safeIndex < steps.length - 1) {
+      setStepIndex(safeIndex + 1);
     } else {
       handleSave();
     }
   }
 
   function handleBack() {
-    if (pageIndex > 0) setPageIndex(pageIndex - 1);
+    if (safeIndex > 0) setStepIndex(safeIndex - 1);
+    else router.push("/coach");
   }
 
   // Build the request body. The stable idempotencyKey ties the free save and
@@ -475,9 +479,9 @@ export default function PreparePage() {
   if (submitting) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
-        <PrepareBackground />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
             Generating your coaching feedback…
           </p>
@@ -489,12 +493,8 @@ export default function PreparePage() {
   if (awaitingGenerate) {
     return (
       <GetFeedbackScreen
-        background={<PrepareBackground />}
-        eyebrow={
-          <span className="inline-block rounded-pill bg-brand px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-white">
-            Prepare
-          </span>
-        }
+        background={<StormBackground />}
+        eyebrow={<Kicker className="text-accent-ink">Prepare</Kicker>}
         title="Saved."
         blurb="Your entry is saved — it's yours to keep. Get AI coaching feedback whenever you're ready."
         tier={tier}
@@ -523,7 +523,7 @@ export default function PreparePage() {
     );
   }
 
-  // --- Form: page-level renderer ---
+  // --- Form: one question per screen (no-scroll FlowScreen) ---
   function renderStep(step: StepDef) {
     if (step.kind === "person") {
       return (
@@ -545,18 +545,13 @@ export default function PreparePage() {
       return (
         <div className="space-y-2">
           {RELATIONSHIPS.map((rel) => (
-            <button
+            <SelectableRow
               key={rel.value}
-              type="button"
+              selected={value === rel.value}
               onClick={() => setFieldValue(step.key, rel.value)}
-              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-[14px] font-semibold transition active:scale-[0.99] ${
-                value === rel.value
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
             >
               {rel.label}
-            </button>
+            </SelectableRow>
           ))}
         </div>
       );
@@ -566,18 +561,13 @@ export default function PreparePage() {
       return (
         <div className="space-y-2">
           {CONVERSATION_MOVES.map((move) => (
-            <button
+            <SelectableRow
               key={move}
-              type="button"
+              selected={value === move}
               onClick={() => setFieldValue(step.key, move)}
-              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-[14px] font-semibold transition active:scale-[0.99] ${
-                value === move
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
             >
               {CONVERSATION_MOVE_LABELS[move]}
-            </button>
+            </SelectableRow>
           ))}
         </div>
       );
@@ -588,7 +578,7 @@ export default function PreparePage() {
         <VoiceInput
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          rows={4}
+          fill
           placeholder="Type or tap the mic to speak..."
         />
       );
@@ -599,6 +589,7 @@ export default function PreparePage() {
         <TextareaIfThen
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
+          fill
         />
       );
     }
@@ -606,38 +597,42 @@ export default function PreparePage() {
   }
 
   return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <PrepareBackground />
-
-      <CoachPage
-        eyebrow="Prepare"
-        pageIndex={pageIndex}
-        totalPages={totalPages}
-        page={currentPage}
-        state={data}
-        renderStep={renderStep}
-        pageTitle={null}
-      />
-      {submitError && (
-        <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
-      )}
-      <div className="mt-6 flex gap-3">
-        {pageIndex > 0 && (
-          <button
-            onClick={handleBack}
-            className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-          >
-            Back
-          </button>
+    <FlowScreen
+      header={
+        <FlowHeader
+          onBack={handleBack}
+          eyebrow="Prepare"
+          counter={`${safeIndex + 1} / ${steps.length}`}
+          dots={
+            <ProgressDots
+              total={PREPARE_PAGES.length}
+              current={current.sectionIndex}
+            />
+          }
+        />
+      }
+      footer={
+        <FlowFooter
+          onBack={safeIndex > 0 ? handleBack : undefined}
+          primaryLabel={isLastStep ? "Save entry" : "Next"}
+          onPrimary={handleNext}
+          primaryDisabled={!canAdvance}
+        />
+      }
+      title={current.q.title}
+      helper={current.q.prompt ?? undefined}
+    >
+      <div
+        key={`${current.pageKey}.${current.q.key}`}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {renderStep(current.q)}
+        {isLastStep && submitError && (
+          <p className="mt-2 shrink-0 text-[13px] font-medium text-danger">
+            {submitError}
+          </p>
         )}
-        <button
-          onClick={handleNext}
-          disabled={!canAdvance()}
-          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-        >
-          {pageIndex === totalPages - 1 ? "Save entry" : "Next"}
-        </button>
       </div>
-    </div>
+    </FlowScreen>
   );
 }

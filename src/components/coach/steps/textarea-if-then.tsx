@@ -18,6 +18,7 @@ type Props = {
   onChange: (next: string) => void;
   placeholder?: string;
   rows?: number;
+  fill?: boolean;
 };
 
 const DEFAULT_PLACEHOLDER =
@@ -28,12 +29,14 @@ export function TextareaIfThen({
   onChange,
   placeholder = DEFAULT_PLACEHOLDER,
   rows = 4,
+  fill,
 }: Props) {
   return (
     <VoiceInput
       value={value ?? ""}
       onChange={onChange}
       rows={rows}
+      fill={fill}
       placeholder={placeholder}
     />
   );

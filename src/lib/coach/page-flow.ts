@@ -127,59 +127,104 @@ export type PageDef = {
 };
 
 /**
- * Returns true if every visible Q on the page has a non-empty value in
- * `state`. Hidden Qs (conditional?.(state) === false) are skipped.
+ * Returns true if a SINGLE Q is satisfied in `state`. A hidden Q
+ * (conditional?.(state) === false) is vacuously satisfied — it's skipped, not
+ * blocking. This is the per-question gate the one-question-per-screen flows use
+ * to enable Next; `pageCanAdvance` is the page-level fold over it.
  *
- * "Non-empty" is intentionally loose — `string` is trimmed and checked
- * for length > 0; arrays/objects/numbers/booleans are checked for any
- * truthy presence (covers chip selections, body location, timing combos).
+ * "Non-empty" is intentionally loose — `string` is trimmed and checked for
+ * length > 0; arrays/objects/numbers/booleans are checked for any truthy
+ * presence (covers chip selections, body location, timing combos).
+ */
+export function questionCanAdvance(
+  q: StepDef,
+  state: Record<string, unknown>,
+): boolean {
+  if (q.conditional && !q.conditional(state)) return true;
+  const v = state[q.key];
+  if (v == null) return false;
+  if (typeof v === "string") return v.trim().length > 0;
+  if (Array.isArray(v)) return v.length > 0;
+  if (typeof v === "object") {
+    const obj = v as Record<string, unknown>;
+    // SOT 2026-05-08 fix5 (#12): when requiredSubFields is declared, ONLY
+    // those keys must be non-empty. Everything else is ignored. Used by
+    // lessonScreen ({ a: required, b: optional, c: optional }).
+    if (q.requiredSubFields !== undefined) {
+      for (const key of q.requiredSubFields) {
+        const child = obj[key];
+        if (typeof child === "string") {
+          if (child.trim().length === 0) return false;
+        } else if (typeof child === "boolean") {
+          // booleans count as present.
+        } else if (child == null) {
+          return false;
+        }
+      }
+      return true;
+    }
+    // Default: every present sub-field must be non-empty AND the object
+    // must have at least one non-empty value. Used by timing_combo
+    // ({ when: string, isNowThatMoment: boolean }) and the
+    // textarea_with_body_chip composite ({ text, bodyLocation }).
+    let hasAny = false;
+    for (const key of Object.keys(obj)) {
+      const child = obj[key];
+      if (typeof child === "string") {
+        if (child.trim().length === 0) return false;
+        hasAny = true;
+      } else if (typeof child === "boolean") {
+        hasAny = true;
+      } else if (child != null) {
+        hasAny = true;
+      }
+    }
+    return hasAny;
+  }
+  // number / boolean present → satisfied.
+  return true;
+}
+
+/**
+ * Returns true if every visible Q on the page is satisfied. Hidden Qs are
+ * skipped. Fold of `questionCanAdvance` over the page.
  */
 export function pageCanAdvance(
   page: PageDef,
   state: Record<string, unknown>,
 ): boolean {
-  for (const q of page.qs) {
-    if (q.conditional && !q.conditional(state)) continue;
-    const v = state[q.key];
-    if (v == null) return false;
-    if (typeof v === "string" && v.trim().length === 0) return false;
-    if (Array.isArray(v) && v.length === 0) return false;
-    if (typeof v === "object" && !Array.isArray(v)) {
-      const obj = v as Record<string, unknown>;
-      // SOT 2026-05-08 fix5 (#12): when requiredSubFields is declared, ONLY
-      // those keys must be non-empty. Everything else is ignored. Used by
-      // lessonScreen ({ a: required, b: optional, c: optional }).
-      if (q.requiredSubFields !== undefined) {
-        for (const key of q.requiredSubFields) {
-          const child = obj[key];
-          if (typeof child === "string") {
-            if (child.trim().length === 0) return false;
-          } else if (typeof child === "boolean") {
-            // booleans count as present.
-          } else if (child == null) {
-            return false;
-          }
-        }
-        continue;
-      }
-      // Default: every present sub-field must be non-empty AND the object
-      // must have at least one non-empty value. Used by timing_combo
-      // ({ when: string, isNowThatMoment: boolean }) and the
-      // textarea_with_body_chip composite ({ text, bodyLocation }).
-      let hasAny = false;
-      for (const key of Object.keys(obj)) {
-        const child = obj[key];
-        if (typeof child === "string") {
-          if (child.trim().length === 0) return false;
-          hasAny = true;
-        } else if (typeof child === "boolean") {
-          hasAny = true;
-        } else if (child != null) {
-          hasAny = true;
-        }
-      }
-      if (!hasAny) return false;
+  return page.qs.every((q) => questionCanAdvance(q, state));
+}
+
+/**
+ * One flattened, currently-visible question in a one-question-per-screen flow,
+ * tagged with the section (page) it belongs to so the progress dots can track
+ * the ORIGINAL grouping (redesign §5).
+ */
+export type FlatStep = {
+  q: StepDef;
+  /** Section index = the page this Q came from. Drives the progress dots. */
+  sectionIndex: number;
+  pageKey: string;
+};
+
+/**
+ * Flatten a `PageDef[]` into the ordered sequence of currently-VISIBLE
+ * questions, one per screen. Recomputed from `state` each call, so a
+ * conditional Q that becomes visible/hidden enters/leaves the sequence
+ * automatically. Callers track an index into this list and must clamp it when
+ * the length shrinks (a prior answer hid a later Q).
+ */
+export function flattenVisibleSteps(
+  pages: PageDef[],
+  state: Record<string, unknown>,
+): FlatStep[] {
+  const out: FlatStep[] = [];
+  pages.forEach((page, sectionIndex) => {
+    for (const q of page.qs) {
+      if (q.conditional && !q.conditional(state)) continue;
+      out.push({ q, sectionIndex, pageKey: page.pageKey });
     }
-  }
-  return true;
+  });
+  return out;
 }
