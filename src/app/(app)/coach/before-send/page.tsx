@@ -6,7 +6,23 @@ import { VoiceInput } from "@/components/voice-input";
 import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { ACTION_FIELDS } from "@/lib/ai/schemas";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
+import {
+  FlowScreen,
+  FlowHeader,
+  FlowFooter,
+} from "@/components/ui/flow-screen";
+import { ProgressDots } from "@/components/ui/progress-dots";
+import { SelectableRow } from "@/components/ui/selectable";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
+import { Card } from "@/components/ui/card";
+import {
+  flattenVisibleSteps,
+  questionCanAdvance,
+  type PageDef,
+  type StepDef,
+} from "@/lib/coach/page-flow";
 import { safeUUID } from "@/lib/utils";
 import type { AiTier } from "@/types";
 import { createClient } from "@/lib/supabase/client";
@@ -56,6 +72,53 @@ type Prefill = {
   stashedAt?: number;
 };
 
+// Stepped wizard (redesign §5). Two sections (progress dots): the message
+// itself, then optional context. The draft leads — it's the required core
+// input; the two optional context fields trail. Payload + copy unchanged from
+// the prior single-scroll form.
+//   1 draft:   draftText (required), messageType (default "conflict")
+//   2 context: riskContext (optional), intentOptional (optional)
+const BYS_PAGES: PageDef[] = [
+  {
+    pageKey: "draft",
+    qs: [
+      {
+        key: "draftText",
+        title: "Your draft",
+        prompt:
+          "This isn't a proofreader. It's a gut-check on how the other person will read it.",
+        kind: "textarea",
+      },
+      {
+        key: "messageType",
+        title: "What kind of message is this?",
+        prompt: null,
+        kind: "select_message_type",
+      },
+    ],
+  },
+  {
+    pageKey: "context",
+    qs: [
+      {
+        key: "riskContext",
+        title: "What might make this land badly?",
+        prompt:
+          "Optional — pressure, blame, a prior fight, their state today. Anything you want the check to weigh.",
+        kind: "textarea",
+        optional: true,
+      },
+      {
+        key: "intentOptional",
+        title: "What do you want them to take away?",
+        prompt: "Optional — tell the coach what you hope they feel or do.",
+        kind: "textarea",
+        optional: true,
+      },
+    ],
+  },
+];
+
 type AiNormal = {
   mode: "normal";
   verdict: "safe" | "risky" | "do_not_send";
@@ -94,16 +157,25 @@ const VERDICT_LABEL: Record<AiNormal["verdict"], string> = {
   do_not_send: "Do not send.",
 };
 
-// Flat single-tint ribbon, not a pill. Muted green on safe so the
-// verdict reads as context, not a bright ad bar competing with the
-// action card below.
+// Flat single-tint ribbon, not a pill — reads as context, not a bright ad bar.
+// Storm dark palette: deep-tinted fill + light same-hue text (the safe pair is
+// the dark counterpart logged in memory project_darkmode_verdict_palette).
 const VERDICT_RIBBON: Record<AiNormal["verdict"], string> = {
-  safe: "bg-[#DFF5E7] text-[#166A3A]",
-  risky: "bg-warm text-ink",
+  safe: "bg-[#1B3A2A] text-[#A8D8B8]",
+  risky: "bg-[#3A2E18] text-[#E8C58A]",
   do_not_send: "bg-danger text-white",
 };
 
-const BysBackground = () => <SkyBackground variant="calm" />;
+// Reading screen (results/refusal/saved) — scrollable, renders inside the app
+// shell over the body's Storm gradient.
+function ReadingScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-10">
+      <StormBackground />
+      {children}
+    </div>
+  );
+}
 
 function RefusalCard({
   output,
@@ -113,36 +185,34 @@ function RefusalCard({
   onBack: () => void;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <BysBackground />
-      <h2
-        className="font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <h1
+        className="text-[24px] font-medium leading-[1.18] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
         A note before you go further.
-      </h2>
-      <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+      </h1>
+      <Card className="mt-5">
         <p className="text-[14px] font-medium leading-[1.55] text-ink">
           {output.message_to_user}
         </p>
-      </div>
-      <button
-        onClick={onBack}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      </Card>
+      <PrimaryButton onClick={onBack} className="mt-8">
         Back to Coach
-      </button>
-    </div>
+      </PrimaryButton>
+    </ReadingScreen>
   );
 }
 
 export default function BeforeYouSendPage() {
   const router = useRouter();
-  const [draftText, setDraftText] = useState("");
+  const [stepIndex, setStepIndex] = useState(0);
+  // Wizard state. messageType defaults to "conflict" so its step is always
+  // advanceable (matches the old pre-selected chip).
+  const [data, setData] = useState<Record<string, unknown>>({
+    messageType: "conflict",
+  });
   const [tier, setTier] = useState<AiTier>("quick");
-  const [messageType, setMessageType] = useState<MessageType>("conflict");
-  const [intentOptional, setIntentOptional] = useState("");
-  const [riskContext, setRiskContext] = useState("");
   const [beforeYouSendEntryId, setBeforeYouSendEntryId] = useState<
     string | null
   >(null);
@@ -176,17 +246,16 @@ export default function BeforeYouSendPage() {
     keyRef.current = safeUUID();
   }
 
-  // Read sessionStorage prefill once on mount (Review → BYS handoff from
-  // Commit 6). The stash is cleared on mount regardless of validation so
-  // a stale/foreign prefill never replays.
+  // Read sessionStorage prefill once on mount (Review/Pulse → BYS handoff).
+  // The stash is cleared on mount regardless of validation so a stale/foreign
+  // prefill never replays.
   //
   // sessionStorage is tab-scoped, not account-scoped. A user who logs out
-  // mid-flow and another user who logs in on the same tab would otherwise
-  // inherit the first user's draft. Two-gate defense:
+  // mid-flow and another who logs in on the same tab would otherwise inherit
+  // the first user's draft. Two-gate defense:
   //   1. stashedAt must be within PREFILL_MAX_AGE_MS (5 min)
   //   2. userId must match the current Supabase session
-  // Same class as the "null-sentinel cross-account guard" lesson in
-  // CLAUDE.md — the hint must be bound to a live auth signal.
+  // Same class as the "null-sentinel cross-account guard" lesson in CLAUDE.md.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -209,16 +278,22 @@ export default function BeforeYouSendPage() {
       }
       if (!parsed.userId) return;
       const supabase = createClient();
-      const { data } = await supabase.auth.getUser();
+      const { data: authData } = await supabase.auth.getUser();
       if (cancelled) return;
-      if (!data.user || data.user.id !== parsed.userId) return;
-      if (parsed.draftText) setDraftText(parsed.draftText);
-      if (parsed.messageType) setMessageType(parsed.messageType);
+      if (!authData.user || authData.user.id !== parsed.userId) return;
+      const prefilled = parsed;
+      setData((d) => ({
+        ...d,
+        ...(prefilled.draftText ? { draftText: prefilled.draftText } : {}),
+        ...(prefilled.messageType
+          ? { messageType: prefilled.messageType }
+          : {}),
+      }));
       // Banner-source tagging — set after both the age + userId gates pass
       // so a stale stash doesn't surface a banner with no payload.
-      if (parsed.sourcePulseCheckEntryId) {
+      if (prefilled.sourcePulseCheckEntryId) {
         setPrefillSource("pulse_check");
-      } else if (parsed.sourceReviewEntryId) {
+      } else if (prefilled.sourceReviewEntryId) {
         setPrefillSource("repair");
       }
     })();
@@ -227,15 +302,45 @@ export default function BeforeYouSendPage() {
     };
   }, []);
 
+  // One-question-per-screen sequence (redesign §5). No conditionals in BYS, but
+  // we use the same flatten so the wizard machinery matches the other flows.
+  const steps = flattenVisibleSteps(BYS_PAGES, data);
+  const safeIndex = Math.min(stepIndex, steps.length - 1);
+  const current = steps[safeIndex];
+  const isLastStep = safeIndex === steps.length - 1;
+  const canAdvance = questionCanAdvance(current.q, data);
+
+  function setFieldValue(key: string, next: unknown) {
+    setData((d) => ({ ...d, [key]: next }));
+  }
+
+  function handleNext() {
+    if (!questionCanAdvance(current.q, data)) return;
+    // Terminal-button branching keys off whether a later visible step exists,
+    // not an index constant (CLAUDE.md dynamic-STEPS rule).
+    if (safeIndex < steps.length - 1) {
+      setStepIndex(safeIndex + 1);
+    } else {
+      handleSaveDraft();
+    }
+  }
+
+  function handleBack() {
+    if (safeIndex > 0) setStepIndex(safeIndex - 1);
+    else router.push("/coach");
+  }
+
   // Shared request body. `key` ties a save and its verdict to one entry; `text`
   // is the draft being scored (the rewrite box sends a different text).
   function buildBody(text: string, key: string, generateAi: boolean) {
     return {
       tier,
       draftText: text,
-      messageType,
-      intentOptional: intentOptional.trim() || null,
-      riskContext: riskContext.trim() || null,
+      messageType: (data.messageType as MessageType | undefined) ?? "conflict",
+      intentOptional:
+        ((data.intentOptional as string | undefined) ?? "").trim() || null,
+      riskContext:
+        ((data.riskContext as string | undefined) ?? "").trim() || null,
       idempotencyKey: key,
       generateAi,
     };
@@ -245,7 +350,8 @@ export default function BeforeYouSendPage() {
   // "Get verdict" screen.
   async function handleSaveDraft() {
     if (submitRef.current) return;
-    if (!draftText.trim()) return;
+    const draftText = ((data.draftText as string | undefined) ?? "").trim();
+    if (!draftText) return;
     submitRef.current = true;
     setSubmitting(true);
     setSubmitError(null);
@@ -278,6 +384,7 @@ export default function BeforeYouSendPage() {
   // the balance is short (draft already saved), surfaced inline on the screen.
   async function handleGenerate() {
     if (submitRef.current) return;
+    const draftText = ((data.draftText as string | undefined) ?? "").trim();
     submitRef.current = true;
     setSubmitting(true);
     setGenerateError(null);
@@ -347,7 +454,7 @@ export default function BeforeYouSendPage() {
     setSubmitError(null);
     setAiOutput(null);
     setSavedMessage(null);
-    setDraftText(text);
+    setFieldValue("draftText", text);
     // Fresh key — reusing the prior key would return the original verdict from
     // the idempotency branch instead of re-scoring the rewrite.
     keyRef.current = safeUUID();
@@ -401,9 +508,9 @@ export default function BeforeYouSendPage() {
   if (submitting) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
-        <BysBackground />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
             Reading your draft…
           </p>
@@ -415,20 +522,14 @@ export default function BeforeYouSendPage() {
   if (aiOutput) {
     if (isRefusal(aiOutput)) {
       return (
-        <RefusalCard
-          output={aiOutput}
-          onBack={() => router.push("/coach")}
-        />
+        <RefusalCard output={aiOutput} onBack={() => router.push("/coach")} />
       );
     }
     if (aiOutput.mode === "normal") {
       const verdict = aiOutput.verdict;
       return (
-        <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-          <BysBackground />
-          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
-            Before you send
-          </span>
+        <ReadingScreen>
+          <Kicker className="text-accent-ink">Before You Send</Kicker>
 
           <div
             className={`-mx-5 mt-3 px-5 py-2 text-[14px] font-semibold ${VERDICT_RIBBON[verdict]}`}
@@ -437,12 +538,12 @@ export default function BeforeYouSendPage() {
           </div>
 
           {verdict === "do_not_send" && (
-            <div className="mt-4 rounded-card-sm bg-danger p-4 shadow-soft">
+            <Card className="mt-4 bg-danger">
               <p className="text-[14px] font-semibold leading-[1.5] text-white">
                 Do not send. This message protects your ego more than the
                 relationship.
               </p>
-            </div>
+            </Card>
           )}
 
           <p className="mt-4 text-[13px] font-medium leading-[1.5] text-ink-soft">
@@ -468,25 +569,21 @@ export default function BeforeYouSendPage() {
                   isAction={isAction}
                 />
               ) : (
-                <div
+                <Card
                   key={key}
-                  className={`rounded-card-sm bg-surface p-4 shadow-soft ${isAction ? "animate-action-in" : "animate-card-in"}`}
+                  className={isAction ? "animate-action-in" : "animate-card-in"}
                 >
-                  <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                    {label}
-                  </p>
+                  <Kicker>{label}</Kicker>
                   <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
                     {text}
                   </p>
-                </div>
+                </Card>
               );
             })}
           </div>
 
           <div className="mt-7">
-            <p className="text-[13px] font-bold uppercase tracking-[1px] text-ink-muted">
-              Rewrite and check it again
-            </p>
+            <Kicker>Rewrite and check it again</Kicker>
             <div className="mt-2">
               <VoiceInput
                 key="bys-rewrite"
@@ -501,58 +598,50 @@ export default function BeforeYouSendPage() {
                 {submitError}
               </p>
             )}
-            <button
+            <PrimaryButton
               onClick={handleCheckAgain}
               disabled={!rewriteText.trim()}
-              className="mt-4 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+              className="mt-4"
             >
               Check it again · {coinCostForTier(tier)}{" "}
               {coinCostForTier(tier) === 1 ? "coin" : "coins"}
-            </button>
+            </PrimaryButton>
           </div>
 
-          <button
+          <SecondaryButton
             onClick={() => router.push("/coach")}
-            className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+            className="mt-3 w-full"
           >
             Done
-          </button>
-        </div>
+          </SecondaryButton>
+        </ReadingScreen>
       );
     }
     // Unknown output shape — fall through to saved-message state.
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-        <BysBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <h1
+          className="text-[24px] font-medium leading-[1.18] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
           Draft saved
-        </h2>
+        </h1>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your draft was saved, but coaching feedback isn&apos;t available for
           this one.
         </p>
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        <PrimaryButton onClick={() => router.push("/coach")} className="mt-8">
           Back to Coach
-        </button>
-      </div>
+        </PrimaryButton>
+      </ReadingScreen>
     );
   }
 
   if (awaitingGenerate) {
     return (
       <GetFeedbackScreen
-        background={<BysBackground />}
-        eyebrow={
-          <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
-            Before you send
-          </span>
-        }
+        background={<StormBackground />}
+        eyebrow={<Kicker className="text-accent-ink">Before You Send</Kicker>}
         title="Draft saved."
         blurb="Your draft is saved. Get a verdict on how it'll land whenever you're ready."
         tier={tier}
@@ -573,139 +662,120 @@ export default function BeforeYouSendPage() {
 
   if (savedMessage) {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-        <BysBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <h1
+          className="text-[24px] font-medium leading-[1.18] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
           Draft saved
-        </h2>
+        </h1>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           {savedMessage}
         </p>
-        <button
-          onClick={handleGenerate}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        <PrimaryButton onClick={handleGenerate} className="mt-8">
           Try again for a verdict
-        </button>
-        <button
+        </PrimaryButton>
+        <SecondaryButton
           onClick={() => router.push("/coach")}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+          className="mt-3 w-full"
         >
           Back to Coach
-        </button>
-      </div>
+        </SecondaryButton>
+      </ReadingScreen>
     );
   }
 
-  return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <BysBackground />
-
-      <span className="inline-block rounded-pill bg-surface-tint px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.8px] text-ink">
-        Before you send
-      </span>
-      <h2
-        className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
-      >
-        Paste the draft. See how it <span className="italic">lands</span>.
-      </h2>
-      <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-        This isn&apos;t a proofreader. It&apos;s a gut-check on how the other
-        person will read it.
-      </p>
-
-      {prefillSource && (
-        <div className="mt-5 rounded-card-sm bg-surface p-3 shadow-soft">
-          <p className="text-[12px] font-medium leading-[1.45] text-ink">
-            {prefillSource === "repair"
-              ? "From your Repair. Edit before checking."
-              : "From your Pulse Check. Edit before sending."}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-5">
-        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-          What might make this land badly?{" "}
-          <span className="text-ink-muted">(optional)</span>
-        </p>
-        <div className="mt-2">
-          <VoiceInput
-            key="bys-risk-context"
-            value={riskContext}
-            onChange={setRiskContext}
-            rows={3}
-            placeholder="Pressure, blame, prior fight, their state today — anything you want the check to weigh."
-          />
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-          Your draft
-        </p>
-        <div className="mt-2">
-          <VoiceInput
-            key="bys-draft"
-            value={draftText}
-            onChange={setDraftText}
-            rows={7}
-            placeholder="Paste or type what you're about to send…"
-          />
-        </div>
-      </div>
-
-      <div className="mt-5">
-        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-          What kind of message is this?
-        </p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
+  // --- Form: one question per screen (no-scroll FlowScreen) ---
+  function renderStep(step: StepDef) {
+    if (step.kind === "select_message_type") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      return (
+        <div className="space-y-2">
           {MESSAGE_TYPES.map((t) => (
-            <button
+            <SelectableRow
               key={t.value}
-              onClick={() => setMessageType(t.value)}
-              className={`flex min-h-11 items-center justify-center rounded-card-sm px-3 text-[13px] font-semibold transition active:scale-[0.99] ${
-                messageType === t.value
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
+              selected={value === t.value}
+              onClick={() => setFieldValue(step.key, t.value)}
             >
               {t.label}
-            </button>
+            </SelectableRow>
           ))}
         </div>
-      </div>
+      );
+    }
+    if (step.kind === "textarea") {
+      const value = (data[step.key] as string | undefined) ?? "";
+      const placeholder =
+        step.key === "draftText"
+          ? "Paste or type what you're about to send…"
+          : step.key === "riskContext"
+            ? "Pressure, blame, prior fight, their state today — anything you want the check to weigh."
+            : "If you want, tell the coach what you hope they feel or do.";
+      const input = (
+        <VoiceInput
+          value={value}
+          onChange={(next) => setFieldValue(step.key, next)}
+          fill
+          placeholder={placeholder}
+        />
+      );
+      // The Review/Pulse → BYS handoff banner rides above the draft field.
+      if (step.key === "draftText" && prefillSource) {
+        return (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="mb-3 shrink-0 rounded-card-sm border border-hairline bg-surface p-3">
+              <p className="text-[12px] font-medium leading-[1.45] text-ink">
+                {prefillSource === "repair"
+                  ? "From your Repair. Edit before checking."
+                  : "From your Pulse Check. Edit before sending."}
+              </p>
+            </div>
+            <div className="flex min-h-0 flex-1 flex-col">{input}</div>
+          </div>
+        );
+      }
+      return input;
+    }
+    return null;
+  }
 
-      <div className="mt-5">
-        <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-          What do you want them to take away? <span className="text-ink-muted">(optional)</span>
-        </p>
-        <div className="mt-2">
-          <VoiceInput
-            key="bys-intent"
-            value={intentOptional}
-            onChange={setIntentOptional}
-            rows={3}
-            placeholder="If you want, tell the coach what you hope they feel or do."
-          />
-        </div>
-      </div>
-
-      {submitError && (
-        <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
-      )}
-
-      <button
-        onClick={handleSaveDraft}
-        disabled={!draftText.trim()}
-        className="mt-7 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+  return (
+    <FlowScreen
+      header={
+        <FlowHeader
+          onBack={handleBack}
+          eyebrow="Before You Send"
+          counter={`${safeIndex + 1} / ${steps.length}`}
+          dots={
+            <ProgressDots
+              total={BYS_PAGES.length}
+              current={current.sectionIndex}
+            />
+          }
+        />
+      }
+      footer={
+        <FlowFooter
+          onBack={safeIndex > 0 ? handleBack : undefined}
+          primaryLabel={isLastStep ? "Save draft" : "Next"}
+          onPrimary={handleNext}
+          primaryDisabled={!canAdvance}
+        />
+      }
+      title={current.q.title}
+      helper={current.q.prompt ?? undefined}
+    >
+      <div
+        key={`${current.pageKey}.${current.q.key}`}
+        className="flex min-h-0 flex-1 flex-col"
       >
-        Save draft
-      </button>
-    </div>
+        {renderStep(current.q)}
+        {isLastStep && submitError && (
+          <p className="mt-2 shrink-0 text-[13px] font-medium text-danger">
+            {submitError}
+          </p>
+        )}
+      </div>
+    </FlowScreen>
   );
 }

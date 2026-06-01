@@ -68,6 +68,7 @@ export type StepKind =
   | "textarea_if_then"
   | "select_signal_next_move"
   | "select_pulse_next_move"
+  | "select_message_type"
   | "select_check_window"
   | "select_repair_need"
   | "select_protecting_with_optional_text"
@@ -118,6 +119,15 @@ export type StepDef = {
    * from true → false to prevent stale data leaking into POST.
    */
   conditional?: (state: Record<string, unknown>) => boolean;
+  /**
+   * Marks a question the user may leave empty and still advance. In the
+   * one-question-per-screen flows `questionCanAdvance` returns true for an
+   * optional Q regardless of its value, so its Next/Save stays enabled.
+   * (Optional Qs are still SENT — the consumer maps an empty value to null
+   * in its request body, same as before.) Used by Before-You-Send's two
+   * optional context fields.
+   */
+  optional?: boolean;
 };
 
 export type PageDef = {
@@ -141,6 +151,8 @@ export function questionCanAdvance(
   state: Record<string, unknown>,
 ): boolean {
   if (q.conditional && !q.conditional(state)) return true;
+  // An optional Q never blocks advance, empty or not.
+  if (q.optional) return true;
   const v = state[q.key];
   if (v == null) return false;
   if (typeof v === "string") return v.trim().length > 0;
