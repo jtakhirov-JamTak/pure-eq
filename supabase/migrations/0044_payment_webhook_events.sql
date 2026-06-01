@@ -2,11 +2,17 @@
 --
 -- Slice B2 (coins payments). Stripe delivers each webhook AT LEAST once and
 -- retries on any non-2xx or timeout, so the same `checkout.session.completed`
--- event can arrive multiple times. grant_coins is already idempotent on
--- (user_id, ref_key = event_id), but this table is the primary, side-effect-
--- agnostic dedup gate: the webhook INSERTs the event id FIRST and only grants
--- coins if the insert was new. It also doubles as a minimal audit log of every
--- payment event the app has accepted.
+-- event can arrive multiple times. grant_coins is itself idempotent on
+-- (user_id, ref_key = event_id), so the credit can never double-apply. This
+-- table is a fast-path "already processed" marker plus a minimal audit log of
+-- every payment event the app has accepted.
+--
+-- ORDERING (see src/app/api/payments/webhook/route.ts): the webhook GRANTS
+-- COINS FIRST and INSERTs the event id only AFTER the grant succeeds. Recording
+-- after — not before — means a transient grant failure returns 500, Stripe
+-- retries, and the retry actually re-attempts the credit instead of being
+-- swallowed by a pre-written event row (which would strand a paid purchase).
+-- Do NOT "optimize" this into insert-first; the grant is the real guarantee.
 --
 -- Greenfield + additive: no existing table touched. System table — there is no
 -- user_id and no client ever reads it; the webhook writes via the service-role

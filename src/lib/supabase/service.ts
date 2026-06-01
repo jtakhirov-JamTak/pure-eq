@@ -1,7 +1,7 @@
 // Service role client — bypasses RLS for privileged writes.
-// Used by admin routes, subscription.ts (reserveFreeUse, createSubscription,
-// lazy trial expiry), and any other path that must write to RLS-pinned
-// columns. NEVER import in client components or middleware.
+// Used by admin routes, the coins ledger (grant/spend/refund via RPC), the
+// Stripe webhook (purchase grants + event log), and any other path that must
+// write to RLS-pinned columns. NEVER import in client components or middleware.
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 

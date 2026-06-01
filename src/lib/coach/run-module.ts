@@ -587,6 +587,19 @@ export async function runCoachModule<
     if (updateResult.error) {
       console.error(`${name}: derived update failed`, updateResult.error.code);
       saveWarning = true;
+      // The AI output was generated but couldn't be persisted to the derived
+      // row — it isn't saved to the user's history. Treat this like an AI
+      // failure for billing: release the hold (reserve → refund), symmetric
+      // with the AI-failure refund above and the Insights insert-failure path.
+      // The user still sees this run's output once in the response; a retry
+      // (existingAiJson is still null, so it regenerates) gets a fresh spend
+      // key via nextGenerationAttempt and charges for the run that actually
+      // persists. Idempotent on the per-attempt key. Clearing coinsCharged
+      // makes coinsSpent below net to 0 for this stranded run.
+      if (coinsCharged && spendKey) {
+        await refundCoins(user.id, coinCost, spendKey);
+        coinsCharged = false;
+      }
     }
   }
 

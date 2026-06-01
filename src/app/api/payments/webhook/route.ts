@@ -61,6 +61,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 
+  // ASSUMPTION: card-only checkout, where the session is fully paid the instant
+  // it completes — so checkout.session.completed + payment_status==='paid' is
+  // the only path that needs to credit. If async/delayed methods (iDEAL, SEPA,
+  // Bacs, other bank redirects) are ever enabled in Stripe, a session can
+  // complete UNPAID and settle minutes-to-days later; those credit via
+  // `checkout.session.async_payment_succeeded`, which is NOT handled here. Add
+  // that event type (same grant-first logic below) BEFORE enabling them, or
+  // delayed purchases will never credit.
+  //
   // Only the one event we subscribed to needs work; ack everything else 200 so
   // Stripe stops retrying unknown types.
   if (event.type !== "checkout.session.completed") {

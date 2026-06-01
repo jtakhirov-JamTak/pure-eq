@@ -638,6 +638,10 @@ export async function generateReflection(
       const lookup = buildEntryLookup(rawRecords);
       const filtered = verifyQuotes(aiOutput, lookup);
       if (filtered.observations.length < 2) {
+        // Not enough verifiable observations — downgrade to a refusal. The coin
+        // release happens in the unified refusal-refund just below, which ALSO
+        // covers a refusal the model returned directly (mode:"refusal" from the
+        // start), which this `mode === "reflection"` block never reaches.
         aiOutput = {
           mode: "refusal",
           refusal_reason: "out_of_scope",
@@ -645,18 +649,21 @@ export async function generateReflection(
             "I could not ground enough patterns in your own words this week. Keep using Coach and Tools for another week or two and come back.",
           suggested_resource: "none",
         };
-        // A refusal isn't a sellable reflection — release the hold (Slice B3).
-        // The refusal row is still persisted below so the 7-day cache short-
-        // circuit prevents a re-charge this week. Clear coinsCharged so the
-        // outer catch can't refund a second time if the INSERT then throws
-        // (the refund is idempotent on its ref_key anyway, but be explicit).
-        if (coinsCharged) {
-          await options.onChargedGenerationFailed?.();
-          coinsCharged = false;
-        }
       } else {
         aiOutput = filtered;
       }
+    }
+
+    // Refund on ANY final refusal — whether we downgraded above after quote
+    // verification OR the model returned mode:"refusal" directly. Charging the
+    // Insights cost to be told there isn't enough data yet is not a sellable
+    // outcome (Slice B3), so release the hold. Released once and idempotent on
+    // the spend key; the refusal row is still persisted below so the 7-day
+    // cache short-circuit prevents a re-charge this week. Clearing coinsCharged
+    // also stops the outer catch from double-releasing if the INSERT then throws.
+    if (aiOutput.mode === "refusal" && coinsCharged) {
+      await options.onChargedGenerationFailed?.();
+      coinsCharged = false;
     }
 
     // Persist. Fail loudly on INSERT error — migration 0018 lesson.

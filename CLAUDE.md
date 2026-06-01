@@ -21,7 +21,7 @@ Not this: dumping everything into CLAUDE.md. Long CLAUDE.md means signal gets bu
 
 ## Business Context
 
-- Revenue model: 3-day free Coach window (1 free Prepare + 1 free Review) plus 7-day free Tools window (unlimited Overwhelmed + Triggered), both anchored to onboarding completion. After each window, $8.99/month or $69.99/year (cancel anytime). Insights is paid-only.
+- Revenue model: **coins** (one-time purchases, NOT a subscription). New users get 50 starter coins. AI feedback debits coins per use — Coach Quick 4 / Deep 6, weekly Insights 20, Monthly Report 80; saving entries, History, Threads, export, and the manual Tools are free (login-only). Coins are bought in packs via Stripe one-time checkout: Booster $4.99/50, Starter $19.99/250, Builder $49.99/750, Master $99.99/1500 (authoritative source: `src/lib/payments.ts` `COIN_PACKS` + `src/types` `COIN_COSTS`). The old subscription model ($8.99/mo, 3-day Coach + 7-day Tools free windows) is fully RETIRED — see memory `project_coins_framework_final`.
 - Onboarding produces a Communication Profile (9-question quiz); free-period anchor starts when profile is saved
 - Product doc: docs/Pure_EQ_Final.txt (source of truth for all product decisions)
 - Engineering playbook: docs/Engineering_Playbook.txt (reusable security/architecture patterns)
@@ -70,7 +70,7 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 - `src/app/api/coach/{prepare,review}/route.ts` — AI-backed coach endpoints
 - `src/app/api/tools/{overwhelmed,triggered}/route.ts` — tool write endpoints
 - `src/app/api/{persons,history,subscribe,transcribe,auth/callback}/route.ts`
-- `src/lib/{validation,check-origin,rate-limit,subscription,require-access,admin,onboarding,verify-ownership,utils}.ts`
+- `src/lib/{validation,check-origin,rate-limit,coins,payments,admin,onboarding,verify-ownership,utils}.ts`
 - `src/lib/insights/{generate,reflection-input,types}.ts` — weekly reflection orchestrator + input helper
 - `src/lib/{supabase/{client,server,service},ai/{prompts,schemas},coach/run-module}.ts`
 - `src/components/{voice-input,person-picker,countdown-timer}.tsx`
@@ -125,7 +125,7 @@ Full tree + rationale lives in `docs/Engineering_Playbook.txt` §1. Pure-EQ-spec
 - Rate limit AI and auth endpoints
 - Never log response bodies or user content
 - Validate all AI output against schema + banned phrases before displaying
-- Paid-only gates use helpers in `src/lib/require-access.ts` — `requirePaidAccessPage/Api`, `requireToolsAccessPage/Api`, `hasToolsAccess`. Do NOT inline the `isAdmin + checkSubscription + redirect/403` block; policy drift is the whole reason the helpers exist
+- Access is coin-gated, not subscription-gated. AI endpoints debit coins server-side via `src/lib/coins.ts` (`spendCoins`/`refundCoins`/`costForTier`); admins bypass the debit via `isAdmin(user.email)`. There is no page-level paywall redirect — `(app)/layout.tsx` is auth-only. (The old `require-access.ts` / `subscription.ts` paid-gate helpers were deleted once coins fully replaced subscriptions.)
 - Gate `/dev/*` routes with `if (process.env.NODE_ENV === "production") notFound();`
 
 ## Lessons Learned
@@ -134,11 +134,11 @@ Universal traps (Zod `.min(1)`/`.int()`/length-uniqueness, auth/rate-limit/origi
 
 ### Access gates & monetization
 
-- **`src/lib/require-access.ts` is the single source of truth for paid-only and Tools gates.** Five helpers: `requirePaidAccessPage/Api`, `requireToolsAccessPage/Api`, `hasToolsAccess`. Do not inline the `isAdmin + checkSubscription + redirect/403` block — drift between the paid-only policy (`!hasAccess`) and the Tools policy (`!hasAccess && !toolsWindowActive`) is exactly what the helpers prevent.
-- **`checkSubscription` takes a single `userId` arg and is wrapped in `React.cache()`.** Creates its own `supabase` inside (request-scoped via cookies). Dedupes across layout + page + helper within one server render — if you add a caller that passes a supabase client, it breaks the cache silently. Always call `checkSubscription(user.id)`, never `checkSubscription(supabase, user.id)`.
-- **Admin detection in gates uses sync `isAdmin(user.email)` (env var `ADMIN_EMAIL`), not DB-role-aware `checkAdmin`.** Consistent with `(app)/layout.tsx`. If DB-role admins are ever supported, switch `src/lib/require-access.ts` AND the layout at the same time — asymmetry would paywall a DB-role admin.
-- **The `(app)/layout.tsx` broad gate is now a Coach-specific backstop, not the primary paid-only enforcement.** It fires only on `!hasAccess && (bothFreeUsed || freePeriodExpired)`, which covers `/coach`, `/coach/prepare`, `/coach/review`. Every other paid surface (`/insights`, `/history`, `/coach/repair`, `/coach/threads*`) now gates itself via `requirePaidAccessPage`. Don't delete the layout gate — it stops unpaid day-4+ users from reaching Coach hub / free-used Prepare or Review, which the page helpers don't cover.
-- **Access anchor column (`user_profiles.created_at`) must stay user-unwritable.** Migration 0020 dropped `user_profiles_delete_own` — delete + retake would have reset the 7-day Tools window. If retake ever needs to clear old profile rows, go through the service-role client. Same rule as migration 0017 for `free_*_used_at` / `status` / `role`.
+- **Access is coin-gated; the subscription gate infra is GONE.** `subscription.ts` (`checkSubscription`/`reserveFreeUse`) and `require-access.ts` (`requirePaidAccess*`/`requireToolsAccess*`/`hasToolsAccess`) were deleted once coins fully replaced subscriptions — they had no live caller left after Slice B3. The `user_subscriptions` table stays in the DB (dormant, read only by admin pages); nothing writes `status='active'` any more. Don't re-introduce a page-level paywall — gate on coins at the API instead.
+- **The single charge primitive is `src/lib/coins.ts`** (`spendCoins`/`refundCoins`/`costForTier`/`getBalance` + `nextGenerationAttempt`/`generationSpendKey`). Reserve-at-start / refund-on-failure, per-attempt spend key. Two charge orchestrators duplicate the policy — Coach `run-module.ts` (inline) and Insights `generate.ts` (callbacks) — so a finalize-on-success change must touch BOTH (memory `project_coin_charge_dual_shape`). Both refund on AI failure, on a derived-write failure, AND on a refusal/downgrade — keep them symmetric.
+- **Admin detection uses sync `isAdmin(user.email)` (env var `ADMIN_EMAIL`), not DB-role-aware `checkAdmin`.** Consistent with `(app)/layout.tsx`. Admins bypass coin debits. If DB-role admins are ever supported, switch every `isAdmin` call site and the layout together — asymmetry would charge a DB-role admin.
+- **`(app)/layout.tsx` is now an auth-only gate.** No paywall backstop, no subscription read. Manual Coach/Tools/History/Threads/export are all free (login-only); only AI feedback debits coins, enforced at the API.
+- **Access anchor column (`user_profiles.created_at`) must stay user-unwritable.** Migration 0020 dropped `user_profiles_delete_own`; delete + retake would have reset the (now-retired) Tools free window. The RLS pinning is still the rule for any onboarding-anchored value: if retake ever needs to clear old profile rows, go through the service-role client. Same rule as migration 0017 for `free_*_used_at` / `status` / `role` on the dormant `user_subscriptions`.
 
 ### Validation & data shape
 
