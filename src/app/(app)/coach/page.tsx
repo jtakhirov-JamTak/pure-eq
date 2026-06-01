@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { readFirstName } from "@/lib/user-metadata";
 
 function firstNameFromEmail(email: string | null | undefined): string {
@@ -24,12 +24,12 @@ export default async function CoachPage() {
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
-      <SkyBackground variant="coach-hub" />
+      <StormBackground />
 
       {/* Headline */}
       <div className="mb-6 pt-2">
         <h1
-          className="font-display text-[28px] leading-[1.1] break-words text-ink sm:text-[34px] sm:leading-[1.08]"
+          className="font-display text-[28px] font-medium leading-[1.1] break-words text-ink sm:text-[34px] sm:leading-[1.08]"
           style={{ letterSpacing: "-0.7px" }}
         >
           {greeting}
@@ -41,24 +41,26 @@ export default async function CoachPage() {
         </p>
       </div>
 
-      {/* Before You Send — hero */}
+      {/* Before You Send — hero. Harmonized to Storm: the old yellow/orange
+          gradient is recolored to a deep sky->navy so it reads as the hero
+          (deeper + larger than the sky Prepare tile) while staying on-palette. */}
       <Link
         href="/coach/before-send"
         className="relative block min-h-[184px] overflow-hidden rounded-card p-6 shadow-dark transition active:scale-[0.99]"
         style={{
-          background: "linear-gradient(160deg, #FFD166 0%, #F39423 100%)",
+          background: "linear-gradient(160deg, #2A86E3 0%, #16335A 100%)",
         }}
       >
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink/85">
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white/80">
           ~90 sec · quick check
         </p>
         <h2
-          className="mt-3 font-display text-[28px] leading-[1.1] text-ink"
+          className="mt-3 font-display text-[28px] font-medium leading-[1.1] text-white"
           style={{ letterSpacing: "-0.6px" }}
         >
           You&rsquo;re about to <span className="italic">hit send</span>.
         </h2>
-        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-ink/80">
+        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-white/85">
           Paste a draft. See how it will land before you regret it.
         </p>
       </Link>

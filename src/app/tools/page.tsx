@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 
 export default async function ToolsPage() {
   const supabase = await createClient();
@@ -14,14 +14,14 @@ export default async function ToolsPage() {
   // free-window + locked-hub card are retired.
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
-      <SkyBackground variant="tools-hub" />
+      <StormBackground />
 
       <div className="pt-2">
-        <span className="inline-block rounded-pill bg-warm px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
+        <span className="inline-block rounded-pill bg-warm px-3 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-accent-text">
           When storms roll in
         </span>
         <h1
-          className="mt-2.5 font-display text-[32px] leading-[1.08] text-ink"
+          className="mt-2.5 font-display text-[32px] font-medium leading-[1.08] text-ink"
           style={{ letterSpacing: "-1px" }}
         >
           Two tools for when

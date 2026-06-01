@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLatestProfile } from "@/lib/onboarding";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 
 export default async function LandingPage() {
   // Authed users don't belong on the marketing page. With a profile they
@@ -19,14 +19,14 @@ export default async function LandingPage() {
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center px-6 pb-[env(safe-area-inset-bottom)] pt-[max(3rem,env(safe-area-inset-top))]">
-      <SkyBackground variant="coach-hub" />
+      <StormBackground />
 
       <div className="w-full max-w-sm text-center">
         <div className="flex justify-center">
           <Wordmark size={24} />
         </div>
         <h1
-          className="mt-10 font-display text-[40px] leading-[1.05] text-ink"
+          className="mt-10 font-display text-[40px] font-medium leading-[1.05] text-ink"
           style={{ letterSpacing: "-1.2px" }}
         >
           Hard conversations,
@@ -40,7 +40,7 @@ export default async function LandingPage() {
 
         <Link
           href="/onboarding"
-          className="mt-10 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
+          className="mt-10 flex h-14 w-full items-center justify-center rounded-pill bg-accent text-[15px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
         >
           Get your communication profile in 90s
         </Link>
@@ -49,7 +49,7 @@ export default async function LandingPage() {
           Already have an account?{" "}
           <Link
             href="/login"
-            className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-brand-deep underline active:opacity-70"
+            className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-accent-ink underline active:opacity-70"
           >
             Log in
           </Link>
