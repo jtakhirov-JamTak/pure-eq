@@ -2,6 +2,19 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 /**
+ * Pill-shaped accent CTA class — the app's primary call-to-action shape, used
+ * on both <button>s (submit/generate) and <Link>s (Get coins, Go to Coach,
+ * landing). It is intentionally distinct from PrimaryButton (which is the
+ * rounded-[14px], font-semibold flow-footer button): this one is `rounded-pill`
+ * + `font-bold`. Compose height/width/text-size and the element at the call
+ * site: `cn(pillAccentClass, "h-14 w-full text-[15px]")`. Baking the
+ * `disabled:` states here keeps them from drifting across the ~12 call sites
+ * (they previously did — some had disabled:shadow-none, some didn't).
+ */
+export const pillAccentClass =
+  "flex items-center justify-center rounded-pill bg-accent font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none";
+
+/**
  * Primary action — accent fill, dark accent-text, 56px tall, full-width. One
  * per screen (§1: the accent is a scarce resource). The soft shadow (shadow-cta)
  * is one of the few shadows Storm allows — it marks the floating primary action.

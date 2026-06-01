@@ -6,6 +6,9 @@ import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { GoogleGlyph } from "@/components/brand/GoogleGlyph";
+import { cn } from "@/lib/utils";
+import { inputClass } from "@/components/ui/field";
+import { pillAccentClass } from "@/components/ui/button";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -155,7 +158,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
+              className={cn(inputClass, "mt-1.5")}
               placeholder="you@example.com"
             />
           </div>
@@ -174,7 +177,7 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
+              className={cn(inputClass, "mt-1.5")}
               placeholder="••••••••"
             />
           </div>
@@ -186,7 +189,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-14 w-full items-center justify-center rounded-pill bg-accent text-[15px] font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+            className={cn(pillAccentClass, "h-14 w-full text-[15px]")}
           >
             {loading ? "Logging in..." : "Log in"}
           </button>

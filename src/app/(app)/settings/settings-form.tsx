@@ -3,6 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+import { inputClass } from "@/components/ui/field";
+import { pillAccentClass } from "@/components/ui/button";
 
 type Props = {
   initialFirstName: string;
@@ -58,7 +61,7 @@ export function SettingsForm({ initialFirstName }: Props) {
         value={firstName}
         onChange={(e) => setFirstName(e.target.value)}
         maxLength={50}
-        className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface-tint px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
+        className={cn(inputClass, "mt-1.5 bg-surface-tint")}
         placeholder="Jane"
       />
       <p className="mt-2 text-[12px] font-medium text-ink-soft">
@@ -76,7 +79,7 @@ export function SettingsForm({ initialFirstName }: Props) {
       <button
         type="submit"
         disabled={!dirty || saving}
-        className="mt-5 flex h-12 w-full items-center justify-center rounded-pill bg-accent text-[14px] font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+        className={cn(pillAccentClass, "mt-5 h-12 w-full text-[14px]")}
       >
         {saving ? "Saving…" : "Save"}
       </button>

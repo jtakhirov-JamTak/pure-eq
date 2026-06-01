@@ -25,6 +25,8 @@ import { ReflectionKickoff } from "@/components/insights/ReflectionKickoff";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
+import { pillAccentClass } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   GENERATOR_VERSION,
   IDEMPOTENCY_WINDOW_MS,
@@ -209,7 +211,7 @@ export default async function InsightsPage() {
           </p>
           <Link
             href="/coach"
-            className="mt-4 inline-flex h-11 items-center justify-center rounded-pill bg-accent px-5 text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
+            className={cn(pillAccentClass, "mt-4 inline-flex h-11 px-5 text-[14px]")}
           >
             Go to Coach
           </Link>

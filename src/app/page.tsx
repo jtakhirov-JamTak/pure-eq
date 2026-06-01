@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getLatestProfile } from "@/lib/onboarding";
 import { Wordmark } from "@/components/brand/Wordmark";
 import { StormBackground } from "@/components/brand/StormBackground";
+import { cn } from "@/lib/utils";
+import { pillAccentClass } from "@/components/ui/button";
 
 export default async function LandingPage() {
   // Authed users don't belong on the marketing page. With a profile they
@@ -40,7 +42,7 @@ export default async function LandingPage() {
 
         <Link
           href="/onboarding"
-          className="mt-10 flex h-14 w-full items-center justify-center rounded-pill bg-accent text-[15px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
+          className={cn(pillAccentClass, "mt-10 h-14 w-full text-[15px]")}
         >
           Get your communication profile in 90s
         </Link>

@@ -8,6 +8,8 @@
 import { useState } from "react";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { Card } from "@/components/ui/card";
+import { pillAccentClass } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type PackView = {
   key: string;
@@ -114,7 +116,7 @@ export function CoinsClient({
                 onClick={() => buy(pack.key)}
                 disabled={disabled}
                 aria-label={`Buy ${pack.name} for ${pack.priceLabel}`}
-                className="flex h-12 min-w-[104px] items-center justify-center rounded-pill bg-accent px-5 text-[14px] font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-50"
+                className={cn(pillAccentClass, "h-12 min-w-[104px] px-5 text-[14px]")}
               >
                 {inFlight ? (
                   <span className="h-5 w-5 animate-spin rounded-full border-2 border-accent-text/30 border-t-accent-text" />

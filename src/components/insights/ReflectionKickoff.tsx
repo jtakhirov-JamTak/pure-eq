@@ -8,6 +8,8 @@ import { useCoinBalance } from "@/components/coach/coin-ui";
 import { ReflectionCard } from "./ReflectionCard";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
+import { pillAccentClass } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 // Kind values sent by the API route (from ReflectionGenerationError.kind).
 // Map each to a short human label so a silent writer regression is
@@ -208,7 +210,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         </p>
         <Link
           href="/coins"
-          className="mt-3 inline-flex h-11 items-center justify-center rounded-pill bg-accent px-5 text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
+          className={cn(pillAccentClass, "mt-3 inline-flex h-11 px-5 text-[14px]")}
         >
           Get coins
         </Link>
@@ -230,7 +232,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         ) : null}
         <button
           onClick={generate}
-          className="mt-4 flex h-12 w-full items-center justify-center rounded-pill bg-accent text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
+          className={cn(pillAccentClass, "mt-4 h-12 w-full text-[14px]")}
         >
           Try again · {COST} coins
         </button>
@@ -257,7 +259,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
         )}
         <button
           onClick={generate}
-          className="mt-4 flex h-14 w-full items-center justify-center rounded-pill bg-accent text-[15px] font-bold text-accent-text shadow-cta transition active:scale-[0.98]"
+          className={cn(pillAccentClass, "mt-4 h-14 w-full text-[15px]")}
         >
           Generate this week&apos;s reflection · {COST} coins
         </button>

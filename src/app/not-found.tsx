@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
+import { cn } from "@/lib/utils";
+import { pillAccentClass } from "@/components/ui/button";
 
 export default function NotFound() {
   return (
@@ -12,7 +14,7 @@ export default function NotFound() {
       </p>
       <Link
         href="/coach"
-        className="mt-6 flex h-12 items-center rounded-pill bg-accent px-6 text-sm font-bold text-accent-text shadow-cta active:scale-[0.98]"
+        className={cn(pillAccentClass, "mt-6 h-12 px-6 text-sm")}
       >
         Back to Coach
       </Link>
