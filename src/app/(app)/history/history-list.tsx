@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { softDeleteEntries } from "./actions";
+import { Card } from "@/components/ui/card";
 
 export type HistoryEntry = {
   id: string;
@@ -123,14 +124,14 @@ export function HistoryList({
 
   if (entries.length === 0) {
     return (
-      <div className="mt-6 rounded-card-sm bg-surface p-6 text-center shadow-soft">
+      <Card className="mt-6 p-6 text-center">
         <p className="text-[15px] font-medium text-ink">
           No completed entries yet.
         </p>
         <p className="mt-1 text-[13px] font-medium text-ink-soft">
           Entries you complete in Coach or Tools will show up here.
         </p>
-      </div>
+      </Card>
     );
   }
 
@@ -142,14 +143,14 @@ export function HistoryList({
             type="checkbox"
             checked={allVisibleSelected}
             onChange={toggleAllVisible}
-            className="h-4 w-4 rounded border-hair text-brand focus:ring-brand"
+            className="h-4 w-4 rounded border-hairline text-accent focus:ring-accent"
           />
           Select all {entries.length}
         </label>
         {selectedCount > 0 && (
           <button
             onClick={() => setShowConfirm(true)}
-            className="inline-flex h-11 items-center gap-1.5 rounded-pill bg-danger px-4 text-[13px] font-bold text-white shadow-soft active:opacity-90"
+            className="inline-flex h-11 items-center gap-1.5 rounded-pill bg-danger px-4 text-[13px] font-bold text-white active:opacity-90"
           >
             <Trash2 className="h-4 w-4" />
             Delete {selectedCount}
@@ -157,7 +158,7 @@ export function HistoryList({
         )}
       </div>
 
-      <ul className="mt-3 overflow-hidden rounded-card-sm bg-surface shadow-soft">
+      <ul className="mt-3 overflow-hidden rounded-card border border-hairline bg-surface">
         {entries.map((e, idx) => {
           const isSelected = selected.has(e.id);
           const date = new Date(e.completedAt);
@@ -177,7 +178,7 @@ export function HistoryList({
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => toggleOne(e.id)}
-                  className="h-4 w-4 rounded border-hair text-brand focus:ring-brand"
+                  className="h-4 w-4 rounded border-hairline text-accent focus:ring-accent"
                   aria-label={`Select ${e.label} entry from ${dateLabel}`}
                 />
                 <div className="flex-1">
@@ -203,7 +204,7 @@ export function HistoryList({
           <button
             onClick={loadMore}
             disabled={loadingMore}
-            className="inline-flex h-11 items-center justify-center rounded-pill bg-surface px-5 text-[13px] font-semibold text-ink shadow-soft active:opacity-80 disabled:opacity-50"
+            className="inline-flex h-11 items-center justify-center rounded-pill border border-hairline bg-surface px-5 text-[13px] font-semibold text-ink active:opacity-80 disabled:opacity-50"
           >
             {loadingMore ? "Loading…" : "Load more"}
           </button>
@@ -212,14 +213,14 @@ export function HistoryList({
 
       {showConfirm && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/50 px-6 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
           onClick={() => !deleting && setShowConfirm(false)}
         >
           <div
-            className="w-full max-w-sm rounded-card-sm bg-surface p-6 shadow-card"
+            className="w-full max-w-sm rounded-card border border-hairline bg-surface p-6 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="font-display text-[22px] leading-[1.15] text-ink">
+            <h3 className="font-display text-[22px] font-medium leading-[1.15] text-ink">
               Delete {selectedCount}{" "}
               {selectedCount === 1 ? "entry" : "entries"}?
             </h3>
@@ -238,7 +239,7 @@ export function HistoryList({
               <button
                 onClick={confirmDelete}
                 disabled={deleting}
-                className="h-12 flex-1 rounded-pill bg-danger text-[14px] font-bold text-white shadow-soft active:opacity-90 disabled:opacity-50"
+                className="h-12 flex-1 rounded-pill bg-danger text-[14px] font-bold text-white active:opacity-90 disabled:opacity-50"
               >
                 {deleting ? "Deleting…" : "Delete"}
               </button>

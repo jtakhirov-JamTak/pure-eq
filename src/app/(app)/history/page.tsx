@@ -2,7 +2,7 @@ import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { Download } from "lucide-react";
 import { HistoryList, type HistoryEntry } from "./history-list";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { captureServerRead } from "@/lib/read-capture";
 
 const PAGE_SIZE = 10;
@@ -110,10 +110,10 @@ export default async function HistoryPage() {
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
-      <SkyBackground variant="calm" />
+      <StormBackground />
 
       <h1
-        className="mt-2 font-display text-[30px] leading-[1.1] text-ink"
+        className="mt-2 font-display text-[30px] font-medium leading-[1.1] text-ink"
         style={{ letterSpacing: "-0.8px" }}
       >
         History
@@ -126,9 +126,9 @@ export default async function HistoryPage() {
         {DELETABLE_TYPES.map((t) => (
           <div
             key={t}
-            className="rounded-card-xs bg-surface p-3 text-center shadow-soft"
+            className="rounded-card-xs border border-hairline bg-surface p-3 text-center"
           >
-            <p className="font-display text-[22px] leading-none text-ink">
+            <p className="font-display text-[22px] font-medium leading-none text-ink">
               {counts[t]}
             </p>
             <p className="mt-1 text-[10px] font-bold uppercase tracking-[0.5px] text-ink-soft">
@@ -146,7 +146,7 @@ export default async function HistoryPage() {
       <a
         href="/api/export"
         download
-        className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-pill bg-surface px-4 py-2 text-[13px] font-semibold text-ink shadow-soft active:opacity-80"
+        className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-pill border border-hairline bg-surface px-4 py-2 text-[13px] font-semibold text-ink active:opacity-80"
       >
         <Download className="h-4 w-4" />
         Download my data (.txt)
