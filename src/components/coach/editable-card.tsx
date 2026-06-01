@@ -103,7 +103,7 @@ export function EditableCard({
               type="button"
               disabled={saving || draft.trim().length === 0}
               onClick={() => persist("edited", draft.trim())}
-              className="flex min-h-11 flex-1 items-center justify-center rounded-pill bg-accent px-4 text-[13px] font-semibold text-accent-text shadow-cta active:scale-[0.98] disabled:opacity-40"
+              className="flex min-h-11 flex-1 items-center justify-center rounded-pill bg-accent px-4 text-[13px] font-semibold text-accent-text shadow-cta active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
             >
               {saving ? "Saving…" : "Save"}
             </button>

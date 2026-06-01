@@ -272,7 +272,7 @@ export function VoiceInput({
           rows={fill ? undefined : rows}
           maxLength={maxLength}
           disabled={disabled}
-          className={`w-full resize-none bg-transparent px-4 pt-3.5 text-[15px] leading-[1.5] text-ink placeholder:text-ink-muted focus:outline-none disabled:opacity-60 ${
+          className={`w-full resize-none bg-transparent px-4 pt-3.5 text-[15px] leading-[1.5] text-ink placeholder:text-ink-soft focus:outline-none disabled:opacity-60 ${
             fill ? "min-h-0 flex-1" : ""
           }`}
           placeholder={placeholder}

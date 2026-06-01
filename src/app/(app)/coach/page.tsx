@@ -71,7 +71,8 @@ export default async function CoachPage() {
           href="/coach/prepare"
           className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
           style={{
-            background: "linear-gradient(160deg, #4FB0FF 0%, #2A86E3 100%)",
+            // Deepened from #4FB0FF so white text clears AA (was ~2.3:1).
+            background: "linear-gradient(160deg, #2470C0 0%, #163A6B 100%)",
           }}
         >
           <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
@@ -83,7 +84,7 @@ export default async function CoachPage() {
           >
             Coming <span className="italic">up</span>.
           </h2>
-          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white">
             A conversation you need to plan.
           </p>
         </Link>
@@ -92,7 +93,8 @@ export default async function CoachPage() {
           href="/coach/pulse-check"
           className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
           style={{
-            background: "linear-gradient(160deg, #34C8B0 0%, #128C7A 100%)",
+            // Deepened from #34C8B0 so white text clears AA (was ~2.1:1).
+            background: "linear-gradient(160deg, #0E8276 0%, #0A4F47 100%)",
           }}
         >
           <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
@@ -104,7 +106,7 @@ export default async function CoachPage() {
           >
             Something <span className="italic">feels off</span>.
           </h2>
-          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
+          <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white">
             Pulse Check before you act.
           </p>
         </Link>
@@ -116,7 +118,7 @@ export default async function CoachPage() {
             background: "linear-gradient(160deg, #3A4A66 0%, #1F2A42 100%)",
           }}
         >
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-warm">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-[#ecc08a]">
             ~4 min · reflect
           </p>
           <h2

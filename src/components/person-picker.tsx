@@ -382,7 +382,7 @@ export function PersonPicker({
           disabled={disabled || transcribing}
           autoComplete="off"
           autoCapitalize="words"
-          className={`w-full rounded-[14px] border px-4 py-3 pr-24 text-base text-ink placeholder:text-ink-muted focus:outline-none ${
+          className={`w-full rounded-[14px] border px-4 py-3 pr-24 text-base text-ink placeholder:text-ink-soft focus:outline-none ${
             selectedPersonId
               ? "border-accent bg-accent-soft"
               : "border-hairline bg-surface focus:border-accent"

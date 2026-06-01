@@ -75,7 +75,7 @@ export function SelectProtectingWithOptionalText({ value, onChange }: Props) {
             value={text}
             onChange={(e) => onChange({ chip, text: e.target.value })}
             placeholder="A specific phrase or moment, if you want."
-            className="block w-full rounded-card-sm border border-hair p-3 text-base text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand"
+            className="block w-full rounded-card-sm border border-hairline p-3 text-base text-ink placeholder:text-ink-soft focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           />
         </div>
       )}

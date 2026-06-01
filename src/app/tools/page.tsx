@@ -35,11 +35,12 @@ export default async function ToolsPage() {
           href="/tools/overwhelmed"
           className="relative block overflow-hidden rounded-card p-5 text-white shadow-dark transition active:scale-[0.99]"
           style={{
+            // Deepened from #2a86e3 so white text clears AA (was ~3.3:1).
             background:
-              "linear-gradient(160deg, #2a86e3 0%, #1A4A8F 100%)",
+              "linear-gradient(160deg, #2470C0 0%, #15346A 100%)",
           }}
         >
-          <span className="text-[11px] font-bold uppercase tracking-[1.5px] opacity-85">
+          <span className="text-[11px] font-bold uppercase tracking-[1.5px]">
             ~4 min · guided
           </span>
           <div
@@ -48,14 +49,14 @@ export default async function ToolsPage() {
           >
             I&apos;m <span className="italic">overwhelmed</span>
           </div>
-          <p className="mt-1.5 max-w-[260px] text-[14px] font-medium leading-[1.4] text-white/90">
+          <p className="mt-1.5 max-w-[260px] text-[14px] font-medium leading-[1.4] text-white">
             Settle the storm. Feel, clear your mind, reset.
           </p>
           <div className="mt-4 flex flex-wrap gap-1.5">
             {["Feel", "Label", "Validate", "Regulate", "Move"].map((s) => (
               <span
                 key={s}
-                className="rounded-pill bg-white/20 px-2.5 py-1 text-[11px] font-bold tracking-[0.3px]"
+                className="rounded-pill bg-black/20 px-2.5 py-1 text-[11px] font-bold tracking-[0.3px]"
               >
                 {s}
               </span>
@@ -71,7 +72,7 @@ export default async function ToolsPage() {
               "linear-gradient(160deg, #3A4A66 0%, #1F2A42 100%)",
           }}
         >
-          <span className="text-[11px] font-bold uppercase tracking-[1.5px] text-warm">
+          <span className="text-[11px] font-bold uppercase tracking-[1.5px] text-[#ecc08a]">
             7 steps · reflect
           </span>
           <div
@@ -87,7 +88,7 @@ export default async function ToolsPage() {
             {["Fact", "Story", "Emotion", "Urge", "Outcome"].map((s) => (
               <span
                 key={s}
-                className="rounded-pill bg-warm/20 px-2.5 py-1 text-[11px] font-bold tracking-[0.3px] text-warm"
+                className="rounded-pill bg-black/20 px-2.5 py-1 text-[11px] font-bold tracking-[0.3px] text-[#ecc08a]"
               >
                 {s}
               </span>
