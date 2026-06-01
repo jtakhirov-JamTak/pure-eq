@@ -92,6 +92,13 @@ html {
   background: var(--bg-solid);
 }
 
+/* When a full-screen answering flow (FlowScreen) is open it adds `flow-open`
+   to <body>; hide the AppShell chrome so the tab bar / top bar can't show
+   through or overlap the flow's footer. */
+body.flow-open [data-app-chrome] {
+  display: none;
+}
+
 body {
   background: var(--background);
   background-attachment: fixed;

@@ -75,7 +75,10 @@ export function AppShell({
   return (
     <div className="relative flex min-h-dvh flex-col">
       {/* Top bar — transparent; pages own their background */}
-      <header className="relative z-20 flex shrink-0 items-center justify-between px-5 pb-3 pt-[max(env(safe-area-inset-top),1.25rem)]">
+      <header
+        data-app-chrome
+        className="relative z-20 flex shrink-0 items-center justify-between px-5 pb-3 pt-[max(env(safe-area-inset-top),1.25rem)]"
+      >
         <Link
           href="/coach"
           aria-label="SpeakEasy home"
@@ -145,6 +148,7 @@ export function AppShell({
 
       {/* Bottom tab bar — 48px pill with blur */}
       <nav
+        data-app-chrome
         className="fixed bottom-[max(env(safe-area-inset-bottom),1rem)] left-0 right-0 z-30 mx-5 flex gap-1 rounded-pill border border-hairline bg-surface/85 p-1.5 shadow-card backdrop-blur-[18px]"
         aria-label="Primary"
       >

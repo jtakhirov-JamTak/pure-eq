@@ -45,7 +45,15 @@ export function FlowScreen({
   // paints over the footer. Mounted-gated so the server render emits nothing
   // (no document.body on the server / hydration mismatch).
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    setMounted(true);
+    // Hide the AppShell chrome (top bar + bottom tab bar) while the flow is
+    // open. The overlay is a full-screen takeover; the tab bar otherwise pokes
+    // through (it lives in its own stacking layer, so z-index alone is not a
+    // reliable cover). A hidden element can't overlap regardless of stacking.
+    document.body.classList.add("flow-open");
+    return () => document.body.classList.remove("flow-open");
+  }, []);
   if (!mounted) return null;
 
   // height/top live as classes for the initial paint, then the hook overrides
