@@ -1,28 +1,31 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
+import { Card } from "@/components/ui/card";
 import { captureServerRead } from "@/lib/read-capture";
 
+// Storm status chips — soft-tinted fill + status-colored ink on the dark
+// surface (replaces the old light pastels, which were invisible on navy).
 const STATUS_LABELS: Record<
   string,
   { label: string; className: string }
 > = {
-  open: { label: "Open", className: "bg-brand/15 text-brand-deep" },
+  open: { label: "Open", className: "bg-accent-soft text-accent-ink" },
   stabilizing: {
     label: "Stabilizing",
-    className: "bg-warm-soft text-[#6A3E00]",
+    className: "bg-warm-soft text-warm",
   },
   resolved: {
     label: "Resolved",
-    className: "bg-[#DFF5E7] text-[#166A3A]",
+    className: "bg-positive/15 text-positive",
   },
   paused: { label: "Paused", className: "bg-surface-tint text-ink-soft" },
   worsened: {
     label: "Worsened",
-    className: "bg-[#FBE3E3] text-[#8B2A2A]",
+    className: "bg-danger/15 text-danger",
   },
-  ended: { label: "Ended", className: "bg-surface-tint text-ink-muted" },
+  ended: { label: "Ended", className: "bg-surface-tint text-ink-soft" },
 };
 
 export default async function ThreadsPage() {
@@ -84,12 +87,12 @@ export default async function ThreadsPage() {
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
-      <SkyBackground variant="calm" />
+      <StormBackground />
 
       <div className="flex items-start justify-between gap-4 pt-2">
         <div>
           <h1
-            className="font-display text-[30px] leading-[1.1] text-ink"
+            className="font-display text-[30px] font-medium leading-[1.1] text-ink"
             style={{ letterSpacing: "-0.8px" }}
           >
             Conversations
@@ -100,19 +103,19 @@ export default async function ThreadsPage() {
         </div>
         <Link
           href="/coach"
-          className="shrink-0 rounded-pill bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft shadow-soft active:opacity-80"
+          className="shrink-0 rounded-pill border border-hairline bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
         >
           Back
         </Link>
       </div>
 
       {threads.length === 0 ? (
-        <div className="mt-6 rounded-card-sm bg-surface p-5 shadow-soft">
+        <Card className="mt-6 p-5">
           <p className="text-[14px] font-medium leading-[1.5] text-ink-soft">
             No conversation threads yet. Threads are created automatically when
             you start a Prepare session about a specific person.
           </p>
-        </div>
+        </Card>
       ) : (
         <ul className="mt-6 space-y-2.5">
           {threads.map((thread) => {
@@ -126,7 +129,7 @@ export default async function ThreadsPage() {
               <li key={thread.thread_id}>
                 <Link
                   href={`/coach/threads/${thread.thread_id}`}
-                  className="block rounded-card-sm bg-surface p-4 shadow-soft transition active:scale-[0.99]"
+                  className="block rounded-card border border-hairline bg-surface p-4 transition active:scale-[0.99]"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">

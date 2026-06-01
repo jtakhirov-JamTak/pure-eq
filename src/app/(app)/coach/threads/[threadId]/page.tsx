@@ -1,12 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
+import { StormBackground } from "@/components/brand/StormBackground";
+import { Kicker } from "@/components/ui/kicker";
 import ThreadStatusSelector from "./thread-status-selector";
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
-  prepare: { label: "Prepare", color: "bg-blue-100 text-blue-700" },
-  review: { label: "Review", color: "bg-purple-100 text-purple-700" },
-  repair: { label: "Repair", color: "bg-amber-100 text-amber-700" },
+  prepare: { label: "Prepare", color: "bg-accent-soft text-accent-ink" },
+  review: { label: "Review", color: "bg-warm-soft text-warm" },
+  repair: { label: "Repair", color: "bg-positive/15 text-positive" },
 };
 
 export default async function ThreadDetailPage({
@@ -80,22 +82,22 @@ export default async function ThreadDetailPage({
   }
 
   return (
-    <div className="px-5 pb-28 pt-8">
+    <div className="relative min-h-full px-5 pb-28 pt-8">
+      <StormBackground />
+
       <div className="flex items-center justify-between">
         <Link
           href="/coach/threads"
-          className="rounded-lg border border-zinc-200 px-3 py-1.5 text-sm text-zinc-600 hover:bg-zinc-50"
+          className="rounded-pill border border-hairline bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
         >
           Back
         </Link>
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium uppercase tracking-widest text-zinc-500">
-          Conversation with {personName}
-        </p>
+        <Kicker>Conversation with {personName}</Kicker>
         {thread.title && (
-          <h2 className="mt-1 truncate text-lg font-bold text-zinc-900">
+          <h2 className="mt-1.5 truncate text-[18px] font-semibold text-ink">
             {thread.title}
           </h2>
         )}
@@ -108,17 +110,17 @@ export default async function ThreadDetailPage({
         />
       </div>
 
-      <p className="mt-4 text-xs text-zinc-500">
+      <p className="mt-4 text-[11px] font-medium text-ink-muted">
         Started {formatDate(thread.started_at)} · Last activity{" "}
         {formatDate(thread.last_activity_at)}
       </p>
 
       {/* Entry Timeline */}
       <div className="mt-6">
-        <p className="text-sm font-medium text-zinc-700">Timeline</p>
+        <Kicker>Timeline</Kicker>
 
         {entries.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500">
+          <p className="mt-3 text-[13px] font-medium text-ink-soft">
             No entries linked to this thread yet.
           </p>
         ) : (
@@ -126,27 +128,29 @@ export default async function ThreadDetailPage({
             {entries.map((entry) => {
               const badge = MODULE_BADGES[entry.record_type] ?? {
                 label: entry.record_type,
-                color: "bg-zinc-100 text-zinc-600",
+                color: "bg-surface-tint text-ink-soft",
               };
               const excerpt = getExcerpt(entry.payload_json);
 
               return (
                 <div
                   key={entry.raw_record_id}
-                  className="rounded-xl border border-zinc-200 p-4"
+                  className="rounded-card border border-hairline bg-surface p-4"
                 >
                   <div className="flex items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.color}`}
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge.color}`}
                     >
                       {badge.label}
                     </span>
-                    <span className="text-xs text-zinc-500">
+                    <span className="text-[11px] font-medium text-ink-muted">
                       {entry.created_at ? formatDate(entry.created_at) : ""}
                     </span>
                   </div>
                   {excerpt && (
-                    <p className="mt-2 text-sm text-zinc-600">{excerpt}</p>
+                    <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
+                      {excerpt}
+                    </p>
                   )}
                 </div>
               );
@@ -157,11 +161,11 @@ export default async function ThreadDetailPage({
 
       {/* Quick links */}
       <div className="mt-8 space-y-2">
-        <p className="text-sm font-medium text-zinc-700">Add to this thread</p>
-        <div className="flex gap-2">
+        <Kicker>Add to this thread</Kicker>
+        <div className="mt-1 flex gap-2">
           <Link
             href="/coach/review"
-            className="rounded-lg border border-zinc-200 px-4 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
+            className="rounded-pill border border-hairline bg-surface px-4 py-2 text-[13px] font-semibold text-ink active:opacity-80"
           >
             Review
           </Link>

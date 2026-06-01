@@ -44,9 +44,9 @@ export default function ThreadStatusSelector({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-zinc-600">Status:</label>
+      <label className="text-[13px] font-medium text-ink-soft">Status:</label>
       <select
-        className="rounded-lg border border-zinc-300 bg-white px-2 py-1.5 text-base text-zinc-900 focus:border-zinc-500 focus:outline-none"
+        className="rounded-input border border-hairline bg-surface px-2 py-1.5 text-base text-ink focus:border-accent focus:outline-none disabled:opacity-50"
         value={status}
         onChange={(e) => handleChange(e.target.value)}
         disabled={saving}
@@ -57,8 +57,8 @@ export default function ThreadStatusSelector({
           </option>
         ))}
       </select>
-      {saving && <span className="text-xs text-zinc-500">Saving...</span>}
-      {error && <span className="text-xs text-red-600">{error}</span>}
+      {saving && <span className="text-[11px] text-ink-muted">Saving...</span>}
+      {error && <span className="text-[11px] text-danger">{error}</span>}
     </div>
   );
 }
