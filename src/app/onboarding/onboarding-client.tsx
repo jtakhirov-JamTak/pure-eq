@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import type { ProfileResult } from "@/types";
 import { createClient } from "@/lib/supabase/client";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { CloudAvatar } from "@/components/brand/CloudAvatar";
 import { SunBadge } from "@/components/brand/SunBadge";
+import { Kicker } from "@/components/ui/kicker";
+import { PrimaryButton } from "@/components/ui/button";
 import { readFirstName } from "@/lib/user-metadata";
 import {
   QUESTIONS,
@@ -70,9 +72,6 @@ function safeRedirect(value: unknown): string {
     return "/coach/prepare";
   return value;
 }
-
-// Local alias — renamed to avoid shadowing the imported shared component.
-const OnboardingSky = () => <SkyBackground variant="calm" />;
 
 export default function OnboardingClient() {
   const router = useRouter();
@@ -239,9 +238,9 @@ export default function OnboardingClient() {
   if (flushing) {
     return (
       <div className="relative flex min-h-dvh items-center justify-center px-6">
-        <OnboardingSky />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[15px] font-medium text-ink-soft">
             Saving your profile…
           </p>
@@ -260,7 +259,7 @@ export default function OnboardingClient() {
           paddingBottom: "max(env(safe-area-inset-bottom), 1.5rem)",
         }}
       >
-        <SkyBackground variant="result" />
+        <StormBackground />
 
         <div
           aria-hidden="true"
@@ -275,37 +274,34 @@ export default function OnboardingClient() {
         </div>
 
         <h1
-          className="mt-6 text-center font-display text-[32px] leading-[1.1] text-white"
-          style={{
-            letterSpacing: "-0.6px",
-            textShadow: "0 2px 8px rgba(20,60,130,0.25)",
-          }}
+          className="mt-6 text-center text-[32px] font-medium leading-[1.1] text-ink"
+          style={{ letterSpacing: "-0.6px" }}
         >
           You&apos;re all set,
           <br />
           <span className="italic break-words">{displayName}</span>.
         </h1>
 
-        <p className="mt-4 max-w-[300px] text-center text-[14px] font-medium leading-[1.5] text-white/90">
+        <p className="mt-4 max-w-[300px] text-center text-[14px] font-medium leading-[1.5] text-ink-soft">
           Your SpeakEasy is tuned for hard conversations and pattern-spotting.
           Blue skies ahead.
         </p>
 
         {submitError && (
-          <p className="mt-6 text-center text-[13px] font-medium text-white">
+          <p className="mt-6 text-center text-[13px] font-medium text-danger">
             {submitError}
           </p>
         )}
 
         <div className="flex-1" />
 
-        <button
+        <PrimaryButton
           onClick={handleCta}
           disabled={submitting}
-          className="h-14 w-full max-w-sm rounded-pill bg-white text-[15px] font-bold text-ink shadow-card transition active:scale-[0.98] disabled:opacity-60"
+          className="max-w-sm"
         >
           {submitting ? "Saving…" : "Step into the forecast →"}
-        </button>
+        </PrimaryButton>
 
         <button
           onClick={() => {
@@ -315,7 +311,7 @@ export default function OnboardingClient() {
             setSubmitError(null);
           }}
           disabled={submitting}
-          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-white underline active:opacity-70 disabled:opacity-50"
+          className="mt-3 inline-flex min-h-11 items-center justify-center px-4 text-[13px] font-medium text-ink-soft underline active:opacity-70 disabled:opacity-50"
         >
           This doesn&apos;t feel right
         </button>
@@ -327,7 +323,7 @@ export default function OnboardingClient() {
 
   return (
     <div className="relative flex min-h-dvh flex-col px-6 pb-[env(safe-area-inset-bottom)] pt-[max(4rem,env(safe-area-inset-top))]">
-      <OnboardingSky />
+      <StormBackground />
       <div className="mx-auto w-full max-w-sm pb-12">
         <div className="flex items-center gap-1.5">
           {Array.from({ length: 9 }).map((_, i) => (
@@ -335,20 +331,22 @@ export default function OnboardingClient() {
               key={i}
               className={`h-1.5 flex-1 rounded-full transition-colors ${
                 i < currentQuestion
-                  ? "bg-brand"
+                  ? "bg-accent"
                   : i === currentQuestion
-                    ? "bg-brand-deep"
-                    : "bg-white/60"
+                    ? "bg-accent-ink"
+                    : "bg-hairline-strong"
               }`}
             />
           ))}
         </div>
-        <p className="mt-3 text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
-          {currentQuestion + 1} of 9
-        </p>
+        <div className="mt-3">
+          <Kicker className="text-ink-soft">
+            {currentQuestion + 1} of 9
+          </Kicker>
+        </div>
 
         <h2
-          className="mt-6 font-display text-[24px] leading-[1.2] text-ink"
+          className="mt-6 text-[24px] font-medium leading-[1.2] text-ink"
           style={{ letterSpacing: "-0.4px" }}
         >
           {question.text}
@@ -359,9 +357,9 @@ export default function OnboardingClient() {
             <button
               key={option.label}
               onClick={() => handleAnswer(option.label)}
-              className="flex w-full items-start gap-3 rounded-card-sm bg-surface p-4 text-left shadow-soft transition active:scale-[0.99]"
+              className="flex w-full items-start gap-3 rounded-[14px] border border-hairline bg-surface p-4 text-left transition active:scale-[0.99]"
             >
-              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-surface-tint text-[12px] font-bold text-brand-deep">
+              <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[12px] font-bold text-accent-ink">
                 {option.label}
               </span>
               <span className="text-[14px] font-medium leading-[1.45] text-ink">
