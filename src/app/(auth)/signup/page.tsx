@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { Wordmark } from "@/components/brand/Wordmark";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { GoogleGlyph } from "@/components/brand/GoogleGlyph";
 
 export default function SignupPage() {
@@ -116,14 +116,14 @@ export default function SignupPage() {
 
   return (
     <div className="relative flex min-h-dvh flex-col items-center justify-center px-6 pb-[env(safe-area-inset-bottom)] pt-[max(3rem,env(safe-area-inset-top))]">
-      <SkyBackground variant="calm" />
+      <StormBackground />
 
       <div className="w-full max-w-sm">
         <div className="flex justify-center">
           <Wordmark size={18} />
         </div>
         <h1
-          className="mt-8 font-display text-[30px] leading-[1.12] text-ink text-center"
+          className="mt-8 font-display text-[30px] font-medium leading-[1.12] text-ink text-center"
           style={{ letterSpacing: "-0.7px" }}
         >
           Create account
@@ -137,7 +137,7 @@ export default function SignupPage() {
           onClick={handleGoogle}
           disabled={loading || isStandalone}
           aria-label="Continue with Google"
-          className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft transition active:scale-[0.98] disabled:opacity-50"
+          className="mt-8 flex h-12 w-full items-center justify-center gap-3 rounded-pill border border-hairline bg-surface text-[15px] font-bold text-ink transition active:scale-[0.98] disabled:opacity-50"
         >
           <GoogleGlyph />
           Continue with Google
@@ -175,7 +175,7 @@ export default function SignupPage() {
               onChange={(e) => setFirstName(e.target.value)}
               maxLength={50}
               required
-              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
+              className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="Jane"
             />
           </div>
@@ -195,7 +195,7 @@ export default function SignupPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
+              className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="you@example.com"
             />
           </div>
@@ -215,7 +215,7 @@ export default function SignupPage() {
               onChange={(e) => setPassword(e.target.value)}
               required
               minLength={8}
-              className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
+              className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
               placeholder="••••••••"
             />
           </div>
@@ -225,14 +225,14 @@ export default function SignupPage() {
           )}
 
           {alreadyRegistered && (
-            <div className="space-y-3 rounded-card-sm bg-warm-soft p-4 shadow-soft">
+            <div className="space-y-3 rounded-card border border-hairline bg-warm-soft p-4">
               <p className="text-[13px] font-medium leading-[1.5] text-ink">
                 You already have an account with this email. Your quiz answers
                 will be saved automatically after you sign in.
               </p>
               <Link
                 href="/login"
-                className="flex h-12 w-full items-center justify-center rounded-pill bg-ink text-[14px] font-bold text-white shadow-soft active:scale-[0.98]"
+                className="flex h-12 w-full items-center justify-center rounded-pill bg-accent text-[14px] font-bold text-accent-text shadow-cta active:scale-[0.98]"
               >
                 Log in instead
               </Link>
@@ -242,7 +242,7 @@ export default function SignupPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-14 w-full items-center justify-center rounded-pill bg-surface text-[15px] font-bold text-ink shadow-soft ring-1 ring-hair transition active:scale-[0.98] disabled:opacity-50"
+            className="flex h-14 w-full items-center justify-center rounded-pill bg-accent text-[15px] font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
           >
             {loading ? "Creating account..." : "Get started"}
           </button>
@@ -252,7 +252,7 @@ export default function SignupPage() {
           Already have an account?{" "}
           <Link
             href="/login"
-            className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-brand-deep underline active:opacity-70"
+            className="inline-flex min-h-11 items-center px-2 text-[13px] font-semibold text-accent-ink underline active:opacity-70"
           >
             Log in
           </Link>

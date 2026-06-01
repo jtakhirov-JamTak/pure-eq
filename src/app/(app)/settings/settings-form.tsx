@@ -42,7 +42,7 @@ export function SettingsForm({ initialFirstName }: Props) {
   return (
     <form
       onSubmit={handleSave}
-      className="rounded-card-sm bg-surface p-5 shadow-card"
+      className="rounded-card border border-hairline bg-surface p-5"
     >
       <label
         htmlFor="firstName"
@@ -58,7 +58,7 @@ export function SettingsForm({ initialFirstName }: Props) {
         value={firstName}
         onChange={(e) => setFirstName(e.target.value)}
         maxLength={50}
-        className="mt-1.5 block h-12 w-full rounded-card-xs bg-surface-tint px-4 text-base text-ink shadow-soft placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-brand"
+        className="mt-1.5 block h-12 w-full rounded-input border border-hairline bg-surface-tint px-4 text-base text-ink placeholder:text-ink-muted focus:outline-none focus:ring-2 focus:ring-accent"
         placeholder="Jane"
       />
       <p className="mt-2 text-[12px] font-medium text-ink-soft">
@@ -70,15 +70,13 @@ export function SettingsForm({ initialFirstName }: Props) {
       )}
 
       {savedAt && !dirty && !error && (
-        <p className="mt-3 text-[13px] font-medium text-brand-deep">
-          Saved.
-        </p>
+        <p className="mt-3 text-[13px] font-medium text-positive">Saved.</p>
       )}
 
       <button
         type="submit"
         disabled={!dirty || saving}
-        className="mt-5 flex h-12 w-full items-center justify-center rounded-pill bg-brand text-[14px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+        className="mt-5 flex h-12 w-full items-center justify-center rounded-pill bg-accent text-[14px] font-bold text-accent-text shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
       >
         {saving ? "Saving…" : "Save"}
       </button>

@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { SkyBackground } from "@/components/brand/SkyBackground";
+import { StormBackground } from "@/components/brand/StormBackground";
 import { SettingsForm } from "./settings-form";
 
 export default async function SettingsPage() {
@@ -15,9 +15,9 @@ export default async function SettingsPage() {
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
-      <SkyBackground variant="calm" />
+      <StormBackground />
       <h1
-        className="font-display text-[30px] leading-[1.12] text-ink"
+        className="font-display text-[30px] font-medium leading-[1.12] text-ink"
         style={{ letterSpacing: "-0.7px" }}
       >
         Settings
