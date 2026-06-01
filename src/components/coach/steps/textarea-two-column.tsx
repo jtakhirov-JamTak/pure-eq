@@ -26,6 +26,13 @@ type Props = {
   leftPlaceholder?: string;
   rightPlaceholder?: string;
   rows?: number;
+  /**
+   * No-scroll FlowScreen mode: stack the two voice fields and split the
+   * available vertical space between them (each grows to fill its half)
+   * instead of using a fixed `rows` height. Used by the one-question-per-screen
+   * coach flows so the two-column step fits without scrolling.
+   */
+  fill?: boolean;
 };
 
 export function TextareaTwoColumn({
@@ -36,9 +43,47 @@ export function TextareaTwoColumn({
   leftPlaceholder = "",
   rightPlaceholder = "",
   rows = 4,
+  fill,
 }: Props) {
   const left = value?.left ?? "";
   const right = value?.right ?? "";
+
+  if (fill) {
+    // Two halves of one flex column. Each column wraps the VoiceInput in a
+    // flex-1 box so the input's `h-full` resolves against the space left after
+    // its label — the two inputs evenly share the main region, no scroll.
+    return (
+      <div className="flex h-full min-h-0 flex-col gap-3">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="mb-1.5 shrink-0 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+            {leftLabel}
+          </p>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <VoiceInput
+              value={left}
+              onChange={(next) => onChange({ left: next, right })}
+              fill
+              placeholder={leftPlaceholder}
+            />
+          </div>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col">
+          <p className="mb-1.5 shrink-0 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+            {rightLabel}
+          </p>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <VoiceInput
+              value={right}
+              onChange={(next) => onChange({ left, right: next })}
+              fill
+              placeholder={rightPlaceholder}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <div>

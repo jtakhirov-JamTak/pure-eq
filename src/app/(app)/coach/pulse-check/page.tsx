@@ -6,14 +6,24 @@ import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
-import { SkyBackground } from "@/components/brand/SkyBackground";
-import { CoachPage } from "@/components/coach/coach-page";
+import { StormBackground } from "@/components/brand/StormBackground";
 import {
   TextareaTwoColumn,
   type TextareaTwoColumnValue,
 } from "@/components/coach/steps/textarea-two-column";
 import {
-  pageCanAdvance,
+  FlowScreen,
+  FlowHeader,
+  FlowFooter,
+} from "@/components/ui/flow-screen";
+import { ProgressDots } from "@/components/ui/progress-dots";
+import { SelectableRow } from "@/components/ui/selectable";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
+import { Card } from "@/components/ui/card";
+import {
+  flattenVisibleSteps,
+  questionCanAdvance,
   type PageDef,
   type StepDef,
 } from "@/lib/coach/page-flow";
@@ -55,6 +65,9 @@ const CHECK_WINDOW_LABELS: Record<CheckWindow, string> = {
 //   1 notice: personName, whatFeelsOff, whatChangedVsBefore
 //   2 read:   storyAndAlternative (two-column), signalTest (two-column)
 //   3 route:  nextMove, checkWindow (if observe), lightCheckQuestion (if ask_light)
+// Redesign §5: the 3 pages stay as the progress MODEL (3 section dots); the
+// user advances one question at a time, conditional Qs entering/leaving the
+// flattened sequence automatically.
 const PULSE_CHECK_PAGES: PageDef[] = [
   {
     pageKey: "notice",
@@ -157,11 +170,20 @@ const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
 
 const PREFILL_KEY = "pure-eq:bys-prefill";
 
-const PulseBackground = () => <SkyBackground variant="warm" />;
+// Reading screen (results/refusal/saved) — scrollable, renders inside the app
+// shell over the body's Storm gradient.
+function ReadingScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-10">
+      <StormBackground />
+      {children}
+    </div>
+  );
+}
 
 export default function PulseCheckPage() {
   const router = useRouter();
-  const [pageIndex, setPageIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
   const [tier, setTier] = useState<AiTier>("quick");
   const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
@@ -200,8 +222,15 @@ export default function PulseCheckPage() {
     };
   }, []);
 
-  const totalPages = PULSE_CHECK_PAGES.length;
-  const currentPage = PULSE_CHECK_PAGES[pageIndex];
+  // One-question-per-screen sequence (redesign §5). Recomputed from `data` each
+  // render so a conditional Q (checkWindow / lightCheckQuestion) enters or
+  // leaves the sequence automatically as `nextMove` changes; clamp the index
+  // when the list shrinks.
+  const steps = flattenVisibleSteps(PULSE_CHECK_PAGES, data);
+  const safeIndex = Math.min(stepIndex, steps.length - 1);
+  const current = steps[safeIndex];
+  const isLastStep = safeIndex === steps.length - 1;
+  const canAdvance = questionCanAdvance(current.q, data);
 
   function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
@@ -219,21 +248,21 @@ export default function PulseCheckPage() {
     });
   }
 
-  function canAdvance(): boolean {
-    return pageCanAdvance(currentPage, data);
-  }
-
   function handleNext() {
-    if (!canAdvance()) return;
-    if (pageIndex < totalPages - 1) {
-      setPageIndex(pageIndex + 1);
+    if (!questionCanAdvance(current.q, data)) return;
+    // Terminal-button branching keys off whether a later visible step exists,
+    // not an index constant (CLAUDE.md dynamic-STEPS rule) — load-bearing here
+    // because the conditional Qs change the sequence length.
+    if (safeIndex < steps.length - 1) {
+      setStepIndex(safeIndex + 1);
     } else {
       handleSave();
     }
   }
 
   function handleBack() {
-    if (pageIndex > 0) setPageIndex(pageIndex - 1);
+    if (safeIndex > 0) setStepIndex(safeIndex - 1);
+    else router.push("/coach");
   }
 
   // Build the request body. The stable idempotencyKey ties the free save and
@@ -417,26 +446,22 @@ export default function PulseCheckPage() {
   // ============================================================
   if (aiOutput && aiOutput.mode === "refusal" && isRefusal(aiOutput)) {
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-        <PulseBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <h1
+          className="text-[24px] font-medium leading-[1.18] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
           A note before you go further.
-        </h2>
-        <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+        </h1>
+        <Card className="mt-5">
           <p className="text-[14px] font-medium leading-[1.55] text-ink">
             {aiOutput.message_to_user}
           </p>
-        </div>
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        </Card>
+        <PrimaryButton onClick={() => router.push("/coach")} className="mt-8">
           Back to Coach
-        </button>
-      </div>
+        </PrimaryButton>
+      </ReadingScreen>
     );
   }
 
@@ -447,17 +472,14 @@ export default function PulseCheckPage() {
     });
     const cta = chipCta((data.nextMove as string) ?? "");
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-        <PulseBackground />
-        <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
-          Pulse Check
-        </span>
-        <h2
-          className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <Kicker className="text-accent-ink">Pulse Check · Complete</Kicker>
+        <h1
+          className="mt-3 text-[24px] font-medium leading-[1.15] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
-          Your <span className="italic">read</span>.
-        </h2>
+          Your read.
+        </h1>
         <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
           Keep each card, edit it in your words, or mark it not true.
         </p>
@@ -474,44 +496,42 @@ export default function PulseCheckPage() {
                 entryId={pulseCheckEntryId}
               />
             ) : (
-              <div
-                key={key}
-                className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
-              >
-                <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                  {label}
-                </p>
+              <Card key={key} className="animate-card-in">
+                <Kicker>{label}</Kicker>
                 <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
                   {text}
                 </p>
-              </div>
+              </Card>
             );
           })}
         </div>
-        {cta && (
-          <button
-            onClick={cta.onClick}
-            className="mt-6 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-          >
-            {cta.label}
-          </button>
+        {cta ? (
+          <>
+            <PrimaryButton onClick={cta.onClick} className="mt-6">
+              {cta.label}
+            </PrimaryButton>
+            <SecondaryButton
+              onClick={() => router.push("/coach")}
+              className="mt-3 w-full"
+            >
+              Done
+            </SecondaryButton>
+          </>
+        ) : (
+          <PrimaryButton onClick={() => router.push("/coach")} className="mt-8">
+            Done
+          </PrimaryButton>
         )}
-        <button
-          onClick={() => router.push("/coach")}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-        >
-          Done
-        </button>
-      </div>
+      </ReadingScreen>
     );
   }
 
   if (submitting) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
-        <PulseBackground />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
             Reading your pulse check…
           </p>
@@ -523,12 +543,8 @@ export default function PulseCheckPage() {
   if (awaitingGenerate) {
     return (
       <GetFeedbackScreen
-        background={<PulseBackground />}
-        eyebrow={
-          <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
-            Pulse Check
-          </span>
-        }
+        background={<StormBackground />}
+        eyebrow={<Kicker className="text-accent-ink">Pulse Check</Kicker>}
         title="Saved."
         blurb="Your pulse check is saved — it's yours to keep. Get an AI read whenever you're ready."
         tier={tier}
@@ -550,43 +566,36 @@ export default function PulseCheckPage() {
   if (savedMessage) {
     const cta = chipCta((data.nextMove as string) ?? "");
     return (
-      <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-        <PulseBackground />
-        <h2
-          className="font-display text-[28px] leading-[1.15] text-ink"
-          style={{ letterSpacing: "-0.6px" }}
+      <ReadingScreen>
+        <h1
+          className="text-[24px] font-medium leading-[1.18] text-ink"
+          style={{ letterSpacing: "-0.5px" }}
         >
           Saved
-        </h2>
+        </h1>
         <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
           {savedMessage}
         </p>
-        <button
-          onClick={retryCoaching}
-          className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-        >
+        <PrimaryButton onClick={retryCoaching} className="mt-8">
           Try again for coaching feedback
-        </button>
+        </PrimaryButton>
         {cta && (
-          <button
-            onClick={cta.onClick}
-            className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-          >
+          <SecondaryButton onClick={cta.onClick} className="mt-3 w-full">
             {cta.label}
-          </button>
+          </SecondaryButton>
         )}
-        <button
+        <SecondaryButton
           onClick={() => router.push("/coach")}
-          className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
+          className="mt-3 w-full"
         >
           Back to Coach
-        </button>
-      </div>
+        </SecondaryButton>
+      </ReadingScreen>
     );
   }
 
   // ============================================================
-  // Form
+  // Form: one question per screen (no-scroll FlowScreen)
   // ============================================================
   function renderStep(step: StepDef) {
     if (step.kind === "person") {
@@ -605,7 +614,7 @@ export default function PulseCheckPage() {
         <VoiceInput
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          rows={step.rows ?? 4}
+          fill
           placeholder="Type or tap the mic to speak..."
         />
       );
@@ -617,6 +626,7 @@ export default function PulseCheckPage() {
           <TextareaTwoColumn
             value={value}
             onChange={(next) => setFieldValue(step.key, next)}
+            fill
             leftLabel="If it's real signal"
             rightLabel="If it's just noise"
             leftPlaceholder="What you'd see that confirms it — a behavior, a message, a tone."
@@ -628,6 +638,7 @@ export default function PulseCheckPage() {
         <TextareaTwoColumn
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
+          fill
           leftLabel="The story"
           rightLabel="An equally plausible alternative"
           leftPlaceholder="The meaning you've been concluding."
@@ -640,18 +651,13 @@ export default function PulseCheckPage() {
       return (
         <div className="space-y-2">
           {PULSE_NEXT_MOVE_V2_VALUES.map((move) => (
-            <button
+            <SelectableRow
               key={move}
-              type="button"
+              selected={value === move}
               onClick={() => setNextMove(move)}
-              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
-                value === move
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
             >
               {NEXT_MOVE_LABELS[move]}
-            </button>
+            </SelectableRow>
           ))}
         </div>
       );
@@ -661,18 +667,13 @@ export default function PulseCheckPage() {
       return (
         <div className="space-y-2">
           {CHECK_WINDOW_VALUES.map((win) => (
-            <button
+            <SelectableRow
               key={win}
-              type="button"
+              selected={value === win}
               onClick={() => setFieldValue(step.key, win)}
-              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
-                value === win
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
             >
               {CHECK_WINDOW_LABELS[win]}
-            </button>
+            </SelectableRow>
           ))}
         </div>
       );
@@ -681,39 +682,42 @@ export default function PulseCheckPage() {
   }
 
   return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <PulseBackground />
-
-      <CoachPage
-        eyebrow="Pulse Check"
-        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"
-        pageIndex={pageIndex}
-        totalPages={totalPages}
-        page={currentPage}
-        state={data}
-        renderStep={renderStep}
-        pageTitle={null}
-      />
-      {submitError && (
-        <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
-      )}
-      <div className="mt-6 flex gap-3">
-        {pageIndex > 0 && (
-          <button
-            onClick={handleBack}
-            className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-          >
-            Back
-          </button>
+    <FlowScreen
+      header={
+        <FlowHeader
+          onBack={handleBack}
+          eyebrow="Pulse Check"
+          counter={`${safeIndex + 1} / ${steps.length}`}
+          dots={
+            <ProgressDots
+              total={PULSE_CHECK_PAGES.length}
+              current={current.sectionIndex}
+            />
+          }
+        />
+      }
+      footer={
+        <FlowFooter
+          onBack={safeIndex > 0 ? handleBack : undefined}
+          primaryLabel={isLastStep ? "Save pulse check" : "Next"}
+          onPrimary={handleNext}
+          primaryDisabled={!canAdvance}
+        />
+      }
+      title={current.q.title}
+      helper={current.q.prompt ?? undefined}
+    >
+      <div
+        key={`${current.pageKey}.${current.q.key}`}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {renderStep(current.q)}
+        {isLastStep && submitError && (
+          <p className="mt-2 shrink-0 text-[13px] font-medium text-danger">
+            {submitError}
+          </p>
         )}
-        <button
-          onClick={handleNext}
-          disabled={!canAdvance()}
-          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-        >
-          {pageIndex === totalPages - 1 ? "Save pulse check" : "Next"}
-        </button>
       </div>
-    </div>
+    </FlowScreen>
   );
 }

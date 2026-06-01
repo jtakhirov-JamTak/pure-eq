@@ -6,14 +6,24 @@ import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
-import { SkyBackground } from "@/components/brand/SkyBackground";
-import { CoachPage } from "@/components/coach/coach-page";
+import { StormBackground } from "@/components/brand/StormBackground";
 import {
   TextareaTwoColumn,
   type TextareaTwoColumnValue,
 } from "@/components/coach/steps/textarea-two-column";
 import {
-  pageCanAdvance,
+  FlowScreen,
+  FlowHeader,
+  FlowFooter,
+} from "@/components/ui/flow-screen";
+import { ProgressDots } from "@/components/ui/progress-dots";
+import { SelectableRow } from "@/components/ui/selectable";
+import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
+import { Kicker } from "@/components/ui/kicker";
+import { Card } from "@/components/ui/card";
+import {
+  flattenVisibleSteps,
+  questionCanAdvance,
   type PageDef,
   type StepDef,
 } from "@/lib/coach/page-flow";
@@ -43,6 +53,8 @@ const NEXT_MOVE_LABELS: Record<ReviewNextMove, string> = {
 //   1 setup: personName, whatHappened
 //   2 read:  observedInterpreted (two-column), whatYouDid
 //   3 learn: easierOrHarder, dataAndUpdate, nextMove
+// Redesign §5: the 3 pages stay as the progress MODEL (3 section dots); the
+// user advances one question at a time across the flattened questions.
 const REVIEW_PAGES: PageDef[] = [
   {
     pageKey: "setup",
@@ -134,7 +146,16 @@ const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
   { label: "Repeat · stop · update", key: "repeat_stop_update" },
 ];
 
-const ReviewBackground = () => <SkyBackground variant="warm" />;
+// Reading screen (results/refusal/saved) — scrollable, renders inside the app
+// shell over the body's Storm gradient.
+function ReadingScreen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="relative min-h-full px-5 pt-6 pb-10">
+      <StormBackground />
+      {children}
+    </div>
+  );
+}
 
 function NormalResultCard({
   output,
@@ -150,17 +171,14 @@ function NormalResultCard({
     return typeof v === "string" && v.trim().length > 0;
   });
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <ReviewBackground />
-      <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
-        Review
-      </span>
-      <h2
-        className="mt-3 font-display text-[28px] leading-[1.12] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <Kicker className="text-accent-ink">Review · Complete</Kicker>
+      <h1
+        className="mt-3 text-[24px] font-medium leading-[1.15] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
-        Your <span className="italic">reflection</span>.
-      </h2>
+        Your reflection.
+      </h1>
       <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
         Keep each card, edit it in your words, or mark it not true.
       </p>
@@ -177,27 +195,19 @@ function NormalResultCard({
               entryId={entryId}
             />
           ) : (
-            <div
-              key={key}
-              className="rounded-card-sm bg-surface p-4 shadow-soft animate-card-in"
-            >
-              <p className="text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
-                {label}
-              </p>
+            <Card key={key} className="animate-card-in">
+              <Kicker>{label}</Kicker>
               <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
                 {text}
               </p>
-            </div>
+            </Card>
           );
         })}
       </div>
-      <button
-        onClick={onBack}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      <PrimaryButton onClick={onBack} className="mt-8">
         Done
-      </button>
-    </div>
+      </PrimaryButton>
+    </ReadingScreen>
   );
 }
 
@@ -209,26 +219,22 @@ function RefusalCard({
   onBack: () => void;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <ReviewBackground />
-      <h2
-        className="font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <h1
+        className="text-[24px] font-medium leading-[1.18] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
         A note before you go further.
-      </h2>
-      <div className="mt-5 rounded-card-sm bg-surface p-4 shadow-soft">
+      </h1>
+      <Card className="mt-5">
         <p className="text-[14px] font-medium leading-[1.55] text-ink">
           {output.message_to_user}
         </p>
-      </div>
-      <button
-        onClick={onBack}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      </Card>
+      <PrimaryButton onClick={onBack} className="mt-8">
         Back to Coach
-      </button>
-    </div>
+      </PrimaryButton>
+    </ReadingScreen>
   );
 }
 
@@ -242,37 +248,30 @@ function EmptyOutputCard({
   message?: string;
 }) {
   return (
-    <div className="relative min-h-full px-5 pt-6 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <ReviewBackground />
-      <h2
-        className="font-display text-[28px] leading-[1.15] text-ink"
-        style={{ letterSpacing: "-0.6px" }}
+    <ReadingScreen>
+      <h1
+        className="text-[24px] font-medium leading-[1.18] text-ink"
+        style={{ letterSpacing: "-0.5px" }}
       >
         Reflection saved
-      </h2>
+      </h1>
       <p className="mt-3 text-[14px] font-medium leading-[1.5] text-ink-soft">
         {message ??
           "Your reflection is saved, but no coaching feedback is available to show for this one."}
       </p>
-      <button
-        onClick={onRetryCoaching}
-        className="mt-8 flex h-14 w-full items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta active:scale-[0.98]"
-      >
+      <PrimaryButton onClick={onRetryCoaching} className="mt-8">
         Try again for coaching feedback
-      </button>
-      <button
-        onClick={onBack}
-        className="mt-3 flex h-12 w-full items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-      >
+      </PrimaryButton>
+      <SecondaryButton onClick={onBack} className="mt-3 w-full">
         Back to Coach
-      </button>
-    </div>
+      </SecondaryButton>
+    </ReadingScreen>
   );
 }
 
 export default function ReviewPage() {
   const router = useRouter();
-  const [pageIndex, setPageIndex] = useState(0);
+  const [stepIndex, setStepIndex] = useState(0);
   const [tier, setTier] = useState<AiTier>("quick");
   const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
@@ -296,28 +295,32 @@ export default function ReviewPage() {
     idempotencyKeyRef.current = safeUUID();
   }
 
-  const totalPages = REVIEW_PAGES.length;
-  const currentPage = REVIEW_PAGES[pageIndex];
+  // One-question-per-screen sequence (redesign §5). Recomputed from `data`
+  // each render; clamp the index when the list could shrink.
+  const steps = flattenVisibleSteps(REVIEW_PAGES, data);
+  const safeIndex = Math.min(stepIndex, steps.length - 1);
+  const current = steps[safeIndex];
+  const isLastStep = safeIndex === steps.length - 1;
+  const canAdvance = questionCanAdvance(current.q, data);
 
   function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
   }
 
-  function canAdvance(): boolean {
-    return pageCanAdvance(currentPage, data);
-  }
-
   function handleNext() {
-    if (!canAdvance()) return;
-    if (pageIndex < totalPages - 1) {
-      setPageIndex(pageIndex + 1);
+    if (!questionCanAdvance(current.q, data)) return;
+    // Terminal-button branching keys off whether a later visible step exists,
+    // not an index constant (CLAUDE.md dynamic-STEPS rule).
+    if (safeIndex < steps.length - 1) {
+      setStepIndex(safeIndex + 1);
     } else {
       handleSave();
     }
   }
 
   function handleBack() {
-    if (pageIndex > 0) setPageIndex(pageIndex - 1);
+    if (safeIndex > 0) setStepIndex(safeIndex - 1);
+    else router.push("/coach");
   }
 
   // Build the request body. The stable idempotencyKey ties the free save and
@@ -466,9 +469,9 @@ export default function ReviewPage() {
   if (submitting) {
     return (
       <div className="relative flex min-h-[60vh] items-center justify-center px-5">
-        <ReviewBackground />
+        <StormBackground />
         <div className="text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-surface-tint border-t-brand" />
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-hairline-strong border-t-accent" />
           <p className="mt-4 text-[14px] font-medium text-ink-soft">
             Generating your reflection…
           </p>
@@ -480,12 +483,8 @@ export default function ReviewPage() {
   if (awaitingGenerate) {
     return (
       <GetFeedbackScreen
-        background={<ReviewBackground />}
-        eyebrow={
-          <span className="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink">
-            Review
-          </span>
-        }
+        background={<StormBackground />}
+        eyebrow={<Kicker className="text-accent-ink">Review</Kicker>}
         title="Saved."
         blurb="Your reflection is saved — it's yours to keep. Get AI coaching feedback whenever you're ready."
         tier={tier}
@@ -514,7 +513,7 @@ export default function ReviewPage() {
     );
   }
 
-  // --- Form: page-level renderer ---
+  // --- Form: one question per screen (no-scroll FlowScreen) ---
   function renderStep(step: StepDef) {
     if (step.kind === "person") {
       return (
@@ -532,7 +531,7 @@ export default function ReviewPage() {
         <VoiceInput
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
-          rows={4}
+          fill
           placeholder="Type or tap the mic to speak..."
         />
       );
@@ -543,6 +542,7 @@ export default function ReviewPage() {
         <TextareaTwoColumn
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
+          fill
           leftLabel="What did you observe?"
           rightLabel="What did you think it meant?"
           leftPlaceholder="Facts only — body, tone, exact words."
@@ -555,18 +555,13 @@ export default function ReviewPage() {
       return (
         <div className="space-y-2">
           {REVIEW_NEXT_MOVE_VALUES.map((move) => (
-            <button
+            <SelectableRow
               key={move}
-              type="button"
+              selected={value === move}
               onClick={() => setFieldValue(step.key, move)}
-              className={`flex min-h-12 w-full items-center rounded-card-sm px-4 py-3 text-left text-[14px] font-semibold transition active:scale-[0.99] ${
-                value === move
-                  ? "bg-brand text-white shadow-cta"
-                  : "bg-surface text-ink shadow-soft"
-              }`}
             >
               {NEXT_MOVE_LABELS[move]}
-            </button>
+            </SelectableRow>
           ))}
         </div>
       );
@@ -575,39 +570,42 @@ export default function ReviewPage() {
   }
 
   return (
-    <div className="relative min-h-full px-5 pt-4 pb-[max(7rem,env(safe-area-inset-bottom))]">
-      <ReviewBackground />
-
-      <CoachPage
-        eyebrow="Review"
-        eyebrowClassName="inline-block rounded-pill bg-warm-soft px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.8px] text-ink"
-        pageIndex={pageIndex}
-        totalPages={totalPages}
-        page={currentPage}
-        state={data}
-        renderStep={renderStep}
-        pageTitle={null}
-      />
-      {submitError && (
-        <p className="mt-3 text-[13px] font-medium text-danger">{submitError}</p>
-      )}
-      <div className="mt-6 flex gap-3">
-        {pageIndex > 0 && (
-          <button
-            onClick={handleBack}
-            className="flex h-12 flex-1 items-center justify-center rounded-pill bg-surface text-[14px] font-semibold text-ink shadow-soft active:opacity-80"
-          >
-            Back
-          </button>
+    <FlowScreen
+      header={
+        <FlowHeader
+          onBack={handleBack}
+          eyebrow="Review"
+          counter={`${safeIndex + 1} / ${steps.length}`}
+          dots={
+            <ProgressDots
+              total={REVIEW_PAGES.length}
+              current={current.sectionIndex}
+            />
+          }
+        />
+      }
+      footer={
+        <FlowFooter
+          onBack={safeIndex > 0 ? handleBack : undefined}
+          primaryLabel={isLastStep ? "Save reflection" : "Next"}
+          onPrimary={handleNext}
+          primaryDisabled={!canAdvance}
+        />
+      }
+      title={current.q.title}
+      helper={current.q.prompt ?? undefined}
+    >
+      <div
+        key={`${current.pageKey}.${current.q.key}`}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        {renderStep(current.q)}
+        {isLastStep && submitError && (
+          <p className="mt-2 shrink-0 text-[13px] font-medium text-danger">
+            {submitError}
+          </p>
         )}
-        <button
-          onClick={handleNext}
-          disabled={!canAdvance()}
-          className="flex h-14 flex-1 items-center justify-center rounded-pill bg-brand text-[15px] font-bold text-white shadow-cta transition active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
-        >
-          {pageIndex === totalPages - 1 ? "Save reflection" : "Next"}
-        </button>
       </div>
-    </div>
+    </FlowScreen>
   );
 }
