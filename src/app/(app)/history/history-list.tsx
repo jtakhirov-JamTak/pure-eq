@@ -171,7 +171,7 @@ export function HistoryList({
             <li key={e.id}>
               <label
                 className={`flex min-h-11 cursor-pointer items-center gap-3 px-4 py-3 ${
-                  idx > 0 ? "border-t border-hair" : ""
+                  idx > 0 ? "border-t border-hairline" : ""
                 }`}
               >
                 <input

@@ -48,10 +48,10 @@ export default async function CoachPage() {
         href="/coach/before-send"
         className="relative block min-h-[184px] overflow-hidden rounded-card p-6 shadow-dark transition active:scale-[0.99]"
         style={{
-          background: "linear-gradient(160deg, #2A86E3 0%, #16335A 100%)",
+          background: "linear-gradient(160deg, #1F6FC4 0%, #16335A 100%)",
         }}
       >
-        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white/80">
+        <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
           ~90 sec · quick check
         </p>
         <h2
@@ -60,7 +60,7 @@ export default async function CoachPage() {
         >
           You&rsquo;re about to <span className="italic">hit send</span>.
         </h2>
-        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-white/85">
+        <p className="mt-2 text-[14px] font-medium leading-[1.45] text-white">
           Paste a draft. See how it will land before you regret it.
         </p>
       </Link>

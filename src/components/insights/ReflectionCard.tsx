@@ -23,7 +23,7 @@ export function ReflectionCard({ reflection, generatedAt }: Props) {
   if (reflection.mode === "refusal") {
     return (
       <Card className="mt-4 p-5">
-        <Kicker>Your weekly reflection</Kicker>
+        <Kicker as="h2">Your weekly reflection</Kicker>
         <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
           {reflection.message_to_user}
         </p>
@@ -37,7 +37,7 @@ export function ReflectionCard({ reflection, generatedAt }: Props) {
   return (
     <Card className="mt-4 p-5">
       <div className="flex items-baseline justify-between gap-3">
-        <Kicker>Your weekly reflection</Kicker>
+        <Kicker as="h2">Your weekly reflection</Kicker>
         {/* Prominent byline — if the writer ever silently breaks, a stale
             date is the user-visible canary (migration-0018 defense). */}
         <p className="text-[11px] font-medium text-ink-muted">

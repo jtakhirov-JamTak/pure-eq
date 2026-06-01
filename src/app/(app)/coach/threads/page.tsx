@@ -23,7 +23,9 @@ const STATUS_LABELS: Record<
   paused: { label: "Paused", className: "bg-surface-tint text-ink-soft" },
   worsened: {
     label: "Worsened",
-    className: "bg-danger/15 text-danger",
+    // Lighter coral than the `danger` token so 11px chip text clears AA on the
+    // tinted fill (danger #e0796b on bg-danger/15 was only ~3.97:1).
+    className: "bg-danger/15 text-[#ec9a8f]",
   },
   ended: { label: "Ended", className: "bg-surface-tint text-ink-soft" },
 };

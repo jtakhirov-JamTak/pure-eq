@@ -180,7 +180,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "generating") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker>Your weekly reflection</Kicker>
+        <Kicker as="h2">Your weekly reflection</Kicker>
         <div className="mt-3 flex items-center gap-3">
           <div
             aria-hidden="true"
@@ -190,7 +190,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
             Reading your last 4 weeks…
           </p>
         </div>
-        <p className="mt-2 text-[12px] font-medium text-ink-muted">
+        <p className="mt-2 text-[12px] font-medium text-ink-soft">
           This can take up to a minute.
         </p>
       </Card>
@@ -198,7 +198,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "insufficient") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker>Your weekly reflection</Kicker>
+        <Kicker as="h2">Your weekly reflection</Kicker>
         <p className="mt-2 text-[14px] font-semibold leading-[1.5] text-ink">
           You need {state.needed} {state.needed === 1 ? "coin" : "coins"} for
           this — you have {state.balance}.
@@ -217,7 +217,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "error") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker>Your weekly reflection</Kicker>
+        <Kicker as="h2">Your weekly reflection</Kicker>
         <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
           Something went wrong generating this week&apos;s reflection —
           we&apos;ve been notified. You weren&apos;t charged. Try again in a
@@ -240,7 +240,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
     // idle — the explicit CTA.
     body = (
       <Card className="mt-4 p-5">
-        <Kicker>Your weekly reflection</Kicker>
+        <Kicker as="h2">Your weekly reflection</Kicker>
         <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
           {hasStaleCached
             ? "Your previous reflection is no longer current. Generate a fresh read of your last 4 weeks."

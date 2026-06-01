@@ -197,7 +197,7 @@ export default async function InsightsPage() {
         <ReflectionKickoff hasStaleCached={hasStaleCached} />
       ) : (
         <Card className="mt-4 p-5">
-          <Kicker>Your weekly reflection</Kicker>
+          <Kicker as="h2">Your weekly reflection</Kicker>
           <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
             Your first reflection unlocks after{" "}
             {MIN_ENTRIES_FOR_REFLECTION} Coach entries — enough to ground a read
