@@ -276,16 +276,24 @@ export const createReviewSchema = z.object({
 // Coach — Before You Send (NEW Coach redesign 2026-04-23)
 // ============================================================
 export const createBeforeYouSendSchema = z.object({
-  // Quick = 3 AI cards (lower coin cost), Deep = 5. Persisted to ai_tier.
-  // Mirrors createPulseCheckSchema / createReviewSchema.
-  tier: z.enum(["quick", "deep"]).default("quick"),
+  // Lean 3-question redesign (Phase 1, 2026-06-01). BYS is single-tier — always
+  // Quick (4 coins). `tier` is clamped to "quick" server-side so a client that
+  // posts tier:"deep" is still charged the flat Quick cost; the field is kept
+  // (not dropped) because run-module derives the coin cost from input.tier.
+  tier: z
+    .enum(["quick", "deep"])
+    .optional()
+    .transform(() => "quick" as const),
+  // Three required inputs, one per screen. situationFacts + desiredOutcome are
+  // new (persisted to situation_facts / desired_outcome, migration 0045).
+  situationFacts: z.string().trim().min(1).max(5000),
+  desiredOutcome: z.string().trim().min(1).max(5000),
   draftText: z.string().trim().min(1).max(10000),
-  messageType: z.enum(BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES),
-  intentOptional: z.string().max(5000).nullable().optional(),
-  // Coach SOT 2026-05-06: optional risk-context field above the draft.
-  // Surfaces "what might make this land badly" so BYS can flag specific
-  // risk patterns (pressure, blame, projection). Empty allowed.
-  riskContext: z.string().max(2000).nullable().optional(),
+  // message_type is no longer a user input — the model infers it. Kept in the
+  // data model (default "conflict", a valid value in the 7-value CHECK) so the
+  // column stays satisfied and the Pulse/Review prefill handoffs may still send
+  // their own value. Never surfaced in the UI.
+  messageType: z.enum(BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES).default("conflict"),
   // BYS has no person/thread concept; runCoachModule's personBehavior:"skip"
   // + threadBehavior:"none" config skips those resolution steps.
 });

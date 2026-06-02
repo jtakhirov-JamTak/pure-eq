@@ -223,54 +223,45 @@ describe("reviewOutputSchema", () => {
 });
 
 // ============================================================
-// beforeYouSendOutputSchema — tier-aware verdict (coins redesign 2026-05-30)
+// beforeYouSendOutputSchema — verdict + 3 cards (lean 3-question redesign 2026-06-01)
 // ============================================================
-// Quick = 3 cards (how_this_will_land, thing_to_cut, check_in_question) + the
-// verdict; Deep adds 2 (what_its_missing, their_likely_reply). The two Deep
-// fields are .optional() so a Quick output validates without them.
-const validBysQuick = {
+// verdict + main_risk + cleaner_version (nullable, null on do_not_send) +
+// why_this_works. The old tier-aware set is fully removed.
+const validBys = {
   mode: "normal",
-  verdict: "safe",
-  how_this_will_land:
-    "She's likely to read this as you finally hearing her on the budget — the acknowledgement is concrete.",
-  thing_to_cut:
-    "You wrote: 'I get it now.' Cut this — she'll read 'now' as 'not before,' which lands as condescension.",
-  check_in_question: "Am I asking her to forgive me, or am I asking her what she needs?",
-};
-
-const validBysDeep = {
-  ...validBysQuick,
-  what_its_missing:
-    "A specific next step would help — right now it ends without giving her something to respond to.",
-  their_likely_reply:
-    "She'll probably reply guarded but open — something like 'okay, let's talk tonight' rather than warmth.",
+  verdict: "risky",
+  main_risk:
+    "She'll read 'I get it now' as 'I didn't before' — it lands as condescension and reopens the fight.",
+  cleaner_version:
+    "Hey — I've been sitting with the budget conversation and I don't think I gave your side enough weight. Can we talk tonight?",
+  why_this_works:
+    "It owns the gap without the loaded 'now,' and asks rather than tells — which moves toward reopening the talk calmly.",
 };
 
 describe("beforeYouSendOutputSchema", () => {
-  it("parses a Quick verdict=safe BYS output (3 cards, no Deep fields)", () => {
-    expect(beforeYouSendOutputSchema.safeParse(validBysQuick).success).toBe(true);
+  it("parses a verdict=risky BYS output (3 cards)", () => {
+    expect(beforeYouSendOutputSchema.safeParse(validBys).success).toBe(true);
   });
 
-  it("parses a Deep BYS output (3 + 2 cards)", () => {
-    expect(beforeYouSendOutputSchema.safeParse(validBysDeep).success).toBe(true);
-  });
-
-  it("parses a verdict=risky BYS output", () => {
+  it("parses a verdict=safe BYS output", () => {
     expect(
-      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, verdict: "risky" }).success,
+      beforeYouSendOutputSchema.safeParse({ ...validBys, verdict: "safe" }).success,
     ).toBe(true);
   });
 
-  it("parses a verdict=do_not_send BYS output", () => {
+  it("parses a verdict=do_not_send BYS output with cleaner_version=null", () => {
     expect(
-      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, verdict: "do_not_send" })
-        .success,
+      beforeYouSendOutputSchema.safeParse({
+        ...validBys,
+        verdict: "do_not_send",
+        cleaner_version: null,
+      }).success,
     ).toBe(true);
   });
 
-  it("accepts a null thing_to_cut (nothing to cut)", () => {
+  it("accepts a null cleaner_version (nothing worth sending yet)", () => {
     expect(
-      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, thing_to_cut: null })
+      beforeYouSendOutputSchema.safeParse({ ...validBys, cleaner_version: null })
         .success,
     ).toBe(true);
   });
@@ -288,36 +279,42 @@ describe("beforeYouSendOutputSchema", () => {
 
   it("rejects an unknown verdict value", () => {
     expect(
-      beforeYouSendOutputSchema.safeParse({ ...validBysQuick, verdict: "send_anyway" }).success,
+      beforeYouSendOutputSchema.safeParse({ ...validBys, verdict: "send_anyway" }).success,
     ).toBe(false);
   });
 
-  it("rejects a missing thing_to_cut (key required, value may be null)", () => {
-    const { thing_to_cut: _omit, ...rest } = validBysQuick;
+  it("rejects a missing main_risk", () => {
+    const { main_risk: _omit, ...rest } = validBys;
     void _omit;
     expect(beforeYouSendOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects a missing check_in_question (Quick-required)", () => {
-    const { check_in_question: _omit, ...rest } = validBysQuick;
+  it("rejects a missing cleaner_version (key required, value may be null)", () => {
+    const { cleaner_version: _omit, ...rest } = validBys;
     void _omit;
     expect(beforeYouSendOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects a how_this_will_land over 300 chars", () => {
+  it("rejects a missing why_this_works", () => {
+    const { why_this_works: _omit, ...rest } = validBys;
+    void _omit;
+    expect(beforeYouSendOutputSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("rejects a main_risk over 300 chars", () => {
     expect(
       beforeYouSendOutputSchema.safeParse({
-        ...validBysQuick,
-        how_this_will_land: "a".repeat(301),
+        ...validBys,
+        main_risk: "a".repeat(301),
       }).success,
     ).toBe(false);
   });
 
-  it("rejects a their_likely_reply over 300 chars (Deep cap enforced when present)", () => {
+  it("rejects a cleaner_version over 2000 chars", () => {
     expect(
       beforeYouSendOutputSchema.safeParse({
-        ...validBysDeep,
-        their_likely_reply: "a".repeat(301),
+        ...validBys,
+        cleaner_version: "a".repeat(2001),
       }).success,
     ).toBe(false);
   });

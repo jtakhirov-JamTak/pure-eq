@@ -38,39 +38,40 @@ export const beforeYouSendModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   derivedIdColumn: "before_you_send_entry_id",
   aiJsonColumn: "ai_verdict_json",
   aiVersionColumn: "ai_verdict_version",
-  // Coins redesign BYS lean slice 2026-05-30: bump 1 → 2. The output shape
-  // changes from the fixed 4-field {verdict, how_this_will_land,
-  // what_its_missing, thing_to_cut, check_in_question} set to the tier-aware
-  // set — Quick = {verdict, how_this_will_land, thing_to_cut,
-  // check_in_question}; Deep adds {what_its_missing, their_likely_reply}.
-  // Readers MUST gate on ai_verdict_version when distinguishing shape —
-  // 2 = lean tiered, 1/NULL = legacy single-tier.
-  aiVersionValue: 2,
+  // Lean 3-question redesign 2026-06-01: bump 2 → 3. The output shape changes
+  // to {verdict, main_risk, cleaner_version, why_this_works} (the tier-aware
+  // how_this_will_land / thing_to_cut / check_in_question / what_its_missing /
+  // their_likely_reply set is removed). Readers MUST gate on ai_verdict_version
+  // when distinguishing shape — 3 = lean 3-card, 2 = lean tiered, 1/NULL =
+  // legacy single-tier. Old rows render verdict + no cards via the field filter.
+  aiVersionValue: 3,
 
   buildPayloadFields: (input) => ({
     tier: input.tier,
     draftText: input.draftText,
+    situationFacts: input.situationFacts,
+    desiredOutcome: input.desiredOutcome,
     messageType: input.messageType,
-    intentOptional: input.intentOptional ?? null,
-    riskContext: input.riskContext ?? null,
   }),
 
   buildDerivedInsert: (input) => ({
     draft_text: input.draftText,
+    situation_facts: input.situationFacts,
+    desired_outcome: input.desiredOutcome,
     message_type: input.messageType,
-    intent_optional: input.intentOptional ?? null,
-    risk_context: input.riskContext ?? null,
+    // Legacy columns retained for /history back-compat — new BYS writes leave
+    // them NULL (these fields are no longer collected).
+    intent_optional: null,
+    risk_context: null,
     ai_tier: input.tier,
   }),
 
   buildPrompt: (input, profile) =>
     buildBeforeYouSendPrompt({
       profile,
-      tier: input.tier,
+      situationFacts: input.situationFacts,
+      desiredOutcome: input.desiredOutcome,
       draftText: input.draftText,
-      messageType: input.messageType,
-      intentOptional: input.intentOptional ?? null,
-      riskContext: input.riskContext ?? null,
     }),
 
   buildResponseExtras: (derivedEntryId) => ({

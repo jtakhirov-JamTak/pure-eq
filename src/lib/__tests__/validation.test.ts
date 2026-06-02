@@ -483,39 +483,61 @@ describe("REPAIR_TRIGGER_NEEDS — SOT 4-chip set", () => {
 });
 
 // ============================================================
-// BYS schema — riskContext optional (Coach SOT 2026-05-06)
+// BYS schema — lean 3-question redesign (Phase 1, 2026-06-01)
 // ============================================================
 const validBysBase = {
+  situationFacts: "She went quiet at dinner after I mentioned the budget.",
+  desiredOutcome: "Reopen the talk tonight without it turning into a fight.",
   draftText: "Hey, I noticed you went quiet at dinner. Want to talk now?",
-  messageType: "check_in" as const,
 };
 
-describe("createBeforeYouSendSchema — riskContext", () => {
-  it("accepts payload without riskContext", () => {
+describe("createBeforeYouSendSchema — lean 3-question", () => {
+  it("accepts the 3 required inputs and defaults messageType to conflict", () => {
     const result = createBeforeYouSendSchema.safeParse(validBysBase);
     expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.messageType).toBe("conflict");
+      // tier is clamped to quick regardless of input.
+      expect(result.data.tier).toBe("quick");
+    }
   });
 
-  it("accepts payload with riskContext populated", () => {
+  it("clamps tier to quick even when the client sends deep", () => {
     const result = createBeforeYouSendSchema.safeParse({
       ...validBysBase,
-      riskContext: "They might read this as pressure if I send it before they're home.",
+      tier: "deep",
     });
     expect(result.success).toBe(true);
+    if (result.success) expect(result.data.tier).toBe("quick");
   });
 
-  it("accepts null riskContext", () => {
+  it("forwards a prefilled messageType (Pulse/Review handoff)", () => {
     const result = createBeforeYouSendSchema.safeParse({
       ...validBysBase,
-      riskContext: null,
+      messageType: "check_in",
     });
     expect(result.success).toBe(true);
+    if (result.success) expect(result.data.messageType).toBe("check_in");
   });
 
-  it("rejects riskContext over 2000 chars", () => {
+  it("rejects a missing situationFacts", () => {
+    const { situationFacts: _omit, ...rest } = validBysBase;
+    void _omit;
+    expect(createBeforeYouSendSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("rejects an empty desiredOutcome", () => {
     const result = createBeforeYouSendSchema.safeParse({
       ...validBysBase,
-      riskContext: "x".repeat(2001),
+      desiredOutcome: "   ",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty draftText", () => {
+    const result = createBeforeYouSendSchema.safeParse({
+      ...validBysBase,
+      draftText: "",
     });
     expect(result.success).toBe(false);
   });

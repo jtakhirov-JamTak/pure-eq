@@ -20,11 +20,11 @@ type BysInput = Parameters<
 >[0];
 
 const baseBysInput: BysInput = {
-  tier: "deep",
+  tier: "quick",
+  situationFacts: "She cut my budget request in the team meeting.",
+  desiredOutcome: "Reopen the conversation without it turning into a fight.",
   draftText: "I get it now — can we talk tonight?",
   messageType: "repair",
-  intentOptional: "I want her to feel heard, not cornered.",
-  riskContext: "We fought about this yesterday.",
 } as BysInput;
 
 const basePulseInput: PulseInput = {
@@ -264,22 +264,24 @@ describe("pulseCheckModuleConfig.buildPayloadFields — lean field passthrough",
   });
 });
 
-describe("beforeYouSendModuleConfig.buildDerivedInsert — tier column mapping", () => {
-  it("maps BYS fields to the right DB columns + persists ai_tier", () => {
+describe("beforeYouSendModuleConfig.buildDerivedInsert — lean 3-question mapping", () => {
+  it("maps the 3 inputs to columns and persists ai_tier=quick", () => {
     const insert = beforeYouSendModuleConfig.buildDerivedInsert(
       baseBysInput,
     ) as Record<string, unknown>;
 
     expect(insert.draft_text).toBe(baseBysInput.draftText);
+    expect(insert.situation_facts).toBe(baseBysInput.situationFacts);
+    expect(insert.desired_outcome).toBe(baseBysInput.desiredOutcome);
     expect(insert.message_type).toBe("repair");
-    expect(insert.intent_optional).toBe(baseBysInput.intentOptional);
-    expect(insert.risk_context).toBe(baseBysInput.riskContext);
-    expect(insert.ai_tier).toBe("deep");
+    expect(insert.ai_tier).toBe("quick");
   });
 
-  it("writes null for omitted optional inputs", () => {
+  it("always nulls the legacy intent_optional / risk_context columns", () => {
     const insert = beforeYouSendModuleConfig.buildDerivedInsert({
       tier: "quick",
+      situationFacts: "S",
+      desiredOutcome: "O",
       draftText: "Quick draft.",
       messageType: "ask",
     } as BysInput) as Record<string, unknown>;
@@ -290,15 +292,15 @@ describe("beforeYouSendModuleConfig.buildDerivedInsert — tier column mapping",
 });
 
 describe("beforeYouSendModuleConfig.buildPayloadFields — field passthrough", () => {
-  it("passes through tier + every input to the raw payload", () => {
+  it("passes through tier + the 3 inputs + messageType to the raw payload", () => {
     const payload = beforeYouSendModuleConfig.buildPayloadFields(
       baseBysInput,
     ) as Record<string, unknown>;
-    expect(payload.tier).toBe("deep");
+    expect(payload.tier).toBe("quick");
     expect(payload.draftText).toBe(baseBysInput.draftText);
+    expect(payload.situationFacts).toBe(baseBysInput.situationFacts);
+    expect(payload.desiredOutcome).toBe(baseBysInput.desiredOutcome);
     expect(payload.messageType).toBe("repair");
-    expect(payload.intentOptional).toBe(baseBysInput.intentOptional);
-    expect(payload.riskContext).toBe(baseBysInput.riskContext);
   });
 });
 
@@ -324,8 +326,8 @@ describe("module configs — pinned identity", () => {
     expect(pulseCheckModuleConfig.derivedTable).toBe("pulse_check_entries");
   });
 
-  it("before_you_send.aiVersionValue is 2 (coins lean-tier marker)", () => {
-    expect(beforeYouSendModuleConfig.aiVersionValue).toBe(2);
+  it("before_you_send.aiVersionValue is 3 (lean 3-question marker)", () => {
+    expect(beforeYouSendModuleConfig.aiVersionValue).toBe(3);
     expect(beforeYouSendModuleConfig.moduleName).toBe("before_you_send");
     expect(beforeYouSendModuleConfig.derivedTable).toBe(
       "before_you_send_entries",

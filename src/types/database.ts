@@ -62,6 +62,7 @@ export type Database = {
           completed_at: string | null
           created_at: string
           deleted_at: string | null
+          desired_outcome: string | null
           draft_text: string | null
           intent_optional: string | null
           is_complete: boolean
@@ -70,6 +71,7 @@ export type Database = {
           person_id: string | null
           raw_record_id: string | null
           risk_context: string | null
+          situation_facts: string | null
           thread_id: string | null
           user_id: string
         }
@@ -81,6 +83,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
+          desired_outcome?: string | null
           draft_text?: string | null
           intent_optional?: string | null
           is_complete?: boolean
@@ -89,6 +92,7 @@ export type Database = {
           person_id?: string | null
           raw_record_id?: string | null
           risk_context?: string | null
+          situation_facts?: string | null
           thread_id?: string | null
           user_id: string
         }
@@ -100,6 +104,7 @@ export type Database = {
           completed_at?: string | null
           created_at?: string
           deleted_at?: string | null
+          desired_outcome?: string | null
           draft_text?: string | null
           intent_optional?: string | null
           is_complete?: boolean
@@ -108,6 +113,7 @@ export type Database = {
           person_id?: string | null
           raw_record_id?: string | null
           risk_context?: string | null
+          situation_facts?: string | null
           thread_id?: string | null
           user_id?: string
         }

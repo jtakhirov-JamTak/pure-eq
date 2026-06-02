@@ -13,7 +13,6 @@ import {
   FlowFooter,
 } from "@/components/ui/flow-screen";
 import { ProgressDots } from "@/components/ui/progress-dots";
-import { SelectableRow } from "@/components/ui/selectable";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
 import { Kicker } from "@/components/ui/kicker";
 import { Card } from "@/components/ui/card";
@@ -39,30 +38,13 @@ import {
 // stash from an abandoned flow doesn't auto-populate days later.
 const PREFILL_MAX_AGE_MS = 5 * 60 * 1000;
 
-type MessageType =
-  | "conflict"
-  | "check_in"
-  | "apology"
-  | "repair"
-  | "ask"
-  | "boundary"
-  | "other";
-
-const MESSAGE_TYPES: { value: MessageType; label: string }[] = [
-  { value: "conflict", label: "Conflict / pushback" },
-  { value: "check_in", label: "Check-in" },
-  { value: "apology", label: "Apology" },
-  { value: "repair", label: "Repair opening" },
-  { value: "ask", label: "Ask / request" },
-  { value: "boundary", label: "Setting a boundary" },
-  { value: "other", label: "Other" },
-];
-
 const PREFILL_KEY = "pure-eq:bys-prefill";
 
 type Prefill = {
   draftText?: string;
-  messageType?: MessageType;
+  // The model infers message type now; the prefill writers may still send it,
+  // so we accept + forward it server-side, but it has no UI step.
+  messageType?: string;
   sourceReviewEntryId?: string;
   // Coach SOT 2026-05-06: Pulse Check `use_bys` chip stashes a check-in
   // draft and tags the source so the banner copy can distinguish a
@@ -72,48 +54,45 @@ type Prefill = {
   stashedAt?: number;
 };
 
-// Stepped wizard (redesign §5). Two sections (progress dots): the message
-// itself, then optional context. The draft leads — it's the required core
-// input; the two optional context fields trail. Payload + copy unchanged from
-// the prior single-scroll form.
-//   1 draft:   draftText (required), messageType (default "conflict")
-//   2 context: riskContext (optional), intentOptional (optional)
+// Lean 3-question flow (Phase 1). Three required steps, one per screen — three
+// progress dots (one per page). The model infers message type + risk; neither
+// is a step. Terminal Save-vs-Next branches on whether a later visible step
+// exists (handled by handleNext), not an index constant.
+//   1 situation:  situationFacts (required)
+//   2 outcome:    desiredOutcome (required)
+//   3 draft:      draftText (required)
 const BYS_PAGES: PageDef[] = [
+  {
+    pageKey: "situation",
+    qs: [
+      {
+        key: "situationFacts",
+        title: "What is the situation?",
+        prompt: "Describe the facts.",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "outcome",
+    qs: [
+      {
+        key: "desiredOutcome",
+        title: "What outcome do you want this message to achieve?",
+        prompt: "What is your goal?",
+        kind: "textarea",
+      },
+    ],
+  },
   {
     pageKey: "draft",
     qs: [
       {
         key: "draftText",
-        title: "Your draft",
+        title: "Draft your message.",
         prompt:
           "This isn't a proofreader. It's a gut-check on how the other person will read it.",
         kind: "textarea",
-      },
-      {
-        key: "messageType",
-        title: "What kind of message is this?",
-        prompt: null,
-        kind: "select_message_type",
-      },
-    ],
-  },
-  {
-    pageKey: "context",
-    qs: [
-      {
-        key: "riskContext",
-        title: "What might make this land badly?",
-        prompt:
-          "Optional — pressure, blame, a prior fight, their state today. Anything you want the check to weigh.",
-        kind: "textarea",
-        optional: true,
-      },
-      {
-        key: "intentOptional",
-        title: "What do you want them to take away?",
-        prompt: "Optional — tell the coach what you hope they feel or do.",
-        kind: "textarea",
-        optional: true,
       },
     ],
   },
@@ -122,13 +101,10 @@ const BYS_PAGES: PageDef[] = [
 type AiNormal = {
   mode: "normal";
   verdict: "safe" | "risky" | "do_not_send";
-  // Quick tier (always present).
-  how_this_will_land: string;
-  thing_to_cut: string | null;
-  check_in_question: string;
-  // Deep tier (present only when tier === "deep").
-  what_its_missing?: string;
-  their_likely_reply?: string;
+  main_risk: string;
+  // null on a do_not_send verdict (no version should be sent yet).
+  cleaner_version: string | null;
+  why_this_works: string;
 };
 
 type AiRefusal = {
@@ -140,21 +116,19 @@ type AiRefusal = {
 
 type AiOutput = AiNormal | AiRefusal;
 
-// Quick fields first, then the two Deep cards. The render filter drops any
-// field the model omitted (Quick output has no Deep keys), so a Quick verdict
-// shows 3 cards and a Deep verdict shows 5.
+// The render filter drops any field the model omitted or returned blank, so a
+// do_not_send verdict (cleaner_version === null) shows 2 cards and the others
+// show 3. Legacy rows (old keys) match none of these → verdict + no cards.
 const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
-  { label: "How this will land", key: "how_this_will_land" },
-  { label: "Thing to cut", key: "thing_to_cut" },
-  { label: "Check-in question", key: "check_in_question" },
-  { label: "What it's missing", key: "what_its_missing" },
-  { label: "Their likely reply", key: "their_likely_reply" },
+  { label: "Main Risk", key: "main_risk" },
+  { label: "Cleaner Version", key: "cleaner_version" },
+  { label: "Why This Works", key: "why_this_works" },
 ];
 
 const VERDICT_LABEL: Record<AiNormal["verdict"], string> = {
-  safe: "Safe to send.",
-  risky: "Risky.",
-  do_not_send: "Do not send.",
+  safe: "Send",
+  risky: "Revise",
+  do_not_send: "Do not send yet",
 };
 
 // Flat single-tint ribbon, not a pill — reads as context, not a bright ad bar.
@@ -212,7 +186,8 @@ export default function BeforeYouSendPage() {
   const [data, setData] = useState<Record<string, unknown>>({
     messageType: "conflict",
   });
-  const [tier, setTier] = useState<AiTier>("quick");
+  // BYS is single-tier now (Phase 1) — always Quick (4 coins). No selector.
+  const tier: AiTier = "quick";
   const [beforeYouSendEntryId, setBeforeYouSendEntryId] = useState<
     string | null
   >(null);
@@ -336,11 +311,11 @@ export default function BeforeYouSendPage() {
     return {
       tier,
       draftText: text,
-      messageType: (data.messageType as MessageType | undefined) ?? "conflict",
-      intentOptional:
-        ((data.intentOptional as string | undefined) ?? "").trim() || null,
-      riskContext:
-        ((data.riskContext as string | undefined) ?? "").trim() || null,
+      situationFacts: ((data.situationFacts as string | undefined) ?? "").trim(),
+      desiredOutcome: ((data.desiredOutcome as string | undefined) ?? "").trim(),
+      // messageType is inferred by the model and never asked; forward the
+      // prefill value if a handoff supplied one, else the server default.
+      messageType: (data.messageType as string | undefined) ?? "conflict",
       idempotencyKey: key,
       generateAi,
     };
@@ -645,15 +620,10 @@ export default function BeforeYouSendPage() {
         title="Draft saved."
         blurb="Your draft is saved. Get a verdict on how it'll land whenever you're ready."
         tier={tier}
-        onTierChange={(t) => {
-          setTier(t);
-          setInsufficient(null);
-          setGenerateError(null);
-        }}
         balance={balance}
         insufficient={insufficient}
         error={generateError}
-        actionLabel="Get verdict"
+        actionLabel="Check my message"
         onGenerate={handleGenerate}
         onBack={() => router.push("/coach")}
       />
@@ -686,31 +656,32 @@ export default function BeforeYouSendPage() {
   }
 
   // --- Form: one question per screen (no-scroll FlowScreen) ---
+  // Review/Pulse → BYS handoff banner. On step 1 it explains why setup comes
+  // before the (already pre-filled) draft; on the draft step it flags that the
+  // text below came from the handoff and should be edited before checking.
+  function prefillBanner(stepKey: string) {
+    if (!prefillSource) return null;
+    const source = prefillSource === "repair" ? "Repair" : "Pulse Check";
+    const copy =
+      stepKey === "draftText"
+        ? `From your ${source}. Edit before checking.`
+        : `We brought your draft from your ${source}. First, a little context so the check is accurate.`;
+    return (
+      <div className="mb-3 shrink-0 rounded-card-sm border border-hairline bg-surface p-3">
+        <p className="text-[12px] font-medium leading-[1.45] text-ink">{copy}</p>
+      </div>
+    );
+  }
+
   function renderStep(step: StepDef) {
-    if (step.kind === "select_message_type") {
-      const value = (data[step.key] as string | undefined) ?? "";
-      return (
-        <div className="space-y-2">
-          {MESSAGE_TYPES.map((t) => (
-            <SelectableRow
-              key={t.value}
-              selected={value === t.value}
-              onClick={() => setFieldValue(step.key, t.value)}
-            >
-              {t.label}
-            </SelectableRow>
-          ))}
-        </div>
-      );
-    }
     if (step.kind === "textarea") {
       const value = (data[step.key] as string | undefined) ?? "";
       const placeholder =
         step.key === "draftText"
           ? "Paste or type what you're about to send…"
-          : step.key === "riskContext"
-            ? "Pressure, blame, prior fight, their state today — anything you want the check to weigh."
-            : "If you want, tell the coach what you hope they feel or do.";
+          : step.key === "situationFacts"
+            ? "What's going on? Just the facts — who, what, when."
+            : "What do you want this message to achieve?";
       const input = (
         <VoiceInput
           value={value}
@@ -719,17 +690,11 @@ export default function BeforeYouSendPage() {
           placeholder={placeholder}
         />
       );
-      // The Review/Pulse → BYS handoff banner rides above the draft field.
-      if (step.key === "draftText" && prefillSource) {
+      const banner = prefillBanner(step.key);
+      if (banner) {
         return (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="mb-3 shrink-0 rounded-card-sm border border-hairline bg-surface p-3">
-              <p className="text-[12px] font-medium leading-[1.45] text-ink">
-                {prefillSource === "repair"
-                  ? "From your Repair. Edit before checking."
-                  : "From your Pulse Check. Edit before sending."}
-              </p>
-            </div>
+            {banner}
             <div className="flex min-h-0 flex-1 flex-col">{input}</div>
           </div>
         );

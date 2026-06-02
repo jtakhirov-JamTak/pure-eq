@@ -132,20 +132,25 @@ export const reviewOutputSchema = z.discriminatedUnion("mode", [
 ]);
 
 // ============================================================
-// Before You Send — tier-aware verdict cards (coins redesign 2026-05-30)
+// Before You Send — verdict + three cards (lean 3-question redesign 2026-06-01)
 // ============================================================
-// Stateless verdict-only flow. User pastes a draft message + selects
-// message_type + a Quick/Deep tier; model returns a verdict
-// (safe | risky | do_not_send) plus tier-aware cards:
-//   Quick tier = 3 cards (how_this_will_land, thing_to_cut, check_in_question).
-//   Deep tier  = those 3 + 2 more (what_its_missing, their_likely_reply).
-// The two Deep fields are .optional() — the prompt fills them only when tier ===
-// "deep", mirroring lean Prepare/Review/Pulse. what_its_missing was a Quick
-// field before the lean redesign; it moves to Deep so the Quick tier stays a
-// tight verdict + the single most important cut. `thing_to_cut` stays the lone
-// BYS ACTION_FIELDS member and should QUOTE the user's actual words verbatim —
-// the prompt enforces this. ai_verdict_version bumps 1 → 2; readers gate shape
-// on it.
+// Stateless single-tier flow (Phase 1, docs/handoff_bys_loop_router.md). The
+// user gives a situation, a desired outcome, and a draft; the model infers the
+// message type + the main relational risk itself and returns a verdict
+// (safe | risky | do_not_send) plus three cards:
+//   - main_risk:       the single biggest way the draft lands badly / misses the goal
+//   - cleaner_version: a rewritten draft the user can adapt — NULL on do_not_send
+//                      (the message shouldn't be sent in any form yet)
+//   - why_this_works:  why the cleaner version lands better than the draft
+// The old tier-aware set (how_this_will_land / thing_to_cut / check_in_question
+// + Deep what_its_missing / their_likely_reply) is fully removed. cleaner_version
+// is deliberately NOT an ACTION_FIELDS member — it reproduces a whole message, so
+// stripGeneric must not nullify it. ai_verdict_version bumps 2 → 3; readers gate
+// shape on it (legacy 1/2 rows render verdict + no cards via the field filter).
+//
+// cleaner_version's cap is higher than the coaching fields (it's a message
+// reproduction, not a one-line note); main_risk / why_this_works keep the 300
+// cap shared across coach modules (memory: project_review_max_caps_incident).
 //
 // `do_not_send` triggers a red banner in the UI: "Do not send. This
 // message protects your ego more than the relationship."
@@ -153,18 +158,9 @@ export const reviewOutputSchema = z.discriminatedUnion("mode", [
 const beforeYouSendNormalShape = z.object({
   mode: z.literal("normal"),
   verdict: z.enum(["safe", "risky", "do_not_send"]),
-  // Quick tier (always required).
-  how_this_will_land: z.string().trim().min(1).max(300),
-  // Action field — nullable per the editorial contract. Keeps the 300-char
-  // cap (matching the other BYS fields) because the prompt instructs Claude
-  // to emit the format `They wrote: "...". Cut this because…`, which needs
-  // ~200 chars to quote the user + explain. A 120-cap made every BYS call
-  // fail schema validation. stripGeneric still nullifies filler phrasings.
-  thing_to_cut: z.string().trim().min(1).max(300).nullable(),
-  check_in_question: z.string().trim().min(1).max(300),
-  // Deep tier (populated only when tier === "deep").
-  what_its_missing: z.string().trim().min(1).max(300).optional(),
-  their_likely_reply: z.string().trim().min(1).max(300).optional(),
+  main_risk: z.string().trim().min(1).max(300),
+  cleaner_version: z.string().trim().min(1).max(2000).nullable(),
+  why_this_works: z.string().trim().min(1).max(300),
 });
 
 export const beforeYouSendOutputSchema = z.discriminatedUnion("mode", [
@@ -235,7 +231,6 @@ export const ACTION_FIELDS = new Set([
   "best_next_move",
   "what_to_own",
   "thing_not_to_say",
-  "thing_to_cut",
 ]);
 
 // Generic-filler rules. Each has a stable `name` so Sentry's `pattern`
