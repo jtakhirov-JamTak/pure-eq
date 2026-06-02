@@ -152,8 +152,16 @@ export default async function CoachPage() {
         </p>
       </Link>
 
+      {/* "What's going on?" router — the three conversation entry points. */}
+      <h2
+        className="mb-3 mt-7 font-display text-[20px] font-medium leading-[1.1] text-ink"
+        style={{ letterSpacing: "-0.4px" }}
+      >
+        What&rsquo;s going on?
+      </h2>
+
       {/* Prepare / Pulse Check / Review row */}
-      <div className="mt-3.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
         <Link
           href="/coach/prepare"
           className="relative block min-h-[132px] overflow-hidden rounded-card p-4 shadow-dark transition active:scale-[0.99]"
@@ -219,6 +227,29 @@ export default async function CoachPage() {
           </p>
         </Link>
       </div>
+
+      {/* "I'm activated" affordance → Regulate (Tools: Triggered/Overwhelmed).
+          Calm bordered card, distinct from the conversation gradient tiles, to
+          signal a different mode: self-regulation in the moment. */}
+      <Link
+        href="/tools"
+        className="mt-6 flex items-center justify-between gap-3 rounded-card border border-hairline bg-surface/70 p-4 shadow-dark transition active:scale-[0.99]"
+      >
+        <div>
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-[#ecc08a]">
+            When emotions hit hard
+          </p>
+          <h2
+            className="mt-1.5 font-display text-[19px] leading-[1.15] text-ink"
+            style={{ letterSpacing: "-0.4px" }}
+          >
+            I&rsquo;m <span className="italic">activated</span> right now.
+          </h2>
+        </div>
+        <span className="shrink-0 text-[20px] text-ink-soft" aria-hidden>
+          &rarr;
+        </span>
+      </Link>
 
       {/* Open-loop return nudges (Phase 2) — only renders when loops exist. */}
       {openLoops.length > 0 && (
