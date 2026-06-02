@@ -1,9 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
+import {
+  REVIEW_PREFILL_KEY,
+  REVIEW_PREFILL_MAX_AGE_MS,
+  type ReviewPrefill,
+} from "@/lib/coach/review-prefill";
 import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { StormBackground } from "@/components/brand/StormBackground";
@@ -275,6 +281,9 @@ export default function ReviewPage() {
   const [tier, setTier] = useState<AiTier>("quick");
   const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
+  // Set when a return-loop handoff (Prepare result / open-loop nudge / thread)
+  // pre-selects the person — drives the banner on the person step.
+  const [prefillName, setPrefillName] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
@@ -294,6 +303,44 @@ export default function ReviewPage() {
   if (!idempotencyKeyRef.current) {
     idempotencyKeyRef.current = safeUUID();
   }
+
+  // Return-loop handoff: a Prepare result / open-loop nudge / thread can route
+  // here with the person pre-selected. Read the stash once on mount, clearing it
+  // regardless of validation so a stale/foreign prefill never replays. Two-gate
+  // cross-account guard (5-min freshness + userId match), same as BYS.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      let parsed: ReviewPrefill | null = null;
+      try {
+        const raw = sessionStorage.getItem(REVIEW_PREFILL_KEY);
+        if (raw) {
+          sessionStorage.removeItem(REVIEW_PREFILL_KEY);
+          parsed = JSON.parse(raw) as ReviewPrefill;
+        }
+      } catch {
+        // malformed stash — already cleared
+      }
+      if (!parsed || !parsed.personName) return;
+      if (
+        typeof parsed.stashedAt !== "number" ||
+        Date.now() - parsed.stashedAt > REVIEW_PREFILL_MAX_AGE_MS
+      ) {
+        return;
+      }
+      if (!parsed.userId) return;
+      const { data: authData } = await createClient().auth.getUser();
+      if (cancelled) return;
+      if (!authData.user || authData.user.id !== parsed.userId) return;
+      const prefilled = parsed;
+      setData((d) => ({ ...d, personName: prefilled.personName }));
+      if (prefilled.personId) setPersonId(prefilled.personId);
+      setPrefillName(prefilled.personName ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // One-question-per-screen sequence (redesign §5). Recomputed from `data`
   // each render; clamp the index when the list could shrink.
@@ -517,12 +564,22 @@ export default function ReviewPage() {
   function renderStep(step: StepDef) {
     if (step.kind === "person") {
       return (
-        <PersonPicker
-          value={(data.personName as string | undefined) ?? ""}
-          onChange={(next) => setFieldValue("personName", next)}
-          onPersonSelect={(id) => setPersonId(id)}
-          selectedPersonId={personId}
-        />
+        <div className="space-y-3">
+          {prefillName && (
+            <div className="rounded-card-sm border border-hairline bg-surface p-3">
+              <p className="text-[12px] font-medium leading-[1.45] text-ink">
+                Reviewing how it went with {prefillName}. Change it below if this
+                was someone else.
+              </p>
+            </div>
+          )}
+          <PersonPicker
+            value={(data.personName as string | undefined) ?? ""}
+            onChange={(next) => setFieldValue("personName", next)}
+            onPersonSelect={(id) => setPersonId(id)}
+            selectedPersonId={personId}
+          />
+        </div>
       );
     }
     if (step.kind === "textarea") {

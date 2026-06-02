@@ -4,6 +4,7 @@ import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { Kicker } from "@/components/ui/kicker";
 import ThreadStatusSelector from "./thread-status-selector";
+import { ThreadReviewButton } from "@/components/coach/thread-review-button";
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
   prepare: { label: "Prepare", color: "bg-accent-soft text-accent-ink" },
@@ -163,12 +164,19 @@ export default async function ThreadDetailPage({
       <div className="mt-8 space-y-2">
         <Kicker>Add to this thread</Kicker>
         <div className="mt-1 flex gap-2">
-          <Link
-            href="/coach/review"
-            className="rounded-pill border border-hairline bg-surface px-4 py-2 text-[13px] font-semibold text-ink active:opacity-80"
-          >
-            Review
-          </Link>
+          {thread.person_id ? (
+            <ThreadReviewButton
+              personName={personName}
+              personId={thread.person_id}
+            />
+          ) : (
+            <Link
+              href="/coach/review"
+              className="rounded-pill border border-hairline bg-surface px-4 py-2 text-[13px] font-semibold text-ink active:opacity-80"
+            >
+              Review
+            </Link>
+          )}
         </div>
       </div>
     </div>

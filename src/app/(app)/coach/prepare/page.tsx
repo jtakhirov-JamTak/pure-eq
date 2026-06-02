@@ -6,6 +6,7 @@ import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
 import { EditableCard } from "@/components/coach/editable-card";
 import { isRefusal } from "@/lib/coach/output-shape";
+import { stashReviewPrefill } from "@/lib/coach/review-prefill";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { TextareaIfThen } from "@/components/coach/steps/textarea-if-then";
 import {
@@ -174,10 +175,16 @@ function NormalResultCard({
   output,
   entryId,
   onBack,
+  personName,
+  onReviewLater,
 }: {
   output: AiNormal;
   entryId: string | null;
   onBack: () => void;
+  // Return-loop (Phase 2): after the conversation happens, route into Review
+  // pre-attached to this person. Shown only when a person was named.
+  personName?: string | null;
+  onReviewLater?: () => void;
 }) {
   const visible = RESULT_FIELDS.filter(({ key }) => {
     const v = output[key];
@@ -220,6 +227,11 @@ function NormalResultCard({
       <PrimaryButton onClick={onBack} className="mt-8">
         Done
       </PrimaryButton>
+      {personName && onReviewLater && (
+        <SecondaryButton onClick={onReviewLater} className="mt-3 w-full">
+          After it happens, review how it went
+        </SecondaryButton>
+      )}
     </ReadingScreen>
   );
 }
@@ -460,6 +472,15 @@ export default function PreparePage() {
           output={aiOutput}
           entryId={prepareEntryId}
           onBack={() => router.push("/coach")}
+          personName={(data.personName as string | undefined) ?? null}
+          onReviewLater={async () => {
+            await stashReviewPrefill({
+              personName: ((data.personName as string | undefined) ?? "").trim(),
+              personId,
+              source: "prepare_followup",
+            });
+            router.push("/coach/review");
+          }}
         />
       );
     }

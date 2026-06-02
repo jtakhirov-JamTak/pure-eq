@@ -1,8 +1,93 @@
-import { getAuthUser } from "@/lib/supabase/server";
+import { getAuthUser, createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { readFirstName } from "@/lib/user-metadata";
+import { captureServerRead } from "@/lib/read-capture";
+import { LoopNudge, type OpenLoop } from "@/components/coach/loop-nudge";
+
+// Open-loop nudges (Phase 2 return loop): conversations the user prepared for
+// but hasn't reviewed yet. An open thread (status "open") with a completed
+// Prepare entry and NO completed Review entry. Capped at 3, most-recent first.
+// Read-only; every query inspects .error (server-component read lesson).
+async function getOpenLoops(userId: string): Promise<OpenLoop[]> {
+  const supabase = await createClient();
+  const threadsRes = await supabase
+    .from("conversation_threads")
+    .select("thread_id, person_id, last_activity_at")
+    .eq("user_id", userId)
+    .eq("status", "open")
+    .not("person_id", "is", null)
+    .order("last_activity_at", { ascending: false })
+    .limit(20);
+  if (threadsRes.error) {
+    captureServerRead(
+      "coach_hub",
+      "conversation_threads",
+      new Error("open_loops_threads_read_failed"),
+    );
+    return [];
+  }
+  const openThreads = threadsRes.data ?? [];
+  const threadIds = openThreads.map((t) => t.thread_id);
+  if (threadIds.length === 0) return [];
+
+  const [recsRes, personsRes] = await Promise.all([
+    supabase
+      .from("raw_records")
+      .select("thread_id, record_type")
+      .eq("user_id", userId)
+      .in("thread_id", threadIds)
+      .in("record_type", ["prepare", "review"])
+      .eq("is_complete", true)
+      .is("deleted_at", null),
+    supabase
+      .from("persons")
+      .select("person_id, display_name")
+      .eq("user_id", userId)
+      .limit(500),
+  ]);
+  if (recsRes.error) {
+    captureServerRead(
+      "coach_hub",
+      "raw_records",
+      new Error("open_loops_records_read_failed"),
+    );
+    return [];
+  }
+  if (personsRes.error) {
+    captureServerRead(
+      "coach_hub",
+      "persons",
+      new Error("open_loops_persons_read_failed"),
+    );
+  }
+
+  const hasPrepare = new Set<string>();
+  const hasReview = new Set<string>();
+  for (const r of recsRes.data ?? []) {
+    if (!r.thread_id) continue;
+    if (r.record_type === "prepare") hasPrepare.add(r.thread_id);
+    else if (r.record_type === "review") hasReview.add(r.thread_id);
+  }
+  const nameById = new Map(
+    (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
+  );
+
+  const loops: OpenLoop[] = [];
+  for (const t of openThreads) {
+    if (!t.person_id) continue;
+    if (hasPrepare.has(t.thread_id) && !hasReview.has(t.thread_id)) {
+      loops.push({
+        threadId: t.thread_id,
+        personId: t.person_id,
+        personName: nameById.get(t.person_id) ?? "someone",
+      });
+      if (loops.length >= 3) break;
+    }
+  }
+  return loops;
+}
 
 function firstNameFromEmail(email: string | null | undefined): string {
   if (!email) return "";
@@ -21,6 +106,8 @@ export default async function CoachPage() {
   const firstName =
     readFirstName(user.user_metadata) || firstNameFromEmail(user.email);
   const greeting = firstName ? `Hi, ${firstName}.` : "Hi there.";
+
+  const openLoops = await getOpenLoops(user.id);
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
@@ -132,6 +219,13 @@ export default async function CoachPage() {
           </p>
         </Link>
       </div>
+
+      {/* Open-loop return nudges (Phase 2) — only renders when loops exist. */}
+      {openLoops.length > 0 && (
+        <div className="mt-6">
+          <LoopNudge loops={openLoops} />
+        </div>
+      )}
     </div>
   );
 }
