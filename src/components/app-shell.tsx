@@ -5,13 +5,17 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { Clock, Coins, LogOut, Settings } from "lucide-react";
+import { Coins, LogOut } from "lucide-react";
 import { Wordmark } from "./brand/Wordmark";
 
-const TABS = [
-  { href: "/coach", label: "Coach" },
-  { href: "/tools", label: "Tools" },
-  { href: "/insights", label: "Insights" },
+// Router nav (Phase 3): three tabs. "Home" is the /coach hub; "Me" gathers
+// the account surfaces (History/Profile/Settings/Coins) so they highlight the
+// Me tab even though they live at their own top-level routes. Tools/Regulate is
+// intentionally NOT a tab — it's reached from the Home "I'm activated" card.
+const TABS: { href: string; label: string; match: string[] }[] = [
+  { href: "/coach", label: "Home", match: [] },
+  { href: "/insights", label: "Insights", match: [] },
+  { href: "/me", label: "Me", match: ["/history", "/settings", "/coins"] },
 ];
 
 // useLinkStatus must be called inside a descendant of <Link>. `pending`
@@ -56,10 +60,12 @@ export function AppShell({
   children,
   userEmail,
   firstName,
+  balance = 0,
 }: {
   children: React.ReactNode;
   userEmail?: string | null;
   firstName?: string | null;
+  balance?: number;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -87,15 +93,26 @@ export function AppShell({
           <Wordmark size={15} />
         </Link>
 
-        <div className="relative">
-          <button
-            type="button"
-            aria-label="Open menu"
-            onClick={() => setMenuOpen((v) => !v)}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-hairline bg-surface text-[14px] font-bold text-ink transition active:scale-95"
+        <div className="flex items-center gap-2">
+          {/* Always-visible coin balance — one tap to the Coins page. */}
+          <Link
+            href="/coins"
+            aria-label={`${balance} coins — buy more`}
+            className="flex h-11 items-center gap-1.5 rounded-full border border-hairline bg-surface px-3 text-[14px] font-bold text-ink transition active:scale-95"
           >
-            {avatarInitial(firstName, userEmail)}
-          </button>
+            <Coins className="h-4 w-4 text-[#ecc08a]" />
+            {balance}
+          </Link>
+
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="Open menu"
+              onClick={() => setMenuOpen((v) => !v)}
+              className="flex h-11 w-11 items-center justify-center rounded-full border border-hairline bg-surface text-[14px] font-bold text-ink transition active:scale-95"
+            >
+              {avatarInitial(firstName, userEmail)}
+            </button>
 
           {menuOpen && (
             <>
@@ -104,30 +121,6 @@ export function AppShell({
                 onClick={() => setMenuOpen(false)}
               />
               <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-[16px] border border-hairline bg-surface py-1 shadow-card">
-                <Link
-                  href="/coins"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-tint"
-                >
-                  <Coins className="h-4 w-4" />
-                  Coins
-                </Link>
-                <Link
-                  href="/history"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-tint"
-                >
-                  <Clock className="h-4 w-4" />
-                  History
-                </Link>
-                <Link
-                  href="/settings"
-                  onClick={() => setMenuOpen(false)}
-                  className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-tint"
-                >
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex w-full items-center gap-2 px-4 py-2.5 text-sm font-medium text-ink-soft hover:bg-surface-tint"
@@ -138,6 +131,7 @@ export function AppShell({
               </div>
             </>
           )}
+          </div>
         </div>
       </header>
 
@@ -154,7 +148,11 @@ export function AppShell({
       >
         {TABS.map((tab) => {
           const isActive =
-            pathname === tab.href || pathname.startsWith(tab.href + "/");
+            pathname === tab.href ||
+            pathname.startsWith(tab.href + "/") ||
+            tab.match.some(
+              (m) => pathname === m || pathname.startsWith(m + "/"),
+            );
           return (
             <Link
               key={tab.href}

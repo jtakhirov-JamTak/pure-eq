@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getAuthUser } from "@/lib/supabase/server";
 import { AppShell } from "@/components/app-shell";
 import { readFirstName } from "@/lib/user-metadata";
+import { getBalance } from "@/lib/coins";
 
 export default async function AppLayout({
   children,
@@ -25,10 +26,16 @@ export default async function AppLayout({
   // As of B3, Insights is coin-gated too (charged on tap in its own page), so
   // this layout is now an auth gate only — no surface still uses the paywall.
 
+  // Balance powers the always-visible header coin pill. Fails closed to 0 on a
+  // DB error (getBalance contract). Reflects the value at page render; spending
+  // coins in a flow refreshes it on the next navigation/revalidate.
+  const balance = await getBalance(user.id);
+
   return (
     <AppShell
       userEmail={user.email}
       firstName={readFirstName(user.user_metadata)}
+      balance={balance}
     >
       {children}
     </AppShell>
