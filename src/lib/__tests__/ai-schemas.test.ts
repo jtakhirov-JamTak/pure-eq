@@ -53,12 +53,12 @@ describe("validateAIOutput — stripGeneric on action fields", () => {
     expect(output.best_next_move).toBeNull();
   });
 
-  it("nullifies 'try to listen better' on thing_to_cut", () => {
+  it("nullifies 'try to listen better' on what_to_own", () => {
     const output: Record<string, unknown> = {
-      thing_to_cut: "try to listen better",
+      what_to_own: "try to listen better",
     };
     validateAIOutput(output);
-    expect(output.thing_to_cut).toBeNull();
+    expect(output.what_to_own).toBeNull();
   });
 
   it("nullifies exact 'Be more patient.' via exact_be_more_patient", () => {
