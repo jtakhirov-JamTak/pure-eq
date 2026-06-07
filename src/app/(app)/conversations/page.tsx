@@ -20,7 +20,7 @@ export default async function ConversationsPage() {
   if (!user) redirect("/login");
 
   const [openLoops, stats] = await Promise.all([
-    getOpenLoops(user.id, 5),
+    getOpenLoops(user.id, 3),
     getActivityStats(user.id),
   ]);
 
@@ -40,22 +40,28 @@ export default async function ConversationsPage() {
         </p>
       </div>
 
-      {openLoops.length > 0 ? (
-        <OpenConversations loops={openLoops} />
-      ) : (
-        <Card className="p-5">
-          <p className="text-[14px] font-medium leading-[1.5] text-ink-soft">
-            Nothing in progress right now. When you prepare for a conversation,
-            it shows up here so you can review how it went.
-          </p>
-          <Link
-            href="/coach/prepare"
-            className="mt-3 inline-flex min-h-11 items-center text-[13px] font-bold text-accent-ink active:opacity-70"
-          >
-            Prepare for a conversation →
-          </Link>
-        </Card>
-      )}
+      {/* Your activity dashboard — at the top: the heatmap is the at-a-glance
+          overview of everything below it. */}
+      <ActivityDashboard stats={stats} />
+
+      <div className="mt-6">
+        {openLoops.length > 0 ? (
+          <OpenConversations loops={openLoops} />
+        ) : (
+          <Card className="p-5">
+            <p className="text-[14px] font-medium leading-[1.5] text-ink-soft">
+              Nothing in progress right now. When you prepare for a
+              conversation, it shows up here so you can review how it went.
+            </p>
+            <Link
+              href="/coach/prepare"
+              className="mt-3 inline-flex min-h-11 items-center text-[13px] font-bold text-accent-ink active:opacity-70"
+            >
+              Prepare for a conversation →
+            </Link>
+          </Card>
+        )}
+      </div>
 
       {/* See all conversations */}
       <Link
@@ -67,9 +73,6 @@ export default async function ConversationsPage() {
         </span>
         <ChevronRight className="h-4 w-4 text-ink-soft" />
       </Link>
-
-      {/* Your activity dashboard */}
-      <ActivityDashboard stats={stats} />
     </div>
   );
 }
