@@ -42,8 +42,7 @@ export default async function InsightsPage() {
   // ReflectionKickoff → /api/insights/generate); viewing an already-generated
   // reflection inside the 7-day window is free.
 
-  const [latestReflectionRes, threadsRes, personsRes, entryCountRes] =
-    await Promise.all([
+  const [latestReflectionRes, entryCountRes] = await Promise.all([
     supabase
       .from("weekly_reflections")
       .select("generated_at, generator_version, ai_json")
@@ -51,19 +50,6 @@ export default async function InsightsPage() {
       .order("generated_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
-    supabase
-      .from("conversation_threads")
-      .select("thread_id, status, person_id, last_activity_at")
-      .eq("user_id", user.id)
-      .in("status", ["open", "stabilizing"])
-      .order("last_activity_at", { ascending: false })
-      .limit(3),
-    supabase
-      .from("persons")
-      .select("person_id, display_name")
-      .eq("user_id", user.id)
-      .eq("is_active", true)
-      .limit(100),
     // All-time count of completed entries across the four reflective modules —
     // the gate for the first weekly reflection. head:true = COUNT only, no rows.
     // The server re-counts in generateReflection (the real gate); this drives
@@ -84,20 +70,6 @@ export default async function InsightsPage() {
       new Error("weekly_reflections_read_failed"),
     );
   }
-  if (threadsRes.error) {
-    captureServerRead(
-      "insights",
-      "conversation_threads_read",
-      new Error("conversation_threads_read_failed"),
-    );
-  }
-  if (personsRes.error) {
-    captureServerRead(
-      "insights",
-      "persons_read",
-      new Error("persons_read_failed"),
-    );
-  }
   if (entryCountRes.error) {
     captureServerRead(
       "insights",
@@ -113,11 +85,6 @@ export default async function InsightsPage() {
   const eligibleEntryCount = entryCountRes.count ?? 0;
   const canGenerate =
     !!entryCountRes.error || eligibleEntryCount >= MIN_ENTRIES_FOR_REFLECTION;
-
-  const threads = threadsRes.data ?? [];
-  const personMap = new Map(
-    (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
-  );
 
   // Decide whether the server-side row is fresh enough to render directly,
   // or whether we should delegate to ReflectionKickoff (which shows the
@@ -189,38 +156,6 @@ export default async function InsightsPage() {
             Go to Coach
           </Link>
         </Card>
-      )}
-
-      {threads.length > 0 && (
-        <div className="mt-4">
-          <Kicker className="text-accent-ink">Open conversations</Kicker>
-          <ul className="mt-2.5 divide-y divide-hairline rounded-card border border-hairline bg-surface px-4">
-            {threads.map((thread) => {
-              const personName = thread.person_id
-                ? (personMap.get(thread.person_id) ?? "Someone")
-                : "General";
-              return (
-                <li key={thread.thread_id}>
-                  <Link
-                    href={`/conversations/${thread.thread_id}`}
-                    className="flex min-h-11 items-center gap-3 py-3 active:opacity-70"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
-                    />
-                    <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
-                      {personName}
-                    </span>
-                    <span className="shrink-0 text-[11px] font-medium text-ink-soft capitalize">
-                      {thread.status === "stabilizing" ? "stabilizing" : "open"}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
       )}
     </div>
   );

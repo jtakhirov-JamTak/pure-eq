@@ -8,12 +8,12 @@ import type { OpenLoop } from "@/lib/coach/open-loops";
 // ============================================================
 // OpenConversations — the interactive top of the Conversations tab
 // ============================================================
-// A uniform "Pick up where you left off" list, matching the Home-hub LoopNudge
-// design (same card shape + font sizes) so the two tabs read consistently. The
-// page caps the list at the top 3. Tapping a row stashes a Review prefill
-// (person) and routes into Review — the Prepare→Review calibration link forms
-// server-side off the person. Client-side so sessionStorage + the auth lookup
-// run in the browser.
+// A uniform "Pick up where you left off" list (one card per open loop, capped
+// at the top 3 by the page). Each row's subtext is the generic "review how it
+// landed" line — never the conversation title. Tapping a row stashes a Review
+// prefill (person) and routes into Review — the Prepare→Review calibration link
+// forms server-side off the person. Client-side so sessionStorage + the auth
+// lookup run in the browser.
 export function OpenConversations({ loops }: { loops: OpenLoop[] }) {
   const router = useRouter();
 
@@ -44,9 +44,7 @@ export function OpenConversations({ loops }: { loops: OpenLoop[] }) {
                 How did it go with {loop.personName}?
               </span>
               <span className="mt-0.5 block text-[13px] font-medium leading-[1.4] text-ink-soft">
-                {loop.title
-                  ? loop.title
-                  : "You prepared for this — review how it landed."}
+                You prepared for this — review how it landed.
               </span>
             </span>
             <span className="shrink-0 text-[13px] font-bold text-accent-ink">

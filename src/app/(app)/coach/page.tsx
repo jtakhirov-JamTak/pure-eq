@@ -3,8 +3,6 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { readFirstName } from "@/lib/user-metadata";
-import { LoopNudge } from "@/components/coach/loop-nudge";
-import { getOpenLoops } from "@/lib/coach/open-loops";
 
 function firstNameFromEmail(email: string | null | undefined): string {
   if (!email) return "";
@@ -23,8 +21,6 @@ export default async function CoachPage() {
   const firstName =
     readFirstName(user.user_metadata) || firstNameFromEmail(user.email);
   const greeting = firstName ? `Hi, ${firstName}.` : "Hi there.";
-
-  const openLoops = await getOpenLoops(user.id);
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
@@ -165,13 +161,6 @@ export default async function CoachPage() {
           &rarr;
         </span>
       </Link>
-
-      {/* Open-loop return nudges (Phase 2) — only renders when loops exist. */}
-      {openLoops.length > 0 && (
-        <div className="mt-6">
-          <LoopNudge loops={openLoops} />
-        </div>
-      )}
     </div>
   );
 }

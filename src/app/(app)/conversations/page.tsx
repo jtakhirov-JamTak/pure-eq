@@ -4,7 +4,8 @@ import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { Card } from "@/components/ui/card";
-import { getOpenLoops } from "@/lib/coach/open-loops";
+import { Kicker } from "@/components/ui/kicker";
+import { getConversationsOverview } from "@/lib/coach/open-loops";
 import { getActivityStats } from "@/lib/coach/activity-stats";
 import { OpenConversations } from "@/components/conversations/open-conversations";
 import { ActivityDashboard } from "@/components/conversations/activity-dashboard";
@@ -19,8 +20,8 @@ export default async function ConversationsPage() {
   } = await getAuthUser();
   if (!user) redirect("/login");
 
-  const [openLoops, stats] = await Promise.all([
-    getOpenLoops(user.id, 3),
+  const [{ openLoops, openThreads }, stats] = await Promise.all([
+    getConversationsOverview(user.id, 3),
     getActivityStats(user.id),
   ]);
 
@@ -62,6 +63,35 @@ export default async function ConversationsPage() {
           </Card>
         )}
       </div>
+
+      {/* Open conversations — open/stabilizing threads (browse → detail), as
+          distinct from the resume-into-Review loops above. Last 3. */}
+      {openThreads.length > 0 && (
+        <div className="mt-6">
+          <Kicker className="text-accent-ink">Open conversations</Kicker>
+          <ul className="mt-2.5 divide-y divide-hairline rounded-card border border-hairline bg-surface px-4">
+            {openThreads.map((t) => (
+              <li key={t.threadId}>
+                <Link
+                  href={`/conversations/${t.threadId}`}
+                  className="flex min-h-11 items-center gap-3 py-3 active:opacity-70"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent"
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+                    {t.personName}
+                  </span>
+                  <span className="shrink-0 text-[11px] font-medium capitalize text-ink-soft">
+                    {t.status === "stabilizing" ? "stabilizing" : "open"}
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* See all conversations */}
       <Link
