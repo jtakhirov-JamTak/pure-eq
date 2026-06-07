@@ -1,7 +1,7 @@
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Clock, Coins, Settings, ChevronRight } from "lucide-react";
+import { Coins, Settings, ChevronRight, Download } from "lucide-react";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { readFirstName } from "@/lib/user-metadata";
 import { SignOutButton } from "@/components/sign-out-button";
@@ -14,13 +14,13 @@ import type { ProfileType } from "@/types";
 import { StyleBox } from "@/components/insights/StyleBox";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
+import { isAdmin } from "@/lib/admin";
 
-// Me tab (Phase 3 router nav): gathers the account surfaces that used to live
-// in the header avatar menu. The Communication Profile lives here as the
-// StyleBox at the top (with its own retake link), so it's dropped from the
-// link list below. Every link points to an existing route. Reading screen.
+// Me tab (router nav): gathers the account surfaces that used to live in the
+// header avatar menu. The Communication Profile lives here as the StyleBox at
+// the top (with its own retake link). History is gone — past conversations now
+// live in the Conversations tab. Reading screen.
 const LINKS = [
-  { href: "/history", label: "History", Icon: Clock },
   { href: "/settings", label: "Settings", Icon: Settings },
   { href: "/coins", label: "Coins", Icon: Coins },
 ];
@@ -37,6 +37,7 @@ export default async function MePage() {
   const secondary = profile?.secondary_profile as ProfileType | null;
 
   const firstName = readFirstName(user.user_metadata);
+  const admin = isAdmin(user.email);
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
@@ -91,6 +92,23 @@ export default async function MePage() {
           </Link>
         ))}
       </div>
+
+      {/* Data export is admin-only for now (gated server-side at /api/export). */}
+      {admin && (
+        <a
+          href="/api/export"
+          download
+          className="mt-4 flex min-h-14 items-center gap-3 rounded-card border border-hairline bg-surface/70 px-4 py-3.5 shadow-dark transition active:bg-surface-tint"
+        >
+          <Download className="h-5 w-5 text-ink-soft" />
+          <span className="flex-1 font-medium text-ink">
+            Download my data (.txt)
+          </span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-muted">
+            Admin
+          </span>
+        </a>
+      )}
 
       <SignOutButton className="mt-4 flex min-h-14 w-full items-center gap-3 rounded-card border border-hairline bg-surface/70 px-4 py-3.5 shadow-dark transition active:bg-surface-tint" />
     </div>

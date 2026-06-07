@@ -4,15 +4,17 @@ import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { Kicker } from "@/components/ui/kicker";
 import ThreadStatusSelector from "./thread-status-selector";
+import { DeleteConversationButton } from "./delete-conversation-button";
 import { ThreadReviewButton } from "@/components/coach/thread-review-button";
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
   prepare: { label: "Prepare", color: "bg-accent-soft text-accent-ink" },
+  pulse_check: { label: "Pulse Check", color: "bg-accent-soft text-accent-ink" },
   review: { label: "Review", color: "bg-warm-soft text-warm" },
   repair: { label: "Repair", color: "bg-positive/15 text-positive" },
 };
 
-export default async function ThreadDetailPage({
+export default async function ConversationDetailPage({
   params,
 }: {
   params: Promise<{ threadId: string }>;
@@ -76,6 +78,7 @@ export default async function ThreadDetailPage({
     const text =
       fields.situation ??
       fields.whatHappened ??
+      fields.whatFeelsOff ??
       fields.whatNeedsRepair ??
       "";
     if (!text) return "";
@@ -88,7 +91,7 @@ export default async function ThreadDetailPage({
 
       <div className="flex items-center justify-between">
         <Link
-          href="/coach/threads"
+          href="/conversations/all"
           className="rounded-pill border border-hairline bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
         >
           Back
@@ -178,6 +181,11 @@ export default async function ThreadDetailPage({
             </Link>
           )}
         </div>
+      </div>
+
+      {/* Delete this conversation */}
+      <div className="mt-10 border-t border-hairline pt-6">
+        <DeleteConversationButton threadId={thread.thread_id} />
       </div>
     </div>
   );

@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Kicker } from "@/components/ui/kicker";
 import { stashReviewPrefill } from "@/lib/coach/review-prefill";
+import type { OpenLoop } from "@/lib/coach/open-loops";
 
 // ============================================================
 // LoopNudge — open-loop return prompts on the hub (Phase 2)
@@ -12,12 +13,6 @@ import { stashReviewPrefill } from "@/lib/coach/review-prefill";
 // Prepare→Review calibration link forms server-side off the person. Resolved by
 // the hub server component; this client wrapper only handles the tap → stash →
 // route so sessionStorage + the auth lookup run in the browser.
-
-export type OpenLoop = {
-  threadId: string;
-  personId: string | null;
-  personName: string;
-};
 
 export function LoopNudge({ loops }: { loops: OpenLoop[] }) {
   const router = useRouter();

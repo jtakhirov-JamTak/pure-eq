@@ -8,14 +8,16 @@ import { cn } from "@/lib/utils";
 import { Coins, LogOut } from "lucide-react";
 import { Wordmark } from "./brand/Wordmark";
 
-// Router nav (Phase 3): three tabs. "Home" is the /coach hub; "Me" gathers
-// the account surfaces (History/Profile/Settings/Coins) so they highlight the
-// Me tab even though they live at their own top-level routes. Tools/Regulate is
+// Router nav: four tabs. "Home" is the /coach hub; "Convos" is the
+// /conversations tab (labelled short so the pill fits a phone); "Me" gathers
+// the account surfaces (Profile/Settings/Coins) so they highlight the Me tab
+// even though they live at their own top-level routes. Tools/Regulate is
 // intentionally NOT a tab — it's reached from the Home "I'm activated" card.
 const TABS: { href: string; label: string; match: string[] }[] = [
   { href: "/coach", label: "Home", match: [] },
+  { href: "/conversations", label: "Convos", match: [] },
   { href: "/insights", label: "Insights", match: [] },
-  { href: "/me", label: "Me", match: ["/history", "/settings", "/coins"] },
+  { href: "/me", label: "Me", match: ["/settings", "/coins"] },
 ];
 
 // useLinkStatus must be called inside a descendant of <Link>. `pending`

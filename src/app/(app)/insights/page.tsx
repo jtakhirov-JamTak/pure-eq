@@ -202,7 +202,7 @@ export default async function InsightsPage() {
               return (
                 <li key={thread.thread_id}>
                   <Link
-                    href={`/coach/threads/${thread.thread_id}`}
+                    href={`/conversations/${thread.thread_id}`}
                     className="flex min-h-11 items-center gap-3 py-3 active:opacity-70"
                   >
                     <span

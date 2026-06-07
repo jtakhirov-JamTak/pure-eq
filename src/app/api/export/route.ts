@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { isAdmin } from "@/lib/admin";
 import { buildExportText } from "@/lib/export";
 
 export const runtime = "nodejs";
@@ -27,9 +28,16 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Coins redesign Phase 3: exporting your own data is free (login-only) — a
-  // data-rights surface, not an AI/paid feature. Origin check + per-minute/day
-  // rate limits below still guard against CSRF and slow exfil.
+  // Export is admin-only for now (the user-facing "Download my data" link was
+  // removed; only the admin Me-page link remains). Enforced server-side so the
+  // endpoint can't be hit directly by a non-admin. Revisit before launch when a
+  // user-facing data-rights export is reintroduced.
+  if (!isAdmin(user.email)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  // Origin check + per-minute/day rate limits below still guard against CSRF
+  // and slow exfil even for the admin path.
   const rlMin = await rateLimit(`export:min:${user.id}`, {
     limit: 3,
     windowMs: 60_000,
