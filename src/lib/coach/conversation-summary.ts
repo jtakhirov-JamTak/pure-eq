@@ -33,7 +33,7 @@ export type ConversationSummary = {
 
 // The single "headline" field of each module's AI output, by record type.
 // Refusal rows (mode === "refusal") surface message_to_user instead.
-function extractHeadline(
+export function extractHeadline(
   recordType: string,
   aiJson: unknown,
 ): string | null {
@@ -211,4 +211,102 @@ export async function getConversationSummaries(
   }
 
   return summaries;
+}
+
+// ============================================================
+// Thread timeline — the per-conversation detail view
+// ============================================================
+// One entry per completed module run in a single thread, each carrying BOTH the
+// user's input summary and the coach AI headline (same extractor as the list).
+// Sourced from the derived tables (not raw_records) because that's where the AI
+// output lives. Oldest → newest. Every query inspects .error.
+export type ThreadTimelineEntry = {
+  recordType: ConversationOrigin | "review";
+  createdAt: string;
+  inputSummary: string | null;
+  aiHeadline: string | null;
+};
+
+function clip(s: string | null | undefined, max = 240): string | null {
+  if (!s) return null;
+  const t = s.trim();
+  if (!t) return null;
+  return t.length > max ? t.slice(0, max) + "…" : t;
+}
+
+export async function getThreadEntries(
+  userId: string,
+  threadId: string,
+): Promise<ThreadTimelineEntry[]> {
+  const supabase = await createClient();
+
+  const [prepRes, reviewRes, pulseRes] = await Promise.all([
+    supabase
+      .from("prepare_entries")
+      .select("situation_text, ai_plan_json, created_at")
+      .eq("user_id", userId)
+      .eq("thread_id", threadId)
+      .eq("is_complete", true)
+      .is("deleted_at", null),
+    supabase
+      .from("review_entries")
+      .select("what_happened, ai_reflection_json, created_at")
+      .eq("user_id", userId)
+      .eq("thread_id", threadId)
+      .eq("is_complete", true)
+      .is("deleted_at", null),
+    supabase
+      .from("pulse_check_entries")
+      .select("what_feels_off, ai_output_json, created_at")
+      .eq("user_id", userId)
+      .eq("thread_id", threadId)
+      .eq("is_complete", true)
+      .is("deleted_at", null),
+  ]);
+
+  for (const [res, kind] of [
+    [prepRes, "prepare_entries"],
+    [reviewRes, "review_entries"],
+    [pulseRes, "pulse_check_entries"],
+  ] as const) {
+    if (res.error) {
+      captureServerRead(
+        "thread_entries",
+        kind,
+        new Error(`${kind}_read_failed`),
+      );
+    }
+  }
+
+  const entries: ThreadTimelineEntry[] = [];
+  for (const r of prepRes.data ?? []) {
+    entries.push({
+      recordType: "prepare",
+      createdAt: r.created_at,
+      inputSummary: clip(r.situation_text),
+      aiHeadline: extractHeadline("prepare", r.ai_plan_json),
+    });
+  }
+  for (const r of reviewRes.data ?? []) {
+    entries.push({
+      recordType: "review",
+      createdAt: r.created_at,
+      inputSummary: clip(r.what_happened),
+      aiHeadline: extractHeadline("review", r.ai_reflection_json),
+    });
+  }
+  for (const r of pulseRes.data ?? []) {
+    entries.push({
+      recordType: "pulse_check",
+      createdAt: r.created_at,
+      inputSummary: clip(r.what_feels_off),
+      aiHeadline: extractHeadline("pulse_check", r.ai_output_json),
+    });
+  }
+
+  entries.sort(
+    (a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  return entries;
 }

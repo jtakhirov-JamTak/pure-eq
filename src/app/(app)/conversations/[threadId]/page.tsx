@@ -6,6 +6,7 @@ import { Kicker } from "@/components/ui/kicker";
 import ThreadStatusSelector from "./thread-status-selector";
 import { DeleteConversationButton } from "./delete-conversation-button";
 import { ThreadReviewButton } from "@/components/coach/thread-review-button";
+import { getThreadEntries } from "@/lib/coach/conversation-summary";
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
   prepare: { label: "Prepare", color: "bg-accent-soft text-accent-ink" },
@@ -37,8 +38,9 @@ export default async function ConversationDetailPage({
 
   if (!thread) notFound();
 
-  // Fetch person name and entries linked to this thread.
-  const [personRes, entriesRes] = await Promise.all([
+  // Fetch person name and the thread timeline (each entry carries the user's
+  // input summary AND the coach AI headline — sourced from the derived tables).
+  const [personRes, entries] = await Promise.all([
     thread.person_id
       ? supabase
           .from("persons")
@@ -46,19 +48,10 @@ export default async function ConversationDetailPage({
           .eq("person_id", thread.person_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
-    supabase
-      .from("raw_records")
-      .select("raw_record_id, record_type, created_at, payload_json")
-      .eq("user_id", user.id)
-      .eq("thread_id", threadId)
-      .eq("is_complete", true)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: true })
-      .limit(100),
+    getThreadEntries(user.id, threadId),
   ]);
 
   const personName = personRes.data?.display_name ?? "Someone";
-  const entries = entriesRes.data ?? [];
 
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString(undefined, {
@@ -67,22 +60,6 @@ export default async function ConversationDetailPage({
       hour: "numeric",
       minute: "2-digit",
     });
-  }
-
-  function getExcerpt(payloadJson: unknown): string {
-    if (!payloadJson || typeof payloadJson !== "object") return "";
-    const payload = payloadJson as { fields?: Record<string, string> };
-    const fields = payload.fields;
-    if (!fields) return "";
-    // Pick the most descriptive field per module type.
-    const text =
-      fields.situation ??
-      fields.whatHappened ??
-      fields.whatFeelsOff ??
-      fields.whatNeedsRepair ??
-      "";
-    if (!text) return "";
-    return text.length > 120 ? text.slice(0, 120) + "..." : text;
   }
 
   return (
@@ -129,16 +106,15 @@ export default async function ConversationDetailPage({
           </p>
         ) : (
           <div className="mt-3 space-y-3">
-            {entries.map((entry) => {
-              const badge = MODULE_BADGES[entry.record_type] ?? {
-                label: entry.record_type,
+            {entries.map((entry, i) => {
+              const badge = MODULE_BADGES[entry.recordType] ?? {
+                label: entry.recordType,
                 color: "bg-surface-tint text-ink-soft",
               };
-              const excerpt = getExcerpt(entry.payload_json);
 
               return (
                 <div
-                  key={entry.raw_record_id}
+                  key={`${entry.recordType}-${entry.createdAt}-${i}`}
                   className="rounded-card border border-hairline bg-surface p-4"
                 >
                   <div className="flex items-center gap-2">
@@ -148,13 +124,30 @@ export default async function ConversationDetailPage({
                       {badge.label}
                     </span>
                     <span className="text-[11px] font-medium text-ink-muted">
-                      {entry.created_at ? formatDate(entry.created_at) : ""}
+                      {formatDate(entry.createdAt)}
                     </span>
                   </div>
-                  {excerpt && (
-                    <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
-                      {excerpt}
-                    </p>
+
+                  {entry.inputSummary && (
+                    <div className="mt-3">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.5px] text-ink-muted">
+                        What you wrote
+                      </p>
+                      <p className="mt-1 text-[13px] font-medium leading-[1.5] text-ink-soft">
+                        {entry.inputSummary}
+                      </p>
+                    </div>
+                  )}
+
+                  {entry.aiHeadline && (
+                    <div className="mt-3 border-t border-hairline pt-3">
+                      <p className="text-[11px] font-bold uppercase tracking-[0.5px] text-accent-ink">
+                        Coach
+                      </p>
+                      <p className="mt-1 text-[13px] font-medium leading-[1.5] text-ink">
+                        {entry.aiHeadline}
+                      </p>
+                    </div>
                   )}
                 </div>
               );
