@@ -120,8 +120,6 @@ export default async function CoachPage() {
           style={{ letterSpacing: "-0.7px" }}
         >
           {greeting}
-          <br />
-          <span className="italic">Blue Skies ahead.</span>
         </h1>
         <p className="mt-2 text-[15px] font-medium leading-[1.5] text-ink-soft">
           Prepare for, review, or pressure-check a conversation.

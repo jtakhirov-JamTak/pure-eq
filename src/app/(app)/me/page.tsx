@@ -1,17 +1,26 @@
-import { getAuthUser } from "@/lib/supabase/server";
+import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Clock, Coins, Settings, UserRound, ChevronRight } from "lucide-react";
+import { Clock, Coins, Settings, ChevronRight } from "lucide-react";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { readFirstName } from "@/lib/user-metadata";
 import { SignOutButton } from "@/components/sign-out-button";
+import {
+  PROFILE_DESCRIPTIONS,
+  PROFILE_AVATAR_CLASSES,
+  getLatestProfile,
+} from "@/lib/onboarding";
+import type { ProfileType } from "@/types";
+import { StyleBox } from "@/components/insights/StyleBox";
+import { Card } from "@/components/ui/card";
+import { Kicker } from "@/components/ui/kicker";
 
 // Me tab (Phase 3 router nav): gathers the account surfaces that used to live
-// in the header avatar menu. Every link points to an existing route — Profile
-// reuses the onboarding quiz in retake mode. Reading screen (pb-32).
+// in the header avatar menu. The Communication Profile lives here as the
+// StyleBox at the top (with its own retake link), so it's dropped from the
+// link list below. Every link points to an existing route. Reading screen.
 const LINKS = [
   { href: "/history", label: "History", Icon: Clock },
-  { href: "/onboarding?retake=1", label: "Communication Profile", Icon: UserRound },
   { href: "/settings", label: "Settings", Icon: Settings },
   { href: "/coins", label: "Coins", Icon: Coins },
 ];
@@ -21,6 +30,11 @@ export default async function MePage() {
     data: { user },
   } = await getAuthUser();
   if (!user) redirect("/login");
+
+  const supabase = await createClient();
+  const profile = await getLatestProfile(supabase, user.id);
+  const primary = profile?.primary_profile as ProfileType | undefined;
+  const secondary = profile?.secondary_profile as ProfileType | null;
 
   const firstName = readFirstName(user.user_metadata);
 
@@ -42,7 +56,29 @@ export default async function MePage() {
         )}
       </div>
 
-      <div className="divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface/70 shadow-dark">
+      {primary ? (
+        <StyleBox
+          primary={primary}
+          secondary={secondary ?? null}
+          description={PROFILE_DESCRIPTIONS[primary]}
+          avatarColorClass={PROFILE_AVATAR_CLASSES[primary]}
+        />
+      ) : (
+        <Card className="mb-4 p-5">
+          <Kicker>Your style</Kicker>
+          <p className="mt-2 text-[13px] font-medium text-ink-soft">
+            Complete onboarding to see your profile here.
+          </p>
+          <Link
+            href="/onboarding?retake=1"
+            className="mt-2 inline-flex min-h-11 items-center text-[12px] font-medium text-ink-soft underline active:opacity-70"
+          >
+            Set up Communication Profile
+          </Link>
+        </Card>
+      )}
+
+      <div className="mt-4 divide-y divide-hairline overflow-hidden rounded-card border border-hairline bg-surface/70 shadow-dark">
         {LINKS.map(({ href, label, Icon }) => (
           <Link
             key={href}

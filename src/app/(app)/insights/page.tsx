@@ -13,13 +13,6 @@
 import Link from "next/link";
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import {
-  PROFILE_DESCRIPTIONS,
-  PROFILE_AVATAR_CLASSES,
-  getLatestProfile,
-} from "@/lib/onboarding";
-import type { ProfileType } from "@/types";
-import { StyleBox } from "@/components/insights/StyleBox";
 import { ReflectionCard } from "@/components/insights/ReflectionCard";
 import { ReflectionKickoff } from "@/components/insights/ReflectionKickoff";
 import { StormBackground } from "@/components/brand/StormBackground";
@@ -49,9 +42,8 @@ export default async function InsightsPage() {
   // ReflectionKickoff → /api/insights/generate); viewing an already-generated
   // reflection inside the 7-day window is free.
 
-  const [profile, latestReflectionRes, threadsRes, personsRes, entryCountRes] =
+  const [latestReflectionRes, threadsRes, personsRes, entryCountRes] =
     await Promise.all([
-    getLatestProfile(supabase, user.id),
     supabase
       .from("weekly_reflections")
       .select("generated_at, generator_version, ai_json")
@@ -122,9 +114,6 @@ export default async function InsightsPage() {
   const canGenerate =
     !!entryCountRes.error || eligibleEntryCount >= MIN_ENTRIES_FOR_REFLECTION;
 
-  const primary = profile?.primary_profile as ProfileType | undefined;
-  const secondary = profile?.secondary_profile as ProfileType | null;
-
   const threads = threadsRes.data ?? [];
   const personMap = new Map(
     (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
@@ -173,22 +162,6 @@ export default async function InsightsPage() {
           Your <span className="italic">patterns</span> are who you are.
         </h1>
       </div>
-
-      {primary ? (
-        <StyleBox
-          primary={primary}
-          secondary={secondary ?? null}
-          description={PROFILE_DESCRIPTIONS[primary]}
-          avatarColorClass={PROFILE_AVATAR_CLASSES[primary]}
-        />
-      ) : (
-        <Card className="mt-4 p-5">
-          <Kicker>Your style</Kicker>
-          <p className="mt-2 text-[13px] font-medium text-ink-soft">
-            Complete onboarding to see your profile here.
-          </p>
-        </Card>
-      )}
 
       {freshReflection ? (
         <ReflectionCard
