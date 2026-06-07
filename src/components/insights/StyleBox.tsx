@@ -42,11 +42,22 @@ export function StyleBox({
         </div>
       </div>
 
-      <p className="mt-3 text-[13px] font-medium leading-[1.5] text-ink-soft">
-        {description.strength}
-      </p>
+      <div className="mt-4 space-y-3">
+        {[
+          { label: "Your strength", body: description.strength },
+          { label: "Under stress", body: description.stress },
+          { label: "Where to start", body: description.willHelpMost },
+        ].map(({ label, body }) => (
+          <div key={label}>
+            <Kicker>{label}</Kicker>
+            <p className="mt-1 text-[13px] font-medium leading-[1.5] text-ink-soft">
+              {body}
+            </p>
+          </div>
+        ))}
+      </div>
 
-      <div className="mt-2 flex justify-end">
+      <div className="mt-3 flex justify-end">
         <Link
           href="/onboarding?retake=1"
           className="inline-flex min-h-11 items-center px-2 text-[12px] font-medium text-ink-soft underline active:opacity-70"
