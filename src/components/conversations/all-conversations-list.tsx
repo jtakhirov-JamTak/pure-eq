@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
@@ -52,6 +53,10 @@ export function AllConversationsList({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // Portal target: the action bar / modal must escape <main>'s z-10 stacking
+  // context, or the app-shell tab bar (rendered outside main) covers them.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   function exitSelect() {
     setSelectMode(false);
@@ -220,9 +225,12 @@ export function AllConversationsList({
         })}
       </ul>
 
-      {/* Bulk action bar — fixed above the tab bar while selecting. */}
-      {selectMode && (
-        <div className="fixed inset-x-0 bottom-0 z-50 border-t border-hairline bg-surface/95 px-5 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur">
+      {/* Bulk action bar — portaled to body so it sits above the tab bar
+          (which lives outside <main>'s z-10 stacking context). */}
+      {selectMode &&
+        mounted &&
+        createPortal(
+          <div className="fixed inset-x-0 bottom-0 z-50 border-t border-hairline bg-surface/95 px-5 pb-[max(env(safe-area-inset-bottom),12px)] pt-3 backdrop-blur">
           <div className="flex items-center gap-2.5">
             <span className="text-[13px] font-semibold text-ink">
               {count} selected
@@ -255,15 +263,18 @@ export function AllConversationsList({
           {error && (
             <p className="mt-2 text-[12px] font-medium text-danger">{error}</p>
           )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
 
-      {/* Bulk-delete confirmation */}
-      {showDeleteConfirm && (
-        <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
-          onClick={() => !busy && setShowDeleteConfirm(false)}
-        >
+      {/* Bulk-delete confirmation — also portaled, same stacking reason. */}
+      {showDeleteConfirm &&
+        mounted &&
+        createPortal(
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
+            onClick={() => !busy && setShowDeleteConfirm(false)}
+          >
           <div
             className="w-full max-w-sm rounded-card border border-hairline bg-surface p-6 shadow-card"
             onClick={(e) => e.stopPropagation()}
@@ -296,8 +307,9 @@ export function AllConversationsList({
               </button>
             </div>
           </div>
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }
