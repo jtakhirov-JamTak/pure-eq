@@ -127,6 +127,11 @@ export async function deleteConversation(
     return { success: false, error: "Could not delete" };
   }
 
+  // Soft-delete every derived table that carries a thread_id FK. Today only
+  // prepare/review/pulse actually attach to a thread (BYS is stateless, repair
+  // is legacy/null), so the last two match zero rows — included defensively so
+  // this stays correct the moment any of them starts threading. No-match
+  // UPDATEs are cheap and don't error.
   const derivedResults = await Promise.all([
     supabase
       .from("prepare_entries")
@@ -142,6 +147,18 @@ export async function deleteConversation(
       .is("deleted_at", null),
     supabase
       .from("pulse_check_entries")
+      .update({ deleted_at: now })
+      .eq("user_id", user.id)
+      .eq("thread_id", threadId)
+      .is("deleted_at", null),
+    supabase
+      .from("before_you_send_entries")
+      .update({ deleted_at: now })
+      .eq("user_id", user.id)
+      .eq("thread_id", threadId)
+      .is("deleted_at", null),
+    supabase
+      .from("repair_entries")
       .update({ deleted_at: now })
       .eq("user_id", user.id)
       .eq("thread_id", threadId)

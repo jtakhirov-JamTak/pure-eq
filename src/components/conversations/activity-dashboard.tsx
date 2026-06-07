@@ -71,7 +71,10 @@ export function ActivityDashboard({ stats }: { stats: ActivityStats }) {
       </div>
 
       {/* By-type breakdown (this month) */}
-      <div className="mt-4 space-y-2">
+      <p className="mt-5 text-[11px] font-bold uppercase tracking-[0.8px] text-ink-muted">
+        This month, by type
+      </p>
+      <div className="mt-2 space-y-2">
         {TYPE_ROWS.map((row) => {
           const count = stats.byType[row.key];
           return (

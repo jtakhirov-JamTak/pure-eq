@@ -65,9 +65,9 @@ export function CoinsClient({
         Coins
       </h1>
       <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-        Coins pay for AI feedback. Saving your work, History, and the tools are
-        always free. Coins never expire — every pack is a one-time purchase, no
-        subscription.
+        Coins pay for AI feedback. Saving your work, your conversations, and the
+        tools are always free. Coins never expire — every pack is a one-time
+        purchase, no subscription.
       </p>
 
       <p className="mt-4 text-[15px] font-semibold text-ink-soft">

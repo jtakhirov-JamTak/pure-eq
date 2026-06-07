@@ -56,8 +56,8 @@ export function DeleteConversationButton({ threadId }: { threadId: string }) {
             </h3>
             <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
               This removes the whole conversation — every Prepare, Pulse Check,
-              and Review in it — from your history and from any insights it
-              contributed to. This can&apos;t be undone.
+              and Review in it — and it won&apos;t be used in future weekly
+              reflections. This can&apos;t be undone.
             </p>
             {error && (
               <p className="mt-3 text-[13px] font-medium text-danger">{error}</p>
