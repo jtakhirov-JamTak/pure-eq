@@ -11,7 +11,7 @@
 // The lean form sends 6 fields + 2 conditional + a Quick/Deep tier. The old
 // 10-field worksheet is gone. Removed inputs (relationship, whenItShifted,
 // feelingAndBody, theirsNotAboutYou) keep their columns nullable for legacy
-// /history reads; new posts do not write them. The single-sided
+// export reads; new posts do not write them. The single-sided
 // signalNoiseObservation becomes the two-sided signal_test_confirm /
 // signal_test_disconfirm. The legacy next_move_chip taxonomy is replaced by the
 // leaner next_move column (new CHECK in migration 0042). relationship is now

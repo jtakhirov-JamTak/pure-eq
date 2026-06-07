@@ -16,7 +16,7 @@ export const runtime = "nodejs";
 // SOT inputs (review_depth, hardest_moment_feeling, the 8 Full SOT Qs,
 // body_location, lesson_about_*, treat_as_data, what_protecting,
 // calibration_block, needs_to_happen_next, forecast, the 6 repair columns) keep
-// their columns nullable for legacy /history reads; new posts do not write them.
+// their columns nullable for legacy export reads; new posts do not write them.
 // Two inputs merge: lessonScreen + treatAsData → data_and_update; the
 // needs_to_happen_next taxonomy → the leaner next_move chip. The Prepare→Review
 // calibration link is UNCHANGED — prePromptEnrich still resolves the most-recent

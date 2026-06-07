@@ -11,7 +11,7 @@
 //
 // soft-deleted Prepares are excluded — without that filter, a Review
 // could `linked_prepare_entry_id` to a row the user hard-deleted from
-// /history, and downstream renderers would 404.
+// their conversations, and downstream renderers would 404.
 
 import { CALIBRATION_LOOKBACK_DAYS } from "./page-flow";
 import type { AppSupabase } from "./types";

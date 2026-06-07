@@ -166,14 +166,14 @@ export const CALIBRATION_FLOOR_VALUES = ["yes", "mostly", "no"] as const;
 //   5. opener + bodyLocation, triggerPlan          (2 fields, 2 step rows)
 //
 // Old fields (situation_text/primary_value/their_need/etc.) stay nullable
-// in the DB for /history reads on legacy rows; new posts do not send them.
+// in the DB for export reads on legacy rows; new posts do not send them.
 
 // Coins redesign (Slice A, 2026-05-29): lean 8-field Prepare. The old
 // 16-field SOT flow is replaced by 8 fields + a Quick/Deep tier selector.
 // Fields the lean form no longer collects (primaryEmotion+body, emotionAsData,
 // defaultPattern, observedFromThem, theirStateHedged, predictedReaction,
 // hiddenExpectation, specificShift, outcomeFloor, neutralCheckQuestion) keep
-// their columns nullable for legacy /history reads — new posts simply stop
+// their columns nullable for legacy export reads — new posts simply stop
 // sending them. Two formerly-user inputs move:
 //   - predictedReaction → now an AI Quick card (writes predicted_reaction
 //     via extractDerivedFromAi); no longer a form field.
@@ -238,7 +238,7 @@ export const BEFORE_YOU_SEND_MESSAGE_TYPE_VALUES = [
 // decoupled from AI tier. Dropped inputs (reviewDepth, hardestMomentFeeling,
 // the 8 Full SOT Qs, body chip, lessonScreen, whatProtecting, calibrationBlock,
 // needsToHappenNext, forecast, the 6 repair fields) keep their columns nullable
-// for legacy /history reads; new posts simply stop sending them. Two formerly-
+// for legacy export reads; new posts simply stop sending them. Two formerly-
 // multi inputs merge:
 //   - lessonScreen + treatAsData → dataAndUpdate (column data_and_update).
 //   - needsToHappenNext → nextMove (lean taxonomy, column next_move).
@@ -304,7 +304,7 @@ export const createBeforeYouSendSchema = z.object({
  * Trims the old 10-field "Something feels off" worksheet to 6 visible + 2
  * conditional fields. Drops `relationship` (resolved server-side from the
  * person row, like lean Review), `whenItShifted`, `feelingAndBody`, and
- * `theirsNotAboutYou` (their columns stay nullable for legacy /history).
+ * `theirsNotAboutYou` (their columns stay nullable for legacy export).
  * The single-sided `signalNoiseObservation` becomes the two-sided
  * `signalTestConfirm` + `signalTestDisconfirm` falsifiable test. `nextMoveChip`
  * (legacy 7) is replaced by the leaner `nextMove` taxonomy (PULSE_NEXT_MOVE_V2).
@@ -441,7 +441,7 @@ export const immediateOutcomeSchema = z.object({
 // Outcome tracking — Repair (legacy archive only).
 // /coach/repair top-level page is deleted, but the outcome PATCH endpoint
 // stays so users can still mark outcomes on archived repair_entries rows
-// surfaced in /history. New repair flow lives inside Review.
+// surfaced in the data export. New repair flow lives inside Review.
 export const repairOutcomeSchema = z.object({
   attemptedRepair: z.enum(["yes", "planned", "no"]),
   howReceived: z.enum(["positive", "mixed", "negative", "no_response", "too_early"]),

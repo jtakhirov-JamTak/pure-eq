@@ -117,7 +117,7 @@ export type BeforeYouSendVerdict = "safe" | "risky" | "do_not_send";
 // Review: select-field enums.
 export type AskBeforeUnderstanding = "yes" | "no" | "unclear";
 // Legacy (pre-redesign) needs-to-happen-next chip. New lean Review posts write
-// `next_move` (REVIEW_NEXT_MOVE_VALUES) instead; this stays for /history reads
+// `next_move` (REVIEW_NEXT_MOVE_VALUES) instead; this stays for export reads
 // on legacy rows and the Insights behavioral-context aggregation.
 export type ReviewNeedsToHappenNext =
   | "nothing"
@@ -157,7 +157,7 @@ export type RepairReadiness = "yes" | "somewhat" | "no";
 //   prepare → /coach/prepare · repair → persisted intent (standalone Repair
 //   ships in Slice D) · set_boundary → close · step_back → close.
 // Stored on pulse_check_entries.next_move (migration 0042). Supersedes the
-// legacy PULSE_NEXT_MOVE_VALUES (validation.ts) — kept there for /history reads.
+// legacy PULSE_NEXT_MOVE_VALUES (validation.ts) — kept there for export reads.
 export const PULSE_NEXT_MOVE_V2_VALUES = [
   "do_nothing",
   "observe",

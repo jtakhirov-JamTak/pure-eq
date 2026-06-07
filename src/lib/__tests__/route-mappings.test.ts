@@ -2,7 +2,7 @@
 // buildDerivedInsert + buildPayloadFields. Schema-only tests catch shape
 // validation drift but miss column-rename drift — if `feltAtHardestMoment
 // → felt_at_hardest_moment` ever flips to a wrong column name, Zod still
-// parses the post but the row lands in the wrong DB column and /history
+// parses the post but the row lands in the wrong DB column and the saved entry
 // renders empty. These tests pin the mapping.
 
 import { describe, it, expect } from "vitest";
@@ -165,7 +165,7 @@ describe("prepareModuleConfig.extractDerivedFromAi — Predicted Reaction → co
 
 // 2026-05-17 fix3 (#23): buildPayloadFields round-trip. The PR-body claimed
 // fix6 covered buildPayloadFields too, but the original tests only asserted
-// on buildDerivedInsert. The raw_records payload is what /history reads on
+// on buildDerivedInsert. The raw_records payload is what the export reads on
 // raw rows AND what the AI prompt builder receives — a column-name drift
 // here lands the user's content in an unread payload field and renders
 // blank coaching even when the derived row is correct.

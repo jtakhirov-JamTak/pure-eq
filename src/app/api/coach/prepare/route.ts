@@ -14,7 +14,7 @@ export const runtime = "nodejs";
 // (primary_emotion, emotion_as_data, default_pattern, observed_from_them,
 // their_state_hedged, specific_shift, hidden_expectation, outcome_floor,
 // neutral_check_question, body_location) keep their columns nullable for
-// legacy /history reads; new posts do not write them. predicted_reaction is
+// legacy export reads; new posts do not write them. predicted_reaction is
 // no longer a user input — it is now written from the AI Quick "Predicted
 // Reaction" card via extractDerivedFromAi, so calibration.ts is unchanged.
 // hidden_expectation + outcome_floor are merged into hidden_ask_and_floor;
@@ -65,7 +65,7 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   }),
 
   buildDerivedInsert: (input) => ({
-    // `path` is the legacy discriminator kept for /history readers and
+    // `path` is the legacy discriminator kept for export readers and
     // export.ts row labels. ai_plan_version (aiVersionValue 9) is the
     // authoritative shape selector — readers gate on it, not on `path`.
     // We still write a non-null value so legacy filter-by-path queries

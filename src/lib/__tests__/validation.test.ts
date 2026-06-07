@@ -383,7 +383,7 @@ describe("createPulseCheckSchema (lean)", () => {
 // Calibration block — SOT 2026-05-08 Commit 3
 // ============================================================
 // calibrationBlockSchema is retained as an export (the SelectCalibrationChip
-// component + legacy /history reads still reference the { compare, shift, floor }
+// component + legacy export reads still reference the { compare, shift, floor }
 // jsonb shape) even though the lean Review form no longer collects it.
 
 describe("calibrationBlockSchema", () => {

@@ -59,7 +59,7 @@ export const beforeYouSendModuleConfig: CoachModuleConfig<Input, AiOutput> = {
     situation_facts: input.situationFacts,
     desired_outcome: input.desiredOutcome,
     message_type: input.messageType,
-    // Legacy columns retained for /history back-compat — new BYS writes leave
+    // Legacy columns retained for export back-compat — new BYS writes leave
     // them NULL (these fields are no longer collected).
     intent_optional: null,
     risk_context: null,
