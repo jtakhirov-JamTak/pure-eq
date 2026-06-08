@@ -12,7 +12,9 @@ export default async function AllConversationsPage() {
   } = await getAuthUser();
   if (!user) redirect("/login");
 
-  const conversations = await getConversationSummaries(user.id);
+  const { summaries: conversations, truncated } = await getConversationSummaries(
+    user.id,
+  );
 
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
@@ -46,7 +48,14 @@ export default async function AllConversationsPage() {
           </p>
         </Card>
       ) : (
-        <AllConversationsList conversations={conversations} />
+        <>
+          <AllConversationsList conversations={conversations} />
+          {truncated && (
+            <p className="mt-5 text-center text-[12px] font-medium leading-[1.5] text-ink-muted">
+              Showing your 100 most recent conversations.
+            </p>
+          )}
+        </>
       )}
     </div>
   );

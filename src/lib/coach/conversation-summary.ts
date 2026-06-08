@@ -60,20 +60,26 @@ type ThreadEntry = {
   aiJson: unknown;
 };
 
+export type ConversationSummaryResult = {
+  summaries: ConversationSummary[];
+  truncated: boolean;
+};
+
 export async function getConversationSummaries(
   userId: string,
-): Promise<ConversationSummary[]> {
+): Promise<ConversationSummaryResult> {
   const supabase = await createClient();
 
   // Cap at 100 conversations (v0). RPC-upgrade path if a user ever exceeds it:
-  // paginate by last_activity_at. Surface a notice if count hits the cap.
+  // paginate by last_activity_at. We fetch 101 so we can tell the caller when
+  // the list was truncated (and the page shows a "newest 100" notice).
   const [threadsRes, personsRes] = await Promise.all([
     supabase
       .from("conversation_threads")
       .select("thread_id, title, status, person_id, last_activity_at")
       .eq("user_id", userId)
       .order("last_activity_at", { ascending: false })
-      .limit(100),
+      .limit(101),
     supabase
       .from("persons")
       .select("person_id, display_name")
@@ -87,7 +93,7 @@ export async function getConversationSummaries(
       "conversation_threads",
       new Error("conversation_threads_read_failed"),
     );
-    return [];
+    return { summaries: [], truncated: false };
   }
   if (personsRes.error) {
     captureServerRead(
@@ -97,9 +103,13 @@ export async function getConversationSummaries(
     );
   }
 
-  const threads = threadsRes.data ?? [];
+  // We asked for 101; if we got more than 100 the list is truncated. Trim to
+  // the 100 newest before building summaries.
+  const allThreads = threadsRes.data ?? [];
+  const truncated = allThreads.length > 100;
+  const threads = truncated ? allThreads.slice(0, 100) : allThreads;
   const threadIds = threads.map((t) => t.thread_id);
-  if (threadIds.length === 0) return [];
+  if (threadIds.length === 0) return { summaries: [], truncated: false };
 
   const nameById = new Map(
     (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
@@ -210,7 +220,7 @@ export async function getConversationSummaries(
     });
   }
 
-  return summaries;
+  return { summaries, truncated };
 }
 
 // ============================================================
