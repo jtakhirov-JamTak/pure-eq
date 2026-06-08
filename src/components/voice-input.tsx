@@ -284,7 +284,7 @@ export function VoiceInput({
             onClick={handleMicClick}
             disabled={disabled || transcribing}
             aria-label={recording ? "Stop recording" : "Start voice input"}
-            className={`inline-flex min-h-9 items-center gap-2 rounded-pill px-3 py-1.5 transition active:scale-95 disabled:opacity-50 ${
+            className={`inline-flex min-h-11 items-center gap-2 rounded-pill px-3 py-1.5 transition active:scale-95 disabled:opacity-50 ${
               recording ? "bg-danger/15 text-danger" : "bg-accent-soft text-accent-ink"
             }`}
           >

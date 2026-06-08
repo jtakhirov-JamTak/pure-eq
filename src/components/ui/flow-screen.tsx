@@ -113,7 +113,7 @@ export function BackChip({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="flex h-10 w-10 items-center justify-center rounded-[13px] border border-hairline bg-surface text-ink transition active:scale-95"
+      className="flex h-11 w-11 items-center justify-center rounded-[13px] border border-hairline bg-surface text-ink transition active:scale-95"
     >
       <ChevronLeft className="h-5 w-5" strokeWidth={2.2} />
     </button>
