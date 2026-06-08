@@ -37,7 +37,14 @@ export async function middleware(request: NextRequest) {
   // login cookie, and its Stripe signature IS the auth. Without this exclusion
   // the !user check below 307-redirects the webhook to /login, Stripe doesn't
   // follow redirects, and purchases never credit. (Coins B2 fix.)
-  const publicRoutes = ["/", "/login", "/signup", "/onboarding"];
+  const publicRoutes = [
+    "/",
+    "/login",
+    "/signup",
+    "/onboarding",
+    "/privacy",
+    "/terms",
+  ];
   const isPublicRoute =
     publicRoutes.some((route) => pathname === route) ||
     pathname.startsWith("/api/auth") ||

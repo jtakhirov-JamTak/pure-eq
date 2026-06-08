@@ -424,6 +424,13 @@ export const createPersonSchema = z.object({
   relationshipSubtype: z.string().max(200).nullable().optional(),
 });
 
+// Account deletion — irreversible hard delete. The literal "DELETE" must be
+// typed to confirm; the schema enforces it server-side so a malformed/automated
+// POST without the exact confirmation word is rejected before any delete runs.
+export const deleteAccountSchema = z.object({
+  confirm: z.literal("DELETE"),
+});
+
 // Coins purchase — Stripe one-time checkout (Slice B2). `pack` is one of the
 // founder-final coin packs; the server maps it to a Stripe Price ID.
 export const checkoutSchema = z.object({

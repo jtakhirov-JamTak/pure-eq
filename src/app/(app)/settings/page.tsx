@@ -2,6 +2,7 @@ import { getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { SettingsForm } from "./settings-form";
+import { DeleteAccount } from "./delete-account";
 
 export default async function SettingsPage() {
   const {
@@ -28,6 +29,10 @@ export default async function SettingsPage() {
 
       <div className="mt-6">
         <SettingsForm initialFirstName={currentFirstName} />
+      </div>
+
+      <div className="mt-6">
+        <DeleteAccount />
       </div>
     </div>
   );
