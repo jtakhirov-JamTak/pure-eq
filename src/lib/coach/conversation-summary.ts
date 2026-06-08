@@ -45,9 +45,9 @@ export function extractHeadline(
       : null;
   }
   let field: string | null = null;
-  if (recordType === "prepare") field = "cleaner_opener";
-  else if (recordType === "review") field = "recommended_move";
-  else if (recordType === "pulse_check") field = "next_move_card";
+  if (recordType === "prepare") field = "pressure_check";
+  else if (recordType === "review") field = "pattern_data";
+  else if (recordType === "pulse_check") field = "signal_vs_noise";
   if (!field) return null;
   const v = j[field];
   return typeof v === "string" && v.trim() ? v.trim() : null;
