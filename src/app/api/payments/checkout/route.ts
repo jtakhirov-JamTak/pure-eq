@@ -103,6 +103,14 @@ export async function POST(req: Request) {
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
+      // Pin card-only IN CODE. The webhook credits only on a synchronously-paid
+      // session and filters out `async_payment_succeeded`, so the card-only
+      // assumption MUST hold. Omitting this hands method selection to the Stripe
+      // Dashboard — a driftable toggle guarding money. "card" still includes
+      // Apple/Google Pay (wallet, synchronous). If async bank methods (iDEAL/
+      // SEPA/Bacs) are ever wanted, add them here AND add the
+      // async_payment_succeeded webhook handler in the same change.
+      payment_method_types: ["card"],
       line_items: [{ price: priceId, quantity: 1 }],
       // client_reference_id + metadata both carry the user id (belt and braces);
       // the webhook reads metadata.
