@@ -5,7 +5,7 @@
   "start_url": "/coach",
   "display": "standalone",
   "background_color": "#D6EEFF",
-  "theme_color": "#D6EEFF",
+  "theme_color": "#0F1825",
   "icons": [
     {
       "src": "/icon-192.svg",

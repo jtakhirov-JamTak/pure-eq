@@ -120,7 +120,7 @@ export function AppShell({
             <>
               <div
                 className="fixed inset-0 z-40"
-                onClick={() => setMenuOpen(false)}
+                onPointerDown={() => setMenuOpen(false)}
               />
               <div className="absolute right-0 top-full z-50 mt-2 w-48 rounded-[16px] border border-hairline bg-surface py-1 shadow-card">
                 <button

@@ -9,6 +9,12 @@ export const runtime = "nodejs";
 
 // GET /api/persons — list active persons, optional ?q= name search
 export async function GET(req: Request) {
+  // 0. Origin — this is a user-scoped enumeration read; same CSRF surface as a
+  //    write (fetch-based CSRF from a compromised page could scrape the list).
+  if (!checkOrigin(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // 1. Auth.
   const supabase = await createClient();
   const {
@@ -19,13 +25,21 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 2. Rate limit.
-  const rl = await rateLimit(`persons:get:${user.id}`, {
+  // 2. Rate limit — minute + day buckets. The day cap bounds how much a
+  //    compromised session can enumerate (a 30/min cap alone allows ~43k/day).
+  const rlMin = await rateLimit(`persons:get:min:${user.id}`, {
     limit: 30,
     windowMs: 60_000,
   });
-  if (!rl.allowed) {
+  if (!rlMin.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+  const rlDay = await rateLimit(`persons:get:day:${user.id}`, {
+    limit: 1000,
+    windowMs: 86_400_000,
+  });
+  if (!rlDay.allowed) {
+    return NextResponse.json({ error: "Daily limit reached" }, { status: 429 });
   }
 
   // 3. Optional search query.

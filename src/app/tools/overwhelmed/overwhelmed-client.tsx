@@ -137,10 +137,6 @@ export default function OverwhelmedClient() {
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
-      if (res.status === 403) {
-        router.push("/paywall");
-        return;
-      }
       if (!res.ok) {
         throw new Error(`status ${res.status}`);
       }

@@ -1,5 +1,6 @@
 // Pure EQ domain — replace in fork.
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { submitQuizSchema } from "@/lib/validation";
 import {
@@ -177,7 +178,14 @@ export async function POST(req: Request) {
   //    the user starts at 0 coins and a later retry / lazy top-up recovers it.
   const grantResult = await grantSignupCoins(user.id);
   if (grantResult === "invalid") {
+    // Not 'ok' and not 'already_applied' — the starter coins silently did NOT
+    // land for a brand-new user. grantSignupCoins captures a thrown RPC error;
+    // this captures the non-apply-without-error case it can't see. First-run
+    // economics breaking is otherwise invisible.
     console.error("onboarding: signup coin grant did not apply");
+    Sentry.captureException(new Error("signup_grant_not_applied"), {
+      tags: { area: "coins", kind: "signup_grant_not_applied" },
+    });
   }
 
   return NextResponse.json({

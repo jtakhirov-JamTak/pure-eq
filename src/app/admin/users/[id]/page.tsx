@@ -34,7 +34,10 @@ export default async function AdminUserDetail({
       .select("*")
       .eq("user_id", id)
       .maybeSingle(),
-    sc.from("raw_records").select("module_type").eq("user_id", id),
+    // Bounded read: counting by module in JS would otherwise pull a power
+    // user's entire lifetime entry log on every admin page view. Cap matches
+    // the repo's raw_records convention; proper fix is a GROUP BY count RPC.
+    sc.from("raw_records").select("module_type").eq("user_id", id).limit(2000),
     sc
       .from("raw_records")
       .select("record_type, module_type, is_complete, created_at")

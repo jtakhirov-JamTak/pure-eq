@@ -17,9 +17,10 @@ export default async function ToolsLayout({
     redirect("/login");
   }
 
-  // Subscription gating happens at the page layer below so we can (a)
-  // render a locked card on the /tools hub for users outside the window
-  // and (b) redirect leaf pages to /paywall before journaling UI renders.
+  // Tools are free (auth-only) — no gating here. This layout just enforces
+  // login and wraps the subtree in the shared AppShell. (Tools live outside
+  // the (app) group so the retired free-window gate couldn't catch them; the
+  // gate is gone now, but the placement is kept — see CLAUDE.md.)
   return (
     <AppShell
       userEmail={user.email}

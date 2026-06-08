@@ -1,6 +1,14 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import * as Sentry from "@sentry/nextjs";
 import { rateLimit } from "@/lib/rate-limit";
+
+// Cooldown-latched capture: if session exchange starts failing (Supabase auth
+// outage, key rotation, SSR cookie regression) EVERY login hits this branch and
+// silently bounces to /login. Without a signal here that looks identical to a
+// normal "no code" visit and ops gets nothing. Module-scoped per rate-limit.ts.
+const EXCHANGE_FAIL_COOLDOWN_MS = 5 * 60 * 1000;
+let lastExchangeFailCaptureAt = 0;
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -32,6 +40,16 @@ export async function GET(request: Request) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
       return NextResponse.redirect(`${origin}${safeNext}`);
+    }
+    // A code was present but exchange failed — this is a real auth failure, not
+    // a normal no-code visit. Surface it (latched) so a login-wide outage pages
+    // us instead of silently bouncing every user to /login.
+    const now = Date.now();
+    if (now - lastExchangeFailCaptureAt >= EXCHANGE_FAIL_COOLDOWN_MS) {
+      lastExchangeFailCaptureAt = now;
+      Sentry.captureException(new Error("auth_code_exchange_failed"), {
+        tags: { area: "auth", kind: "code_exchange_failed" },
+      });
     }
   }
 

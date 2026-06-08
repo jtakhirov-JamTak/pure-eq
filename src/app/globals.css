@@ -110,6 +110,32 @@ body {
 }
 
 /* ============================================================
+   Visible keyboard focus (WCAG 2.4.7 / 2.4.11)
+   ============================================================
+   Many inputs/buttons use Tailwind `focus:outline-none` to drop the default
+   ring in favor of a border tint — which leaves keyboard/AT users with NO
+   visible focus. Restore an accent focus ring for keyboard focus only
+   (:focus-visible — mouse clicks stay clean). The element-scoped rule uses
+   box-shadow, not outline, because a `focus:outline-none` utility outranks an
+   element `:focus-visible` outline on specificity and would suppress it; a
+   box-shadow ring is uncontested and follows each element's own corner radius.
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg-solid), 0 0 0 4px var(--color-accent);
+}
+
+/* ============================================================
    Mobile tap responsiveness
    ============================================================
    `touch-action: manipulation` tells the browser the tap is a plain

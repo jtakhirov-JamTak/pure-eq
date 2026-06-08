@@ -291,13 +291,6 @@ export const PROFILE_AVATAR_CLASSES: Record<ProfileType, string> = {
   intense: "bg-orange-600",
 };
 
-export const MODULE_LABELS: Record<RecommendedModule, string> = {
-  prepare: "Prepare",
-  review: "Review",
-  repair: "Repair",
-  before_send: "Before You Send",
-};
-
 // Fetches the user's latest Profile Snapshot (append-only per §6.2.A).
 // Shared by the onboarding server gate, root landing page, and /insights —
 // one source for "does this user have a profile". Selects only the fields

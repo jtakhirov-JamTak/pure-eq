@@ -44,8 +44,14 @@ export default function ThreadStatusSelector({
 
   return (
     <div className="flex items-center gap-2">
-      <label className="text-[13px] font-medium text-ink-soft">Status:</label>
+      <label
+        htmlFor="thread-status"
+        className="text-[13px] font-medium text-ink-soft"
+      >
+        Status:
+      </label>
       <select
+        id="thread-status"
         className="rounded-input border border-hairline bg-surface px-2 py-1.5 text-base text-ink focus:border-accent focus:outline-none disabled:opacity-50"
         value={status}
         onChange={(e) => handleChange(e.target.value)}

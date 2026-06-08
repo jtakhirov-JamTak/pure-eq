@@ -23,7 +23,9 @@ const plexMono = IBM_Plex_Mono({
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // No maximumScale — pinch-zoom must stay enabled (WCAG 1.4.4). Locking it to 1
+  // blocks low-vision users from zooming. iOS input-zoom is handled by 16px+
+  // font-size on inputs instead, not by disabling zoom.
   viewportFit: "cover",
   themeColor: "#0F1825",
 };
