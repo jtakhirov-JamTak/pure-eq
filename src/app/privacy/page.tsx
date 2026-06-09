@@ -110,9 +110,12 @@ export default function PrivacyPage() {
 
         <Section title="Retention">
           <p>
-            We keep your data while your account is active. When you delete your
-            account, your data is erased. [State your retention defaults and any
-            backup-retention window here.]
+            We keep your data while your account is active. When you delete an
+            individual conversation or entry, it is removed from your account
+            immediately and permanently deleted from our systems within 30 days.
+            When you delete your account, all of your data is erased. [Confirm
+            these windows and add any backup-retention window with your
+            reviewer.]
           </p>
         </Section>
 
