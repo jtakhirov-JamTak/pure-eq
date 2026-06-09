@@ -20,6 +20,7 @@ import {
 } from "@/lib/coins";
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
+import { isAIDisabled } from "@/lib/kill-switch";
 import { validateAIOutput } from "@/lib/ai/schemas";
 import type { AiTier, ProfileType } from "@/types";
 import type { CoachModuleConfig } from "./types";
@@ -449,6 +450,26 @@ export async function runCoachModule<
       rawRecordId,
       ...config.buildResponseExtras(derivedEntryId),
       cached: true,
+    });
+  }
+
+  // 11b-kill. AI kill switch (DISABLE_AI). The entry is already saved for free
+  // above; we only refuse the paid generation. No coins are reserved. A cached
+  // output (the existingAiJson short-circuit above) still serves — flipping the
+  // switch never costs anything, so there's nothing to gate there. Mirror the
+  // AI-failure response shape so the client lands on its saved-but-no-coaching
+  // screen with a retry, distinguished by aiFailureKind "disabled".
+  if (isAIDisabled()) {
+    return NextResponse.json({
+      success: true,
+      aiOutput: null,
+      rawRecordId,
+      ...config.buildResponseExtras(derivedEntryId),
+      coinsSpent: 0,
+      saveWarning: false,
+      aiFailureKind: "disabled",
+      message:
+        "Coaching feedback is paused for maintenance right now. Your entry is saved — please try again later.",
     });
   }
 

@@ -41,7 +41,22 @@ export function CoinsClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pack: packKey }),
       });
-      if (!res.ok) throw new Error(`status ${res.status}`);
+      if (!res.ok) {
+        // Surface the server's own message for a deliberate halt (503,
+        // DISABLE_CHECKOUT) so it doesn't read as a transient glitch. Other
+        // errors fall through to the generic retry copy in catch.
+        if (res.status === 503) {
+          const body = await res.json().catch(() => ({}));
+          setError(
+            typeof body?.error === "string"
+              ? body.error
+              : "Coin purchases are temporarily unavailable. Please try again later.",
+          );
+          setSubmitting(null);
+          return;
+        }
+        throw new Error(`status ${res.status}`);
+      }
       const json = await res.json();
       if (!json.url) throw new Error("no url");
       // Hand off to Stripe. Do NOT clear `submitting` — the page is navigating

@@ -130,6 +130,18 @@ export async function POST(req: Request) {
       },
     });
 
+    if (result.status === "ai_disabled") {
+      // DISABLE_AI is set. No charge happened (the switch trips before the coin
+      // reserve, and an existing reflection would have returned as "cached").
+      return NextResponse.json(
+        {
+          error:
+            "Weekly reflections are paused for maintenance right now. Please check back later.",
+        },
+        { status: 503 },
+      );
+    }
+
     if (result.status === "insufficient_entries") {
       // Not enough Coach entries yet to ground a reflection. Defense-in-depth:
       // the /insights page already hides the Generate button below the

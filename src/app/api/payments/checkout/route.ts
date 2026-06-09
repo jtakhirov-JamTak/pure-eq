@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { checkoutSchema } from "@/lib/validation";
+import { isCheckoutDisabled } from "@/lib/kill-switch";
 import { getStripe, packForKey, priceIdForPack } from "@/lib/payments";
 
 export const runtime = "nodejs";
@@ -58,6 +59,19 @@ export async function POST(req: Request) {
   } = await supabase.auth.getUser();
   if (authError || !user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+  }
+
+  // 3b. Checkout kill switch (DISABLE_CHECKOUT). Refuse to start a new coin
+  // purchase without a code change. Existing balances and the webhook crediting
+  // path are untouched — this only stops new sessions being created.
+  if (isCheckoutDisabled()) {
+    return NextResponse.json(
+      {
+        error:
+          "Coin purchases are temporarily unavailable. Please try again later.",
+      },
+      { status: 503 },
+    );
   }
 
   // 4. Rate limit — checkout creation is cheap but a tight cap blocks abuse.

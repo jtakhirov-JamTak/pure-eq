@@ -28,6 +28,7 @@ import {
   type ReflectionNormal,
 } from "@/lib/ai/schemas";
 import { REVIEW_NEEDS_NEXT_VALUES as REVIEW_NEEDS_NEXT_ENUM } from "@/lib/validation";
+import { isAIDisabled } from "@/lib/kill-switch";
 import { buildReflectionInput } from "./reflection-input";
 import type { ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
@@ -94,6 +95,7 @@ const INPUT_WINDOW_MS = INPUT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 type GenerateOutcome =
   | { status: "cached"; row: WeeklyReflectionRow }
   | { status: "created"; row: WeeklyReflectionRow }
+  | { status: "ai_disabled" }
   | { status: "profile_missing" }
   | { status: "insufficient_entries"; count: number; needed: number }
   | { status: "insufficient_coins"; balance: number; needed: number };
@@ -354,6 +356,14 @@ export async function generateReflection(
   const cachedRow = await readCachedReflection(supabase, userId);
   if (cachedRow) {
     return { status: "cached", row: cachedRow };
+  }
+
+  // AI kill switch (DISABLE_AI). An existing reflection is served by the cache
+  // hit above (free); we only refuse to GENERATE a new one. Placed after the
+  // cache read and before any further DB work / the coin reserve, so nothing is
+  // charged. Route maps this to a 503 the page surfaces.
+  if (isAIDisabled()) {
+    return { status: "ai_disabled" };
   }
 
   // Entry-count gate: the first reflection requires at least
