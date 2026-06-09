@@ -29,8 +29,9 @@ import {
 } from "@/lib/ai/schemas";
 import { REVIEW_NEEDS_NEXT_VALUES as REVIEW_NEEDS_NEXT_ENUM } from "@/lib/validation";
 import { isAIDisabled } from "@/lib/kill-switch";
+import { recordEvent } from "@/lib/observability";
 import { buildReflectionInput } from "./reflection-input";
-import type { ProfileType } from "@/types";
+import { COIN_COSTS, type ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 
 // v3 (2026-05-03): Tools restored. The reflection prompt's FIELD GLOSSARY
@@ -714,6 +715,24 @@ export async function generateReflection(
         "insert_failed",
       );
     }
+
+    // Success heartbeat + AI-spend signal, same stream as Coach's run-module
+    // `ai.generated`. A real reflection nets the full charge; a refusal was
+    // refunded above (coinsCharged cleared) so `coins` reads 0. Absence of this
+    // stream = the AI path stopped succeeding; a count/coins spike = runaway.
+    recordEvent(
+      "ai.generated",
+      {
+        area: "ai_spend",
+        module: "insights",
+        tier: "weekly_insights",
+        outcome: aiOutput.mode,
+      },
+      {
+        coins: coinsCharged ? COIN_COSTS.weekly_insights : 0,
+        latencyMs: aiDurationMs,
+      },
+    );
 
     // Freshly-written row — ai_json is the Zod-validated aiOutput we just
     // inserted, so narrowing here is safe (not a blind jsonb read).

@@ -21,6 +21,7 @@ import {
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { isAIDisabled } from "@/lib/kill-switch";
+import { recordEvent } from "@/lib/observability";
 import { extractHeadline } from "@/lib/coach/conversation-summary";
 import { validateAIOutput } from "@/lib/ai/schemas";
 import type { AiTier, ProfileType } from "@/types";
@@ -520,6 +521,8 @@ export async function runCoachModule<
   let aiOutput: TAiOutput | null = null;
   let lastFailureKind = "none";
   let lastErr: unknown = null;
+  let attemptsUsed = 0;
+  const aiCallStart = Date.now();
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -559,6 +562,7 @@ export async function runCoachModule<
         throw new Error("banned phrase");
       }
       lastFailureKind = "none";
+      attemptsUsed = attempt + 1;
       break;
     } catch (err) {
       lastErr = err;
@@ -630,6 +634,25 @@ export async function runCoachModule<
         coinsCharged = false;
       }
     }
+  }
+
+  // 13b. Success heartbeat + AI-spend signal (the positive counterpart to the
+  // captureException above). Emitted only on a genuine generation — the cached /
+  // save-only / disabled / insufficient branches all returned earlier. `coins`
+  // mirrors the net charge below (0 for admins, refunded-failures, or a stranded
+  // save). Absence of this stream = AI path down; a count/coins spike = runaway.
+  if (aiOutput) {
+    recordEvent(
+      "ai.generated",
+      { area: "ai_spend", module: name, tier },
+      {
+        coins: coinsCharged ? coinCost : 0,
+        attempts: attemptsUsed,
+        latencyMs: Date.now() - aiCallStart,
+        admin: adminUser,
+        saveWarning,
+      },
+    );
   }
 
   // 14. Response.
