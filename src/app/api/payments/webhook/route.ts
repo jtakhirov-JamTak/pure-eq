@@ -23,6 +23,7 @@ import * as Sentry from "@sentry/nextjs";
 import { createServiceClient } from "@/lib/supabase/service";
 import { getStripe, packForKey } from "@/lib/payments";
 import { grantCoins } from "@/lib/coins";
+import { isWebhookDisabled } from "@/lib/kill-switch";
 
 export const runtime = "nodejs";
 
@@ -121,6 +122,19 @@ export async function POST(req: Request) {
       .from("payment_webhook_events")
       .insert({ event_id: event.id, type: event.type });
     return NextResponse.json({ received: true, skipped: true });
+  }
+
+  // Webhook kill switch (DISABLE_WEBHOOK). At this point the event is authentic,
+  // a paid checkout.session.completed, has a known user + pack, and has NOT been
+  // processed yet — i.e. a real creditable purchase. Return 503 (NOT 200) so
+  // Stripe QUEUES and retries: we have not granted coins and have not logged the
+  // event, so clearing the switch lets the retry credit correctly. Placed after
+  // all validation/dedup so unknown event types, duplicates, unpaid, and
+  // missing-metadata events still ack normally and never enter Stripe's retry
+  // loop. NEVER change this to a 200 — that strands the payment permanently.
+  if (isWebhookDisabled()) {
+    console.error("webhook: paused via DISABLE_WEBHOOK — returning 503 for retry");
+    return NextResponse.json({ error: "Webhook paused" }, { status: 503 });
   }
 
   // Step 1: idempotent credit keyed on the Stripe event id. Coins come from the

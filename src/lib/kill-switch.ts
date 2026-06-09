@@ -22,6 +22,18 @@
 // gating it would break typing-by-voice across the whole app. If transcription
 // ever needs its own halt, add a separate DISABLE_TRANSCRIBE flag rather than
 // widening this one.
+//
+// DISABLE_WEBHOOK is the SAFE form of a payment-webhook halt: the webhook
+// returns 503 (NOT a silent 200) for an authentic, paid, not-yet-credited
+// purchase, so Stripe QUEUES the event and retries with backoff (~72h). No
+// coins are granted and the event is NOT logged as processed while the switch
+// is on, so when you clear it Stripe's retries credit correctly — nothing is
+// stranded *within the retry window*. Past ~3 days, manually "Resend" the
+// events from the Stripe dashboard. NEVER reimplement this as ack-200-and-skip:
+// that would tell Stripe the delivery succeeded and permanently strand a paid
+// purchase. Use it to stop crediting while fixing a crediting-logic bug; do not
+// leave it on for days (Stripe warns on, and may disable, a persistently
+// failing endpoint).
 
 function isOn(value: string | undefined): boolean {
   if (!value) return false;
@@ -45,4 +57,14 @@ export function isAIDisabled(): boolean {
  */
 export function isCheckoutDisabled(): boolean {
   return isOn(process.env.DISABLE_CHECKOUT);
+}
+
+/**
+ * Stripe webhook crediting. When ON, the webhook returns 503 for an authentic,
+ * paid, not-yet-credited purchase so Stripe retries later (NEVER a silent 200 —
+ * see the SCOPE note above). Halts coin grants without stranding payments within
+ * Stripe's retry window. Use to pause crediting while fixing a crediting bug.
+ */
+export function isWebhookDisabled(): boolean {
+  return isOn(process.env.DISABLE_WEBHOOK);
 }
