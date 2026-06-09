@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
 import * as Sentry from "@sentry/nextjs";
 import { rateLimit } from "@/lib/rate-limit";
+import { safeNextPath } from "@/lib/safe-next";
 
 // Cooldown-latched capture: if session exchange starts failing (Supabase auth
 // outage, key rotation, SSR cookie regression) EVERY login hits this branch and
@@ -23,17 +24,9 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/login`);
   }
 
-  // Validate redirect target: must start with "/", not "//" (protocol-relative
-  // open redirect), and not contain backslashes (older browsers normalize
-  // "/\\evil.com" or "/\evil.com" to a host change). Also reject embedded
-  // newlines / control chars that some redirect parsers mishandle.
-  const safeNext =
-    next.startsWith("/") &&
-    !next.startsWith("//") &&
-    !next.includes("\\") &&
-    !/[\x00-\x1f]/.test(next)
-      ? next
-      : "/onboarding";
+  // Validate redirect target against open-redirect vectors (protocol-relative
+  // "//host", backslash-folded "/\host", control chars). See safeNextPath.
+  const safeNext = safeNextPath(next);
 
   if (code) {
     const supabase = await createClient();
