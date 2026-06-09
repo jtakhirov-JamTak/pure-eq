@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { ConversationSummary } from "@/lib/coach/conversation-summary";
 import {
   bulkDeleteConversations,
@@ -261,55 +262,27 @@ export function AllConversationsList({
             </button>
           </div>
           {error && (
-            <p className="mt-2 text-[12px] font-medium text-danger">{error}</p>
+            <p role="alert" className="mt-2 text-[12px] font-medium text-danger">
+              {error}
+            </p>
           )}
           </div>,
           document.body,
         )}
 
-      {/* Bulk-delete confirmation — also portaled, same stacking reason. */}
-      {showDeleteConfirm &&
-        mounted &&
-        createPortal(
-          <div
-            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
-            onClick={() => !busy && setShowDeleteConfirm(false)}
-          >
-          <div
-            className="w-full max-w-sm rounded-card border border-hairline bg-surface p-6 shadow-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-display text-[22px] font-medium leading-[1.15] text-ink">
-              Delete {count} conversation{count === 1 ? "" : "s"}?
-            </h3>
-            <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-              This removes each selected conversation — every Prepare, Pulse
-              Check, and Review in them — and they won&apos;t be used in future
-              weekly reflections. This can&apos;t be undone.
-            </p>
-            {error && (
-              <p className="mt-3 text-[13px] font-medium text-danger">{error}</p>
-            )}
-            <div className="mt-5 flex gap-2">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                disabled={busy}
-                className="h-12 flex-1 rounded-pill bg-surface-tint text-[14px] font-semibold text-ink active:opacity-80 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={busy}
-                className="h-12 flex-1 rounded-pill bg-danger text-[14px] font-bold text-white active:opacity-90 disabled:opacity-50"
-              >
-                {busy ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-          </div>,
-          document.body,
-        )}
+      {/* Bulk-delete confirmation — shared accessible dialog (role/dialog,
+          focus trap, Escape, focus restore); portals itself to body. */}
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title={`Delete ${count} conversation${count === 1 ? "" : "s"}?`}
+        description="This removes each selected conversation — every Prepare, Pulse Check, and Review in them — and they won't be used in future weekly reflections. This can't be undone."
+        confirmLabel="Delete"
+        busyLabel="Deleting…"
+        busy={busy}
+        error={error}
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }

@@ -1,7 +1,7 @@
 // Pure EQ domain — replace in fork.
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { pickMimeType, measureRms, MIN_RMS_FOR_SPEECH } from "@/lib/audio";
 import type { RelationshipDomain } from "@/types";
 
@@ -53,9 +53,15 @@ export function PersonPicker({
   const [suggestions, setSuggestions] = useState<Person[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Highlighted option for keyboard nav (-1 = none). Drives aria-activedescendant
+  // and the visual highlight; focus stays on the input (combobox pattern).
+  const [activeIndex, setActiveIndex] = useState(-1);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLUListElement>(null);
+  // Stable, instance-unique ids for the combobox/listbox/option wiring.
+  const listboxId = useId();
+  const optionId = (i: number) => `${listboxId}-opt-${i}`;
 
   // Voice recording state
   const [voiceStatus, setVoiceStatus] = useState<VoiceStatus>("idle");
@@ -119,6 +125,7 @@ export function PersonPicker({
     if (q.length === 0 || selectedPersonId) {
       setSuggestions([]);
       setShowDropdown(false);
+      setActiveIndex(-1);
       return;
     }
 
@@ -133,6 +140,7 @@ export function PersonPicker({
           const persons: Person[] = data.persons ?? [];
           setSuggestions(persons);
           setShowDropdown(persons.length > 0);
+          setActiveIndex(-1);
         }
       } catch {
         // Silently fail — user can still type a new name
@@ -192,6 +200,46 @@ export function PersonPicker({
     }
     onChange(next);
   }
+
+  // Keyboard navigation for the combobox listbox (ArrowDown/Up move the
+  // highlight, Enter selects it, Escape closes). Focus stays on the input;
+  // the highlighted option is conveyed via aria-activedescendant.
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!showDropdown || suggestions.length === 0) {
+      // ArrowDown re-opens a closed dropdown when suggestions exist.
+      if (e.key === "ArrowDown" && suggestions.length > 0) {
+        e.preventDefault();
+        setShowDropdown(true);
+        setActiveIndex(0);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => (i + 1 >= suggestions.length ? 0 : i + 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
+    } else if (e.key === "Enter") {
+      if (activeIndex >= 0 && activeIndex < suggestions.length) {
+        e.preventDefault();
+        handleSelect(suggestions[activeIndex]);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      setShowDropdown(false);
+      setActiveIndex(-1);
+    }
+  }
+
+  // Keep the highlighted option scrolled into view during keyboard nav.
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    const el = document.getElementById(optionId(activeIndex));
+    el?.scrollIntoView({ block: "nearest" });
+    // optionId is derived from the stable listboxId; safe to omit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeIndex]);
 
   // ---------- Voice recording ----------
   async function startRecording() {
@@ -373,6 +421,7 @@ export function PersonPicker({
           type="text"
           value={value}
           onChange={(e) => handleInputChange(e.target.value)}
+          onKeyDown={handleKeyDown}
           onFocus={() => {
             if (suggestions.length > 0 && !selectedPersonId) {
               setShowDropdown(true);
@@ -382,6 +431,13 @@ export function PersonPicker({
           disabled={disabled || transcribing}
           autoComplete="off"
           autoCapitalize="words"
+          role="combobox"
+          aria-expanded={showDropdown && suggestions.length > 0}
+          aria-controls={listboxId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            activeIndex >= 0 ? optionId(activeIndex) : undefined
+          }
           className={`w-full rounded-[14px] border px-4 py-3 pr-24 text-base text-ink placeholder:text-ink-soft focus:outline-none ${
             selectedPersonId
               ? "border-accent bg-accent-soft"
@@ -470,10 +526,13 @@ export function PersonPicker({
 
       {/* Voice feedback */}
       {voiceError && (
-        <p className="mt-2 text-sm text-danger">{voiceError}</p>
+        <p role="alert" className="mt-2 text-sm text-danger">{voiceError}</p>
       )}
       {recording && !voiceError && (
-        <p className="mt-2 flex items-center gap-2 text-sm font-medium text-danger">
+        <p
+          role="status"
+          className="mt-2 flex items-center gap-2 text-sm font-medium text-danger"
+        >
           <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-danger" />
           Recording… {voiceSecondsLeft}s remaining
         </p>
@@ -512,14 +571,26 @@ export function PersonPicker({
       {showDropdown && suggestions.length > 0 && (
         <ul
           ref={dropdownRef}
+          id={listboxId}
+          role="listbox"
+          aria-label="Matching people"
           className="absolute left-0 right-0 top-full z-20 mt-1 max-h-60 overflow-y-auto rounded-[14px] border border-hairline bg-surface shadow-card"
         >
-          {suggestions.map((person) => (
-            <li key={person.person_id}>
+          {suggestions.map((person, i) => (
+            <li
+              key={person.person_id}
+              id={optionId(i)}
+              role="option"
+              aria-selected={i === activeIndex}
+            >
               <button
                 type="button"
+                tabIndex={-1}
                 onClick={() => handleSelect(person)}
-                className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-surface-tint active:bg-surface-tint"
+                onMouseEnter={() => setActiveIndex(i)}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left ${
+                  i === activeIndex ? "bg-surface-tint" : ""
+                }`}
                 style={{ minHeight: "44px" }}
               >
                 <span className="text-base font-medium text-ink">

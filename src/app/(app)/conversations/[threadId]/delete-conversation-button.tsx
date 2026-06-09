@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { deleteConversation } from "./actions";
 
 // Per-conversation delete (lives only in the detail view). Soft-deletes the
@@ -42,45 +43,17 @@ export function DeleteConversationButton({ threadId }: { threadId: string }) {
         Delete conversation
       </button>
 
-      {showConfirm && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-6 backdrop-blur-sm"
-          onClick={() => !deleting && setShowConfirm(false)}
-        >
-          <div
-            className="w-full max-w-sm rounded-card border border-hairline bg-surface p-6 shadow-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="font-display text-[22px] font-medium leading-[1.15] text-ink">
-              Delete this conversation?
-            </h3>
-            <p className="mt-2 text-[14px] font-medium leading-[1.5] text-ink-soft">
-              This removes the whole conversation — every Prepare, Pulse Check,
-              and Review in it — and it won&apos;t be used in future weekly
-              reflections. This can&apos;t be undone.
-            </p>
-            {error && (
-              <p className="mt-3 text-[13px] font-medium text-danger">{error}</p>
-            )}
-            <div className="mt-5 flex gap-2">
-              <button
-                onClick={() => setShowConfirm(false)}
-                disabled={deleting}
-                className="h-12 flex-1 rounded-pill bg-surface-tint text-[14px] font-semibold text-ink active:opacity-80 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="h-12 flex-1 rounded-pill bg-danger text-[14px] font-bold text-white active:opacity-90 disabled:opacity-50"
-              >
-                {deleting ? "Deleting…" : "Delete"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDialog
+        open={showConfirm}
+        title="Delete this conversation?"
+        description="This removes the whole conversation — every Prepare, Pulse Check, and Review in it — and it won't be used in future weekly reflections. This can't be undone."
+        confirmLabel="Delete"
+        busyLabel="Deleting…"
+        busy={deleting}
+        error={error}
+        onConfirm={confirmDelete}
+        onCancel={() => setShowConfirm(false)}
+      />
     </>
   );
 }

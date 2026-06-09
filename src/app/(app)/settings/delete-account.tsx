@@ -76,7 +76,9 @@ export function DeleteAccount() {
           />
 
           {error && (
-            <p className="mt-3 text-[13px] font-medium text-danger">{error}</p>
+            <p role="alert" className="mt-3 text-[13px] font-medium text-danger">
+              {error}
+            </p>
           )}
 
           <div className="mt-4 flex gap-3">

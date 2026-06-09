@@ -145,7 +145,9 @@ export function CoinsClient({
       </div>
 
       {error && (
-        <p className="mt-4 text-[13px] font-medium text-danger">{error}</p>
+        <p role="alert" className="mt-4 text-[13px] font-medium text-danger">
+          {error}
+        </p>
       )}
 
       <p className="mt-6 text-[12px] font-medium leading-[1.5] text-ink-muted">

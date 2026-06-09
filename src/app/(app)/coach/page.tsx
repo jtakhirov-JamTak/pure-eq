@@ -84,12 +84,12 @@ export default async function CoachPage() {
           <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
             ~3 min · guided
           </p>
-          <h2
+          <h3
             className="mt-3 font-display text-[20px] leading-[1.1] text-white"
             style={{ letterSpacing: "-0.4px" }}
           >
             Coming <span className="italic">up</span>.
-          </h2>
+          </h3>
           <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white">
             A conversation you need to plan.
           </p>
@@ -106,12 +106,12 @@ export default async function CoachPage() {
           <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-white">
             ~3 min · early read
           </p>
-          <h2
+          <h3
             className="mt-3 font-display text-[20px] leading-[1.1] text-white"
             style={{ letterSpacing: "-0.4px" }}
           >
             Something <span className="italic">feels off</span>.
-          </h2>
+          </h3>
           <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white">
             Pulse Check before you act.
           </p>
@@ -127,12 +127,12 @@ export default async function CoachPage() {
           <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-[#ecc08a]">
             ~4 min · reflect
           </p>
-          <h2
+          <h3
             className="mt-3 font-display text-[20px] leading-[1.1] text-white"
             style={{ letterSpacing: "-0.4px" }}
           >
             Just <span className="italic">happened</span>.
-          </h2>
+          </h3>
           <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-white/90">
             Look at how it landed.
           </p>
