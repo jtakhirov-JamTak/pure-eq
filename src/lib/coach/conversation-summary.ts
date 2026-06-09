@@ -6,11 +6,13 @@
 // the main topic, the origin (prepared vs. "something felt off"), whether it's
 // been reviewed, and a one-line snippet of the MAIN AI OUTPUT.
 //
-// The AI output lives in per-module derived tables with module- and
-// version-specific shapes. extractHeadline() reads only a known field per type
-// and returns null on any mismatch (legacy/legacy-version rows, hand-edits) —
-// a defensive jsonb read, never a blind cast. On null the card just omits the
-// AI line rather than rendering garbage.
+// The one-line AI headline is DENORMALIZED into each derived table's
+// `ai_headline` column, stamped at generation time by run-module via
+// extractHeadline() (defined here = single source of truth). The reads below
+// select that short string instead of the full AI jsonb blob (the old path
+// fetched 100s of KB across up to 100 threads to read one line each). A null
+// ai_headline (refusal with no message, or a pre-backfill row) just omits the
+// AI line. extractHeadline() stays exported as the writer's extractor.
 //
 // Threads whose entries are all soft-deleted (a deleted conversation) drop out:
 // we only fetch is_complete + deleted_at-null entries, and skip any thread with
@@ -57,7 +59,7 @@ type ThreadEntry = {
   recordType: ConversationOrigin | "review";
   createdAt: string;
   topic: string | null;
-  aiJson: unknown;
+  headline: string | null;
 };
 
 export type ConversationSummaryResult = {
@@ -115,26 +117,28 @@ export async function getConversationSummaries(
     (personsRes.data ?? []).map((p) => [p.person_id, p.display_name]),
   );
 
-  // Pull the three threaded module tables in bulk (no N+1). Each row carries
-  // its topic column + AI output column so we can pick a per-thread headline.
+  // Pull the three threaded module tables in bulk (no N+1). Each row carries its
+  // topic column + the denormalized ai_headline string (stamped at generation
+  // time by run-module via extractHeadline) — NOT the full AI jsonb blob, which
+  // would be 100s of KB across up to 100 threads just to read one line each.
   const [prepRes, reviewRes, pulseRes] = await Promise.all([
     supabase
       .from("prepare_entries")
-      .select("thread_id, situation_text, ai_plan_json, created_at")
+      .select("thread_id, situation_text, ai_headline, created_at")
       .eq("user_id", userId)
       .in("thread_id", threadIds)
       .eq("is_complete", true)
       .is("deleted_at", null),
     supabase
       .from("review_entries")
-      .select("thread_id, what_happened, ai_reflection_json, created_at")
+      .select("thread_id, what_happened, ai_headline, created_at")
       .eq("user_id", userId)
       .in("thread_id", threadIds)
       .eq("is_complete", true)
       .is("deleted_at", null),
     supabase
       .from("pulse_check_entries")
-      .select("thread_id, what_feels_off, ai_output_json, created_at")
+      .select("thread_id, what_feels_off, ai_headline, created_at")
       .eq("user_id", userId)
       .in("thread_id", threadIds)
       .eq("is_complete", true)
@@ -169,7 +173,7 @@ export async function getConversationSummaries(
       recordType: "prepare",
       createdAt: r.created_at,
       topic: r.situation_text ?? null,
-      aiJson: r.ai_plan_json,
+      headline: r.ai_headline,
     });
   }
   for (const r of reviewRes.data ?? []) {
@@ -178,7 +182,7 @@ export async function getConversationSummaries(
       recordType: "review",
       createdAt: r.created_at,
       topic: r.what_happened ?? null,
-      aiJson: r.ai_reflection_json,
+      headline: r.ai_headline,
     });
   }
   for (const r of pulseRes.data ?? []) {
@@ -187,7 +191,7 @@ export async function getConversationSummaries(
       recordType: "pulse_check",
       createdAt: r.created_at,
       topic: r.what_feels_off ?? null,
-      aiJson: r.ai_output_json,
+      headline: r.ai_headline,
     });
   }
 
@@ -215,7 +219,7 @@ export async function getConversationSummaries(
       origin,
       status: t.status,
       hasReview,
-      aiHeadline: extractHeadline(last.recordType, last.aiJson),
+      aiHeadline: last.headline,
       lastActivityAt: t.last_activity_at,
     });
   }
@@ -253,21 +257,21 @@ export async function getThreadEntries(
   const [prepRes, reviewRes, pulseRes] = await Promise.all([
     supabase
       .from("prepare_entries")
-      .select("situation_text, ai_plan_json, created_at")
+      .select("situation_text, ai_headline, created_at")
       .eq("user_id", userId)
       .eq("thread_id", threadId)
       .eq("is_complete", true)
       .is("deleted_at", null),
     supabase
       .from("review_entries")
-      .select("what_happened, ai_reflection_json, created_at")
+      .select("what_happened, ai_headline, created_at")
       .eq("user_id", userId)
       .eq("thread_id", threadId)
       .eq("is_complete", true)
       .is("deleted_at", null),
     supabase
       .from("pulse_check_entries")
-      .select("what_feels_off, ai_output_json, created_at")
+      .select("what_feels_off, ai_headline, created_at")
       .eq("user_id", userId)
       .eq("thread_id", threadId)
       .eq("is_complete", true)
@@ -294,7 +298,7 @@ export async function getThreadEntries(
       recordType: "prepare",
       createdAt: r.created_at,
       inputSummary: clip(r.situation_text),
-      aiHeadline: extractHeadline("prepare", r.ai_plan_json),
+      aiHeadline: r.ai_headline,
     });
   }
   for (const r of reviewRes.data ?? []) {
@@ -302,7 +306,7 @@ export async function getThreadEntries(
       recordType: "review",
       createdAt: r.created_at,
       inputSummary: clip(r.what_happened),
-      aiHeadline: extractHeadline("review", r.ai_reflection_json),
+      aiHeadline: r.ai_headline,
     });
   }
   for (const r of pulseRes.data ?? []) {
@@ -310,7 +314,7 @@ export async function getThreadEntries(
       recordType: "pulse_check",
       createdAt: r.created_at,
       inputSummary: clip(r.what_feels_off),
-      aiHeadline: extractHeadline("pulse_check", r.ai_output_json),
+      aiHeadline: r.ai_headline,
     });
   }
 

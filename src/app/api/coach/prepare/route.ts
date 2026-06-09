@@ -43,6 +43,7 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   derivedTable: "prepare_entries",
   derivedIdColumn: "prepare_entry_id",
   aiJsonColumn: "ai_plan_json",
+  headlineColumn: "ai_headline",
   aiVersionColumn: "ai_plan_version",
   // Coins redesign Slice A 2026-05-29: bump 8 → 9. The lean form drops most
   // SOT inputs and the AI output shape changes from the fixed 5-card set to

@@ -21,6 +21,7 @@ import {
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { isAIDisabled } from "@/lib/kill-switch";
+import { extractHeadline } from "@/lib/coach/conversation-summary";
 import { validateAIOutput } from "@/lib/ai/schemas";
 import type { AiTier, ProfileType } from "@/types";
 import type { CoachModuleConfig } from "./types";
@@ -594,11 +595,18 @@ export async function runCoachModule<
     const derivedFromAi = config.extractDerivedFromAi
       ? config.extractDerivedFromAi(aiOutput)
       : {};
+    // Stamp the denormalized one-line headline so the conversations list reads a
+    // short string, not the full AI jsonb (×100 threads). Same extractor the
+    // list/detail use → single source of truth. Threaded modules only.
+    const headlineUpdate = config.headlineColumn
+      ? { [config.headlineColumn]: extractHeadline(name, aiOutput) }
+      : {};
     const updateResult = await (supabase.from(config.derivedTable) as ReturnType<typeof supabase.from>)
       .update({
         [config.aiJsonColumn]: aiOutput,
         [config.aiVersionColumn]: config.aiVersionValue,
         ...derivedFromAi,
+        ...headlineUpdate,
         is_complete: true,
         completed_at: new Date().toISOString(),
       })

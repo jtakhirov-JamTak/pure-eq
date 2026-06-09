@@ -61,6 +61,7 @@ export const reviewModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   derivedTable: "review_entries",
   derivedIdColumn: "review_entry_id",
   aiJsonColumn: "ai_reflection_json",
+  headlineColumn: "ai_headline",
   aiVersionColumn: "ai_reflection_version",
   // Coins redesign Slice A 2026-05-29: bump 9 → 10. The lean form drops the
   // Quick/Full split + most SOT inputs, and the AI output shape changes from the

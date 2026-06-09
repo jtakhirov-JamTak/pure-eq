@@ -124,6 +124,16 @@ interface BaseCoachModuleConfig<
    */
   extractDerivedFromAi?: (aiOutput: TAiOutput) => Record<string, unknown>;
 
+  /**
+   * Optional: the derived-table text column that stores the one-line AI
+   * headline for the conversations list/detail (set to "ai_headline" on the
+   * three threaded modules — Prepare/Review/Pulse Check). When set, run-module
+   * stamps `extractHeadline(moduleName, aiOutput)` into it on generation, so the
+   * list read selects a short string instead of the full AI jsonb blob.
+   * Omitted for Before-You-Send (no thread, no such column).
+   */
+  headlineColumn?: string;
+
   // -- Response --
 
   /** Extra fields to include in the response beyond the standard ones. */

@@ -61,6 +61,7 @@ export const pulseCheckModuleConfig: CoachModuleConfig<Input, AiOutput> = {
   derivedTable: "pulse_check_entries",
   derivedIdColumn: "pulse_check_entry_id",
   aiJsonColumn: "ai_output_json",
+  headlineColumn: "ai_headline",
   aiVersionColumn: "ai_output_version",
   // Coins redesign Slice C1 2026-05-29: bump 1 → 2. The lean form drops 4 inputs,
   // splits the signal test into two columns, realigns the next-move taxonomy, and

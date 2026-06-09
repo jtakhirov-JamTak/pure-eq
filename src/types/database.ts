@@ -490,6 +490,7 @@ export type Database = {
       prepare_entries: {
         Row: {
           afraid_it_means: string | null
+          ai_headline: string | null
           ai_plan_json: Json | null
           ai_plan_version: number | null
           ai_tier: string | null
@@ -537,6 +538,7 @@ export type Database = {
         }
         Insert: {
           afraid_it_means?: string | null
+          ai_headline?: string | null
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
           ai_tier?: string | null
@@ -584,6 +586,7 @@ export type Database = {
         }
         Update: {
           afraid_it_means?: string | null
+          ai_headline?: string | null
           ai_plan_json?: Json | null
           ai_plan_version?: number | null
           ai_tier?: string | null
@@ -655,6 +658,7 @@ export type Database = {
       }
       pulse_check_entries: {
         Row: {
+          ai_headline: string | null
           ai_output_json: Json | null
           ai_output_version: number | null
           ai_tier: string | null
@@ -685,6 +689,7 @@ export type Database = {
           when_it_shifted: string | null
         }
         Insert: {
+          ai_headline?: string | null
           ai_output_json?: Json | null
           ai_output_version?: number | null
           ai_tier?: string | null
@@ -715,6 +720,7 @@ export type Database = {
           when_it_shifted?: string | null
         }
         Update: {
+          ai_headline?: string | null
           ai_output_json?: Json | null
           ai_output_version?: number | null
           ai_tier?: string | null
@@ -959,6 +965,7 @@ export type Database = {
       }
       review_entries: {
         Row: {
+          ai_headline: string | null
           ai_reflection_json: Json | null
           ai_reflection_version: number | null
           ai_tier: string | null
@@ -1021,6 +1028,7 @@ export type Database = {
           your_part: string | null
         }
         Insert: {
+          ai_headline?: string | null
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
           ai_tier?: string | null
@@ -1083,6 +1091,7 @@ export type Database = {
           your_part?: string | null
         }
         Update: {
+          ai_headline?: string | null
           ai_reflection_json?: Json | null
           ai_reflection_version?: number | null
           ai_tier?: string | null
