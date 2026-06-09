@@ -46,6 +46,7 @@ describe("safeNextPath — rejects open-redirect vectors → fallback", () => {
     expect(safeNextPath("/x" + String.fromCharCode(13) + "y")).toBe("/onboarding"); // \r
     expect(safeNextPath("/x" + String.fromCharCode(9) + "y")).toBe("/onboarding"); // \t
     expect(safeNextPath("/x" + String.fromCharCode(0) + "y")).toBe("/onboarding"); // \0
+    expect(safeNextPath("/x" + String.fromCharCode(127) + "y")).toBe("/onboarding"); // DEL 0x7f
   });
 });
 

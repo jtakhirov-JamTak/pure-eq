@@ -162,6 +162,9 @@ export function PersonPicker({
         !containerRef.current.contains(e.target as Node)
       ) {
         setShowDropdown(false);
+        // Reset the highlight too, matching the Escape path — otherwise
+        // aria-activedescendant dangles at an unmounted option id.
+        setActiveIndex(-1);
       }
     }
     document.addEventListener("pointerdown", handlePointerOutside);

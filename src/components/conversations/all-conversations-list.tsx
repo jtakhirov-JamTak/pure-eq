@@ -64,6 +64,10 @@ export function AllConversationsList({
     setSelected(new Set());
     setError(null);
     setShowDeleteConfirm(false);
+    // Clear busy on every exit, incl. the success path: confirmDelete/applyStatus
+    // call exitSelect() without resetting busy, so without this a completed bulk
+    // action would leave the action buttons stuck disabled on the next select.
+    setBusy(false);
   }
 
   function toggle(threadId: string) {
