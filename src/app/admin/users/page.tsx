@@ -1,7 +1,18 @@
 // Pure EQ domain — replace in fork.
 import Link from "next/link";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceClient } from "@/lib/supabase/service";
 import { toggleAccess } from "../actions";
+
+// Per-user aggregate from the `admin_user_activity` view (migration 0048). The
+// view is deliberately NOT registered in the generated `Database` type: doing so
+// poisons the `.from()` relation union that run-module.ts's dynamic-table casts
+// depend on. Typed locally instead.
+type UserActivityRow = {
+  user_id: string;
+  entry_count: number;
+  last_active: string | null;
+};
 
 export default async function AdminUsersPage() {
   const sc = createServiceClient();
@@ -12,7 +23,7 @@ export default async function AdminUsersPage() {
   const userIds = users.map((u) => u.id);
 
   // Parallel queries for user data
-  const [profilesRes, subsRes, entriesRes] = await Promise.all([
+  const [profilesRes, subsRes, activityRes] = await Promise.all([
     sc
       .from("user_profiles")
       .select("user_id, primary_profile")
@@ -22,14 +33,15 @@ export default async function AdminUsersPage() {
       .from("user_subscriptions")
       .select("user_id, status, role")
       .in("user_id", userIds),
-    // Fetch limited raw_records for entry counts + last active.
-    // Limit to 5000 rows as a stopgap; proper fix is a Postgres view.
-    sc
-      .from("raw_records")
-      .select("user_id, created_at")
+    // Per-user entry count + last active, aggregated in Postgres (migration 0048
+    // `admin_user_activity` view). Replaces the old 5000-row raw_records fetch +
+    // JS count, which silently truncated counts past the cap. Untyped client cast
+    // (see UserActivityRow note above) — the view is intentionally off the schema.
+    (sc as SupabaseClient)
+      .from("admin_user_activity")
+      .select("user_id, entry_count, last_active")
       .in("user_id", userIds)
-      .order("created_at", { ascending: false })
-      .limit(5000),
+      .returns<UserActivityRow[]>(),
   ]);
 
   // Build lookup maps
@@ -48,10 +60,11 @@ export default async function AdminUsersPage() {
 
   const entryCountMap = new Map<string, number>();
   const lastActiveMap = new Map<string, string>();
-  for (const e of entriesRes.data ?? []) {
-    entryCountMap.set(e.user_id, (entryCountMap.get(e.user_id) ?? 0) + 1);
-    if (!lastActiveMap.has(e.user_id)) {
-      lastActiveMap.set(e.user_id, e.created_at);
+  for (const a of activityRes.data ?? []) {
+    // entry_count is a bigint — PostgREST may return it as a string.
+    entryCountMap.set(a.user_id, Number(a.entry_count));
+    if (a.last_active) {
+      lastActiveMap.set(a.user_id, a.last_active);
     }
   }
 
