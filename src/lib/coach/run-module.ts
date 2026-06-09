@@ -16,12 +16,12 @@ import {
   costForTier,
   getBalance,
   nextGenerationAttempt,
-  generationSpendKey,
 } from "@/lib/coins";
 import type { Json } from "@/types/database";
 import { isAdmin } from "@/lib/admin";
 import { isAIDisabled } from "@/lib/kill-switch";
 import { recordEvent } from "@/lib/observability";
+import { runBilledGeneration } from "@/lib/coach/billed-generation";
 import { extractHeadline } from "@/lib/coach/conversation-summary";
 import { validateAIOutput } from "@/lib/ai/schemas";
 import type { AiTier, ProfileType } from "@/types";
@@ -475,183 +475,154 @@ export async function runCoachModule<
     });
   }
 
-  // 11c. Reserve coins for the generation (admins bypass). Keyed on a
-  // per-attempt spend key (`idempotencyKey:gen:<n>`) so a double-tapped "Get AI
-  // feedback" never double-charges (reserve-at-start, unique index dedups the
-  // same attempt) WHILE a genuine retry after a failed+refunded generation gets
-  // a fresh key and charges again — closing the retry leak where a same-key
-  // retry hit 'already_applied' and generated free. On AI failure we refund the
-  // same spend key below (release). On insufficient balance the entry is already
-  // saved — the client surfaces an inline top-up rather than losing the work.
-  let coinsCharged = false;
-  let spendKey: string | null = null;
-  if (!adminUser) {
-    const attempt = await nextGenerationAttempt(user.id, idempotencyKey);
-    spendKey = generationSpendKey(idempotencyKey, attempt);
-    const reason = tier === "deep" ? "debit_deep" : "debit_quick";
-    const spend = await spendCoins(user.id, coinCost, reason, spendKey);
-    if (spend === "insufficient") {
-      const balance = await getBalance(user.id);
-      return NextResponse.json(
-        {
-          error: "insufficient_coins",
-          needed: coinCost,
-          balance,
-          ...config.buildResponseExtras(derivedEntryId),
-        },
-        { status: 402 },
-      );
-    }
-    if (spend === "invalid") {
-      // Unexpected RPC failure (already logged + captured in spendCoins). The
-      // entry is saved; don't run a generation we couldn't charge for.
-      return NextResponse.json(
-        { error: "Could not start feedback. Try again in a moment." },
-        { status: 500 },
-      );
-    }
-    // 'ok' = freshly charged this request → refund on AI failure (below).
-    // 'already_applied' = a prior attempt charged under this key (retry after
-    // a failed+refunded run); proceed without a second charge.
-    coinsCharged = spend === "ok";
+  // 11c–14. Reserve → generate → persist → reconcile billing. The money-
+  // sensitive branches live in runBilledGeneration (unit-tested in
+  // billed-generation.test.ts). The AI call and the derived-row write stay here
+  // as closures — they need the per-module config + this request's client.
+  const billed = await runBilledGeneration<TAiOutput>({
+    userId: user.id,
+    module: name,
+    adminUser,
+    idempotencyKey,
+    tier,
+    coinCost,
+    coins: { nextGenerationAttempt, spendCoins, refundCoins, getBalance },
+
+    // 12. Call Claude. Reuses the prompt built before the idempotency branch.
+    generate: async () => {
+      const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
+      let aiOutput: TAiOutput | null = null;
+      let failureKind = "none";
+      let lastErr: unknown = null;
+      let attempts = 0;
+      const aiCallStart = Date.now();
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        try {
+          const message = await anthropic.messages.create({
+            // Sonnet 4.6: thinking off + effort high. Explicit because Sonnet 4.6
+            // defaults have shifted across SDK versions; pinning preserves the
+            // instruction-following behavior our prompts are tuned against.
+            model: "claude-sonnet-4-6",
+            max_tokens: 1024,
+            thinking: { type: "disabled" },
+            output_config: { effort: "high" },
+            system: prompt.system,
+            messages: [{ role: "user", content: prompt.user }],
+          });
+          const textBlock = message.content.find((b) => b.type === "text");
+          if (!textBlock || textBlock.type !== "text") {
+            failureKind = "no_text";
+            throw new Error("no text block");
+          }
+          const raw = textBlock.text.replace(/```json\n?|```/g, "").trim();
+          let jsonOutput: unknown;
+          try {
+            jsonOutput = JSON.parse(raw);
+          } catch {
+            failureKind = "json_parse";
+            throw new Error("bad json");
+          }
+          const validated = config.aiOutputSchema.safeParse(jsonOutput);
+          if (!validated.success) {
+            failureKind = "schema_mismatch";
+            throw new Error("schema mismatch");
+          }
+          try {
+            aiOutput = validateAIOutput(validated.data);
+          } catch {
+            failureKind = "banned_phrase";
+            throw new Error("banned phrase");
+          }
+          failureKind = "none";
+          attempts = attempt + 1;
+          break;
+        } catch (err) {
+          lastErr = err;
+          console.error(`${name}: AI attempt ${attempt + 1} failed kind=${failureKind}`);
+          if (attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        }
+      }
+      return {
+        aiOutput,
+        failureKind,
+        lastErr,
+        attempts,
+        latencyMs: Date.now() - aiCallStart,
+      };
+    },
+
+    // 13. Update derived row with AI output. extractDerivedFromAi (optional)
+    // promotes fields out of the AI output into their own derived columns — e.g.
+    // lean Prepare copies the AI Predicted Reaction card into predicted_reaction
+    // so Review calibration reads it. The headline stamp denormalizes the one-
+    // line summary so the conversations list reads a short string, not the full
+    // AI jsonb (×100 threads). Both merged into one update so they land atomically.
+    persist: async (aiOutput) => {
+      const derivedFromAi = config.extractDerivedFromAi
+        ? config.extractDerivedFromAi(aiOutput)
+        : {};
+      const headlineUpdate = config.headlineColumn
+        ? { [config.headlineColumn]: extractHeadline(name, aiOutput) }
+        : {};
+      const updateResult = await (supabase.from(config.derivedTable) as ReturnType<typeof supabase.from>)
+        .update({
+          [config.aiJsonColumn]: aiOutput,
+          [config.aiVersionColumn]: config.aiVersionValue,
+          ...derivedFromAi,
+          ...headlineUpdate,
+          is_complete: true,
+          completed_at: new Date().toISOString(),
+        })
+        .eq("user_id", user.id)
+        .eq(config.derivedIdColumn, derivedEntryId);
+
+      if (updateResult.error) {
+        console.error(`${name}: derived update failed`, updateResult.error.code);
+        return { error: true };
+      }
+      return { error: false };
+    },
+  });
+
+  // Map the billing outcome to HTTP.
+  if (billed.kind === "insufficient") {
+    // Entry already saved — the client surfaces an inline top-up rather than
+    // losing the work.
+    return NextResponse.json(
+      {
+        error: "insufficient_coins",
+        needed: coinCost,
+        balance: billed.balance,
+        ...config.buildResponseExtras(derivedEntryId),
+      },
+      { status: 402 },
+    );
+  }
+  if (billed.kind === "spend_error") {
+    // Unexpected RPC failure (already logged + captured in spendCoins). The
+    // entry is saved; don't run a generation we couldn't charge for.
+    return NextResponse.json(
+      { error: "Could not start feedback. Try again in a moment." },
+      { status: 500 },
+    );
   }
 
-  // 12. Call Claude. Reuses the prompt built before the idempotency branch.
-  const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
-  let aiOutput: TAiOutput | null = null;
-  let lastFailureKind = "none";
-  let lastErr: unknown = null;
-  let attemptsUsed = 0;
-  const aiCallStart = Date.now();
-
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      const message = await anthropic.messages.create({
-        // Sonnet 4.6: thinking off + effort high. Explicit because Sonnet 4.6
-        // defaults have shifted across SDK versions; pinning preserves the
-        // instruction-following behavior our prompts are tuned against.
-        model: "claude-sonnet-4-6",
-        max_tokens: 1024,
-        thinking: { type: "disabled" },
-        output_config: { effort: "high" },
-        system: prompt.system,
-        messages: [{ role: "user", content: prompt.user }],
-      });
-      const textBlock = message.content.find((b) => b.type === "text");
-      if (!textBlock || textBlock.type !== "text") {
-        lastFailureKind = "no_text";
-        throw new Error("no text block");
-      }
-      const raw = textBlock.text.replace(/```json\n?|```/g, "").trim();
-      let jsonOutput: unknown;
-      try {
-        jsonOutput = JSON.parse(raw);
-      } catch {
-        lastFailureKind = "json_parse";
-        throw new Error("bad json");
-      }
-      const validated = config.aiOutputSchema.safeParse(jsonOutput);
-      if (!validated.success) {
-        lastFailureKind = "schema_mismatch";
-        throw new Error("schema mismatch");
-      }
-      try {
-        aiOutput = validateAIOutput(validated.data);
-      } catch {
-        lastFailureKind = "banned_phrase";
-        throw new Error("banned phrase");
-      }
-      lastFailureKind = "none";
-      attemptsUsed = attempt + 1;
-      break;
-    } catch (err) {
-      lastErr = err;
-      console.error(`${name}: AI attempt ${attempt + 1} failed kind=${lastFailureKind}`);
-      if (attempt < MAX_RETRIES) {
-        await new Promise((r) => setTimeout(r, 400));
-      }
-    }
-  }
-
-  if (!aiOutput) {
-    Sentry.captureException(lastErr, {
-      tags: { area: "coach", module: name, kind: lastFailureKind },
-    });
-    // Release the reservation: the generation failed before any output was
-    // saved (reserve → refund). Only when we actually charged THIS request —
-    // an 'already_applied' retry must not trigger a spurious credit. The
-    // refund is idempotent (keyed off the per-attempt spendKey), so a repeat
-    // failure on the same key won't stack credits, and the refund row is what
-    // nextGenerationAttempt counts to advance the next retry's key.
-    if (coinsCharged && spendKey) {
-      await refundCoins(user.id, coinCost, spendKey);
-    }
-  }
-
-  // 13. Update derived row with AI output.
-  // extractDerivedFromAi (optional) promotes fields out of the AI output
-  // into their own derived columns — e.g. lean Prepare copies the AI
-  // Predicted Reaction card into predicted_reaction so Review calibration
-  // reads it. Merged into the same update so the column + ai_json land
-  // atomically.
-  let saveWarning = false;
-  if (aiOutput) {
-    const derivedFromAi = config.extractDerivedFromAi
-      ? config.extractDerivedFromAi(aiOutput)
-      : {};
-    // Stamp the denormalized one-line headline so the conversations list reads a
-    // short string, not the full AI jsonb (×100 threads). Same extractor the
-    // list/detail use → single source of truth. Threaded modules only.
-    const headlineUpdate = config.headlineColumn
-      ? { [config.headlineColumn]: extractHeadline(name, aiOutput) }
-      : {};
-    const updateResult = await (supabase.from(config.derivedTable) as ReturnType<typeof supabase.from>)
-      .update({
-        [config.aiJsonColumn]: aiOutput,
-        [config.aiVersionColumn]: config.aiVersionValue,
-        ...derivedFromAi,
-        ...headlineUpdate,
-        is_complete: true,
-        completed_at: new Date().toISOString(),
-      })
-      .eq("user_id", user.id)
-      .eq(config.derivedIdColumn, derivedEntryId);
-
-    if (updateResult.error) {
-      console.error(`${name}: derived update failed`, updateResult.error.code);
-      saveWarning = true;
-      // The AI output was generated but couldn't be persisted to the derived
-      // row — it isn't saved to the user's history. Treat this like an AI
-      // failure for billing: release the hold (reserve → refund), symmetric
-      // with the AI-failure refund above and the Insights insert-failure path.
-      // The user still sees this run's output once in the response; a retry
-      // (existingAiJson is still null, so it regenerates) gets a fresh spend
-      // key via nextGenerationAttempt and charges for the run that actually
-      // persists. Idempotent on the per-attempt key. Clearing coinsCharged
-      // makes coinsSpent below net to 0 for this stranded run.
-      if (coinsCharged && spendKey) {
-        await refundCoins(user.id, coinCost, spendKey);
-        coinsCharged = false;
-      }
-    }
-  }
+  const { aiOutput, coinsSpent, saveWarning, failureKind, attempts, latencyMs } =
+    billed;
 
   // 13b. Success heartbeat + AI-spend signal (the positive counterpart to the
-  // captureException above). Emitted only on a genuine generation — the cached /
-  // save-only / disabled / insufficient branches all returned earlier. `coins`
-  // mirrors the net charge below (0 for admins, refunded-failures, or a stranded
-  // save). Absence of this stream = AI path down; a count/coins spike = runaway.
+  // captureException in runBilledGeneration). Emitted only on a genuine
+  // generation — cached / save-only / disabled / insufficient branches returned
+  // earlier. `coins` is the NET charge (0 for admins, refunded failures, or a
+  // stranded save). Absence of this stream = AI path down; a spike = runaway.
   if (aiOutput) {
     recordEvent(
       "ai.generated",
       { area: "ai_spend", module: name, tier },
-      {
-        coins: coinsCharged ? coinCost : 0,
-        attempts: attemptsUsed,
-        latencyMs: Date.now() - aiCallStart,
-        admin: adminUser,
-        saveWarning,
-      },
+      { coins: coinsSpent, attempts, latencyMs, admin: adminUser, saveWarning },
     );
   }
 
@@ -662,10 +633,11 @@ export async function runCoachModule<
     rawRecordId,
     ...config.buildResponseExtras(derivedEntryId),
     // Net coins spent: the cost only when we charged AND produced output. A
-    // charged-then-failed run was refunded above, so it nets to 0.
-    coinsSpent: aiOutput && coinsCharged ? coinCost : 0,
+    // charged-then-failed run was refunded inside runBilledGeneration, so it
+    // nets to 0.
+    coinsSpent,
     saveWarning,
-    aiFailureKind: aiOutput ? undefined : lastFailureKind,
+    aiFailureKind: aiOutput ? undefined : failureKind,
     message: aiOutput
       ? undefined
       : "We couldn't generate coaching feedback this time. Your entry is saved — you can try again.",
