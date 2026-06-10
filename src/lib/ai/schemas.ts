@@ -189,13 +189,57 @@ export const observationShape = z.object({
   theme: z.string().trim().min(1).max(120),
   observation: z.string().trim().min(1).max(500),
   evidence: z.array(evidenceShape).min(1).max(3),
-  confidence: z.enum(["tentative", "clear"]),
+  // Quotes from entries that CUT AGAINST the theme. Optional — most patterns
+  // have none. Verified + shown like supporting evidence, but a failed counter
+  // quote drops only that item (not the whole observation), and each distinct
+  // contradicting entry subtracts from the confidence count. See deriveConfidence
+  // in src/lib/insights/generate.ts.
+  counter_evidence: z.array(evidenceShape).max(3).default([]),
+  // Server-DERIVED from verified distinct-entry counts (supporting − counter).
+  // The model emits a guess but generate.ts overwrites it, so the label can
+  // never overstate the evidence actually shown.
+  confidence: z.enum(["early", "emerging", "clear"]),
+});
+
+// The four coaching flows the user can be directed to PRACTICE in next week.
+// Wire values map to: prepare → Prepare, before_you_send → Before-You-Send,
+// triggered → Triggered tool (trigger_log), review → Review. Server-side
+// adherence counting keys off this enum (see computeFocusActivity).
+export const FOCUS_MODULES = [
+  "prepare",
+  "before_you_send",
+  "triggered",
+  "review",
+] as const;
+export const focusModuleEnum = z.enum(FOCUS_MODULES);
+
+// ONE prescribed focus for the coming week, tied to one of this week's
+// observations (the model copies that observation's theme verbatim).
+export const reflectionFocusShape = z.object({
+  theme: z.string().trim().min(1).max(120),
+  practice: z.string().trim().min(1).max(280),
+  modules: z.array(focusModuleEnum).min(1).max(4),
+});
+
+// Look-back on LAST week's focus. `took_action` is server-authoritative
+// (derived from real entry counts in the prescribed tools); `note` is the
+// model's grounded narration. Present only when a prior focus existed.
+export const focusFollowupShape = z.object({
+  prior_theme: z.string().trim().min(1).max(120),
+  took_action: z.boolean(),
+  note: z.string().trim().min(1).max(280),
 });
 
 export const reflectionNormalShape = z.object({
   mode: z.literal("reflection"),
   summary: z.string().trim().min(1).max(300),
   observations: z.array(observationShape).min(2).max(3),
+  // Required: every reflection prescribes exactly one focus for next week.
+  focus: reflectionFocusShape,
+  // Null on the first reflection (nothing prior to grade). Server forces this
+  // to null when no prior focus existed, and overwrites took_action/prior_theme
+  // from authoritative counts when one did.
+  focus_followup: focusFollowupShape.nullable().default(null),
 });
 
 export const reflectionOutputSchema = z.discriminatedUnion("mode", [
@@ -203,8 +247,11 @@ export const reflectionOutputSchema = z.discriminatedUnion("mode", [
   refusalShape,
 ]);
 
+export type FocusModule = (typeof FOCUS_MODULES)[number];
 export type ReflectionOutput = z.infer<typeof reflectionOutputSchema>;
 export type ReflectionNormal = z.infer<typeof reflectionNormalShape>;
+export type ReflectionFocus = z.infer<typeof reflectionFocusShape>;
+export type FocusFollowup = z.infer<typeof focusFollowupShape>;
 export type ReflectionObservation = z.infer<typeof observationShape>;
 export type ReflectionEvidence = z.infer<typeof evidenceShape>;
 

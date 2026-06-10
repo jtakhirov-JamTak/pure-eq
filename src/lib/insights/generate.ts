@@ -20,12 +20,20 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { buildReflectionPrompt, type BehavioralContext } from "@/lib/ai/prompts";
+import {
+  buildReflectionPrompt,
+  type BehavioralContext,
+  type PriorFocusContext,
+} from "@/lib/ai/prompts";
 import {
   reflectionOutputSchema,
   validateAIOutput,
   type ReflectionOutput,
   type ReflectionNormal,
+  type ReflectionObservation,
+  type ReflectionFocus,
+  type FocusFollowup,
+  type FocusModule,
 } from "@/lib/ai/schemas";
 import { REVIEW_NEEDS_NEXT_VALUES as REVIEW_NEEDS_NEXT_ENUM } from "@/lib/validation";
 import { isAIDisabled } from "@/lib/kill-switch";
@@ -34,6 +42,18 @@ import { buildReflectionInput } from "./reflection-input";
 import { COIN_COSTS, type ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 
+// v5 (2026-06-09): every reflection now prescribes one "focus" for next week
+// (tied to a surfaced observation) and grades last week's focus via a
+// server-counted "focus_followup" look-back. New required + optional fields in
+// ai_json → bump so v4 rows regenerate rather than fail the new Zod parse.
+//
+// v4 (2026-06-09): confidence is now a 3-level NET read (early/emerging/clear)
+// derived server-side from distinct supporting vs contradicting entries, and
+// observations gained an optional counter_evidence[] array. The ai_json shape
+// changed (confidence enum values + new field), so the bump forces v3 rows to
+// regenerate via the symmetric writer/reader guard rather than fail the new
+// Zod parse and render blank.
+//
 // v3 (2026-05-03): Tools restored. The reflection prompt's FIELD GLOSSARY
 // re-includes trigger_log + overwhelmed bullets, and the input record_type
 // filter once again pulls Tools entries. v2 cached rows from the 6-day
@@ -46,7 +66,7 @@ import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 // Migration 0031 moved generator_version into the weekly_reflections unique
 // index, so a mid-week version bump is handled natively by an INSERT of a
 // new (user_id, date, version) row — no UPDATE fallback needed.
-export const GENERATOR_VERSION = "reflection_v3";
+export const GENERATOR_VERSION = "reflection_v5";
 
 // Allowlist for review.needs_to_happen_next. Gates arbitrary DB strings
 // (legacy rows, schema drift) from leaking into the prompt. Single source
@@ -163,26 +183,181 @@ export interface GenerateOptions {
  * Drops observations with any unverifiable quote. Returns the filtered set.
  * If fewer than 2 observations survive, caller downgrades to refusal.
  */
+// True when a single evidence item's quote substring-matches its cited source
+// entry AND clears the degenerate-quote floor. The FIELD GLOSSARY in the prompt
+// contains enum tokens (apologize, boundary, clarify, etc.) that are also common
+// in user text — a single-word "quote" would verify trivially via substring
+// match but carry no evidentiary weight, so require at least one internal space.
+function quoteVerifies(
+  ev: { quote: string; source_record_id: string },
+  entryLookup: Map<string, string>,
+): boolean {
+  const trimmed = ev.quote.trim();
+  if (!trimmed.includes(" ") || trimmed.length < MIN_QUOTE_CHARS) return false;
+  const source = entryLookup.get(ev.source_record_id);
+  if (!source) return false;
+  return source.includes(ev.quote);
+}
+
 // Exported for unit tests.
 export function verifyQuotes(
   reflection: ReflectionNormal,
   entryLookup: Map<string, string>, // raw_record_id → concatenated fields text
 ): ReflectionNormal {
-  const verified = reflection.observations.filter((obs) => {
-    return obs.evidence.every((ev) => {
-      const trimmed = ev.quote.trim();
-      // Defense-in-depth: reject degenerate single-word quotes. The FIELD
-      // GLOSSARY in the prompt contains enum tokens (apologize, boundary,
-      // clarify, etc.) that are also common in user text — a single-word
-      // "quote" would verify trivially via substring match but carry no
-      // evidentiary weight. Require at least one internal space.
-      if (!trimmed.includes(" ") || trimmed.length < MIN_QUOTE_CHARS) return false;
-      const source = entryLookup.get(ev.source_record_id);
-      if (!source) return false;
-      return source.includes(ev.quote);
-    });
-  });
+  const verified = reflection.observations
+    // A pattern is grounded by its SUPPORTING quotes: if any fail, the whole
+    // observation is unsafe to show — drop it (keeps the <2 → refusal path live).
+    .filter((obs) => obs.evidence.every((ev) => quoteVerifies(ev, entryLookup)))
+    // Counter-evidence is supplementary: a failed counter quote drops only that
+    // item, never the observation (the theme's grounding is unaffected).
+    .map((obs) => ({
+      ...obs,
+      counter_evidence: obs.counter_evidence.filter((ev) =>
+        quoteVerifies(ev, entryLookup),
+      ),
+    }));
   return { ...reflection, observations: verified };
+}
+
+/**
+ * Net-confidence label, derived from VERIFIED quotes only (call AFTER
+ * verifyQuotes). Counts DISTINCT entries that support the theme minus distinct
+ * entries that contradict it, then maps the net to a 3-level label:
+ *   net ≥ 3 → "clear"   (e.g. 3 supporting entries, no contradiction)
+ *   net = 2 → "emerging" (e.g. 3 supporting − 1 contradicting, or 2 clean)
+ *   net ≤ 1 → "early"
+ * Counting distinct entry IDs (not raw quote count) means two quotes from the
+ * same entry only count once. Server-authoritative — overwrites the model's
+ * own guess so the label can never overstate the evidence shown.
+ * Exported for unit tests.
+ */
+export function deriveConfidence(
+  obs: ReflectionObservation,
+): "early" | "emerging" | "clear" {
+  const supporting = new Set(obs.evidence.map((e) => e.source_record_id)).size;
+  const contradicting = new Set(
+    obs.counter_evidence.map((e) => e.source_record_id),
+  ).size;
+  const net = supporting - contradicting;
+  if (net >= 3) return "clear";
+  if (net === 2) return "emerging";
+  return "early";
+}
+
+// Wire-value → raw_records.record_type for the focus modules that live in
+// raw_records. before_you_send is its own table, handled separately.
+const FOCUS_MODULE_RECORD_TYPE: Record<
+  Exclude<FocusModule, "before_you_send">,
+  string
+> = {
+  prepare: "prepare",
+  review: "review",
+  triggered: "trigger_log",
+};
+
+/**
+ * Count the user's COMPLETED, non-deleted entries in each prescribed focus tool
+ * since the focus was set. Authoritative signal for took_action — head:true
+ * COUNT queries, one per distinct module, run in parallel. A per-module read
+ * error is non-fatal (the follow-up just under-reports) but captured.
+ */
+export async function computeFocusActivity(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  modules: FocusModule[],
+  sinceIso: string,
+): Promise<{ activityByModule: Record<string, number>; activityTotal: number }> {
+  const uniqueModules = Array.from(new Set(modules));
+  const pairs = await Promise.all(
+    uniqueModules.map(async (m): Promise<readonly [string, number]> => {
+      // Separate concrete branches per table — a union-typed query builder
+      // collapses the later `.eq("record_type")` to `never` (BYS has no such
+      // column).
+      const res =
+        m === "before_you_send"
+          ? await supabase
+              .from("before_you_send_entries")
+              .select("user_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("is_complete", true)
+              .is("deleted_at", null)
+              .gte("created_at", sinceIso)
+          : await supabase
+              .from("raw_records")
+              .select("user_id", { count: "exact", head: true })
+              .eq("user_id", userId)
+              .eq("record_type", FOCUS_MODULE_RECORD_TYPE[m])
+              .eq("is_complete", true)
+              .is("deleted_at", null)
+              .gte("created_at", sinceIso);
+      if (res.error) {
+        Sentry.captureException(new Error("focus_activity_count_failed"), {
+          tags: { area: "insights_generate", kind: "focus_activity_count", module: m },
+        });
+        return [m, 0] as const;
+      }
+      return [m, res.count ?? 0] as const;
+    }),
+  );
+  const activityByModule: Record<string, number> = {};
+  let activityTotal = 0;
+  for (const [m, n] of pairs) {
+    activityByModule[m] = n;
+    activityTotal += n;
+  }
+  return { activityByModule, activityTotal };
+}
+
+/**
+ * Most recent prior reflection that carried a focus, plus when it was generated
+ * (the look-back window start). Scans the last few rows so a refusal week in
+ * between doesn't break the chain. Read errors are non-fatal — no look-back is
+ * better than failing the whole reflection over a supplementary feature.
+ */
+async function readPriorFocus(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<{ focus: ReflectionFocus; generatedAt: string } | null> {
+  const res = await supabase
+    .from("weekly_reflections")
+    .select("generated_at, ai_json")
+    .eq("user_id", userId)
+    .order("generated_at", { ascending: false })
+    .limit(5);
+  if (res.error) {
+    Sentry.captureException(new Error("prior_focus_read_failed"), {
+      tags: { area: "insights_generate", kind: "prior_focus_read" },
+    });
+    return null;
+  }
+  for (const row of res.data ?? []) {
+    const parsed = reflectionOutputSchema.safeParse(row.ai_json);
+    if (parsed.success && parsed.data.mode === "reflection") {
+      return { focus: parsed.data.focus, generatedAt: row.generated_at };
+    }
+  }
+  return null;
+}
+
+/**
+ * Build the server-authoritative focus_followup. took_action is decided by REAL
+ * activity counts (≥1 entry in any prescribed tool = engaged), never the model;
+ * the model's note is kept when present, otherwise a neutral fallback. Exported
+ * for unit tests.
+ */
+export function buildFocusFollowup(
+  priorFocus: { theme: string },
+  activityTotal: number,
+  modelNote: string | null | undefined,
+): FocusFollowup {
+  const tookAction = activityTotal >= 1;
+  const note =
+    modelNote && modelNote.trim().length > 0
+      ? modelNote.trim()
+      : tookAction
+        ? "You logged entries in your focus tools this week — keep building on it."
+        : "You didn't log any entries in your focus tools this week. No pressure — try one this coming week.";
+  return { prior_theme: priorFocus.theme, took_action: tookAction, note };
 }
 
 /**
@@ -510,11 +685,34 @@ export async function generateReflection(
     })),
   );
 
+  // Look-back loop: read the most recent prior focus (if any) and count the
+  // user's REAL activity in the prescribed tools since it was set. Both feed
+  // the prompt; the counts are authoritative for took_action below. Non-fatal —
+  // a missing/unreadable prior focus just means no look-back this week.
+  const prior = await readPriorFocus(supabase, userId);
+  let priorFocusContext: PriorFocusContext | null = null;
+  if (prior) {
+    const activity = await computeFocusActivity(
+      supabase,
+      userId,
+      prior.focus.modules,
+      prior.generatedAt,
+    );
+    priorFocusContext = {
+      theme: prior.focus.theme,
+      practice: prior.focus.practice,
+      modules: prior.focus.modules,
+      activityByModule: activity.activityByModule,
+      activityTotal: activity.activityTotal,
+    };
+  }
+
   const prompt = buildReflectionPrompt({
     profile,
     persons: input.persons,
     entries: input.entries,
     behavioralContext,
+    priorFocus: priorFocusContext,
   });
 
   // Coin reserve (Slice B3) — AFTER the cache miss, BEFORE the LLM call. A
@@ -616,13 +814,28 @@ export async function generateReflection(
     // (not just the evidence item) so the <2 → refusal path still engages.
     try {
       if (aiOutput.mode === "reflection") {
-        validateAIOutput({ summary: aiOutput.summary });
+        // summary + the forward-looking focus prose are top-level leaves the
+        // observation walker below never reaches — check them explicitly.
+        validateAIOutput({
+          summary: aiOutput.summary,
+          focus_theme: aiOutput.focus.theme,
+          focus_practice: aiOutput.focus.practice,
+        });
+        if (aiOutput.focus_followup) {
+          validateAIOutput({ focus_followup_note: aiOutput.focus_followup.note });
+        }
         aiOutput = {
           ...aiOutput,
           observations: aiOutput.observations.filter((obs) => {
             try {
               validateAIOutput({ theme: obs.theme, observation: obs.observation });
               for (const ev of obs.evidence) {
+                validateAIOutput({ quote: ev.quote });
+              }
+              // Counter-quotes are verbatim user text too and can carry a
+              // banned clinical phrase — walk them on the same drop-the-whole-
+              // observation rule as supporting evidence.
+              for (const ev of obs.counter_evidence) {
                 validateAIOutput({ quote: ev.quote });
               }
               return true;
@@ -661,7 +874,27 @@ export async function generateReflection(
           suggested_resource: "none",
         };
       } else {
-        aiOutput = filtered;
+        // Overwrite each surviving observation's confidence with the server's
+        // net read of verified distinct entries (supporting − contradicting).
+        // The model's own label is discarded — the count can't lie. And set the
+        // focus_followup server-authoritatively: present (with took_action from
+        // real counts, model's note kept) ONLY when a prior focus existed,
+        // forced null otherwise so a hallucinated look-back can't ship.
+        aiOutput = {
+          ...filtered,
+          observations: filtered.observations.map((obs) => ({
+            ...obs,
+            confidence: deriveConfidence(obs),
+          })),
+          focus_followup:
+            prior && priorFocusContext
+              ? buildFocusFollowup(
+                  prior.focus,
+                  priorFocusContext.activityTotal,
+                  filtered.focus_followup?.note,
+                )
+              : null,
+        };
       }
     }
 

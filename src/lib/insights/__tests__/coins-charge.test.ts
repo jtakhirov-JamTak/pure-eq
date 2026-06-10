@@ -34,7 +34,7 @@ function validReflectionJson() {
             source_date: "2026-05-20",
           },
         ],
-        confidence: "tentative",
+        confidence: "early",
       },
       {
         theme: "Repair attempts",
@@ -46,9 +46,15 @@ function validReflectionJson() {
             source_date: "2026-05-21",
           },
         ],
-        confidence: "tentative",
+        confidence: "early",
       },
     ],
+    focus: {
+      theme: "Conflict avoidance",
+      practice:
+        "When you feel the urge to keep arguing, pause and name what you actually want.",
+      modules: ["review"],
+    },
   };
 }
 
@@ -57,7 +63,7 @@ function validReflectionJson() {
 function refusalRow() {
   return {
     generated_at: "2026-05-29T00:00:00.000Z",
-    generator_version: "reflection_v3",
+    generator_version: "reflection_v4",
     ai_json: {
       mode: "refusal",
       refusal_reason: "out_of_scope",

@@ -13,7 +13,14 @@ describe("reflectionOutputSchema", () => {
     observation:
       "Across three Reviews, the hardest moment is described as the other person getting louder — and the user's response is almost always to go silent or leave the room. Naming this is the first step to holding presence.",
     evidence: [validEvidence],
-    confidence: "tentative" as const,
+    confidence: "early" as const,
+  };
+
+  const validFocus = {
+    theme: "You pull back when contradicted",
+    practice:
+      "When a conversation heats up, name the discomfort out loud instead of going quiet.",
+    modules: ["review", "prepare"],
   };
 
   it("accepts a valid reflection with 2 observations", () => {
@@ -21,6 +28,7 @@ describe("reflectionOutputSchema", () => {
       mode: "reflection",
       summary: "Three themes show up across your last four weeks.",
       observations: [validObservation, validObservation],
+      focus: validFocus,
     });
     expect(result.success).toBe(true);
   });
@@ -30,8 +38,18 @@ describe("reflectionOutputSchema", () => {
       mode: "reflection",
       summary: "Three themes show up across your last four weeks.",
       observations: [validObservation, validObservation, validObservation],
+      focus: validFocus,
     });
     expect(result.success).toBe(true);
+  });
+
+  it("rejects a reflection missing the required focus", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Has observations but no focus.",
+      observations: [validObservation, validObservation],
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects a reflection with only 1 observation", () => {
@@ -112,6 +130,79 @@ describe("reflectionOutputSchema", () => {
       summary: "Summary.",
       observations: [
         { ...validObservation, confidence: "certain" },
+        validObservation,
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects the retired 'tentative' confidence value", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Summary.",
+      observations: [
+        { ...validObservation, confidence: "tentative" },
+        validObservation,
+      ],
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("defaults counter_evidence to [] when omitted", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Summary.",
+      observations: [validObservation, validObservation],
+      focus: validFocus,
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.mode === "reflection") {
+      expect(result.data.observations[0].counter_evidence).toEqual([]);
+    }
+  });
+
+  it("defaults focus_followup to null when omitted", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Summary.",
+      observations: [validObservation, validObservation],
+      focus: validFocus,
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.mode === "reflection") {
+      expect(result.data.focus_followup).toBeNull();
+    }
+  });
+
+  it("rejects a focus with an invalid module value", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Summary.",
+      observations: [validObservation, validObservation],
+      focus: { ...validFocus, modules: ["journaling"] },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("accepts valid counter_evidence items", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Summary.",
+      observations: [
+        { ...validObservation, counter_evidence: [validEvidence] },
+        validObservation,
+      ],
+      focus: validFocus,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects more than 3 counter_evidence items", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "Summary.",
+      observations: [
+        { ...validObservation, counter_evidence: Array(4).fill(validEvidence) },
         validObservation,
       ],
     });

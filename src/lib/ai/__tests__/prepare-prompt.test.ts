@@ -24,7 +24,7 @@ describe("buildPreparePrompt — lean tiered shape", () => {
   it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
-    expect(PROMPT_VERSION).toBe("6.0.0");
+    expect(PROMPT_VERSION).toBe("6.2.0");
   });
 
   it("includes the PREPARE OPENER RULE in the system prompt", () => {

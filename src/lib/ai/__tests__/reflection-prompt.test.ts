@@ -98,6 +98,35 @@ describe("buildReflectionPrompt", () => {
     expect(out.user).toMatch(/framing only.*do NOT quote/);
   });
 
+  it("includes the FOCUS FOR NEXT WEEK rule + schema field in system", () => {
+    const out = buildReflectionPrompt(baseParams);
+    expect(out.system).toContain("FOCUS FOR NEXT WEEK");
+    expect(out.system).toContain('"focus"');
+    expect(out.system).toContain("before_you_send");
+  });
+
+  it("omits the LAST WEEK'S FOCUS user block when no prior focus is given", () => {
+    const out = buildReflectionPrompt(baseParams);
+    expect(out.user).not.toContain("LAST WEEK'S FOCUS");
+  });
+
+  it("includes the LAST WEEK'S FOCUS block with activity counts when provided", () => {
+    const out = buildReflectionPrompt({
+      ...baseParams,
+      priorFocus: {
+        theme: "You pull back when contradicted",
+        practice: "Name the discomfort out loud instead of going quiet.",
+        modules: ["review", "before_you_send"],
+        activityByModule: { review: 2, before_you_send: 0 },
+        activityTotal: 2,
+      },
+    });
+    expect(out.user).toContain("LAST WEEK'S FOCUS");
+    expect(out.user).toContain("You pull back when contradicted");
+    expect(out.user).toContain("review=2");
+    expect(out.user).toContain("total 2");
+  });
+
   it("stamps the current PROMPT_VERSION constant", () => {
     // Asserts equality against the imported constant, not a literal —
     // PROMPT_VERSION is shared across all builders in prompts.ts, so a
