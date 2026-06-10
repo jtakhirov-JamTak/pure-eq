@@ -49,36 +49,37 @@ export function TextareaTwoColumn({
   const right = value?.right ?? "";
 
   if (fill) {
-    // Two halves of one flex column. Each column wraps the VoiceInput in a
-    // flex-1 box so the input's `h-full` resolves against the space left after
-    // its label — the two inputs evenly share the main region, no scroll.
+    // Two stacked voice fields don't fit the no-scroll budget: splitting the
+    // region in half and letting each VoiceInput's chrome (label + mic bar +
+    // hint + redo) eat its share collapses each textarea to ~0px once the
+    // keyboard shrinks the viewport, hiding typed/transcribed text entirely.
+    // So this step is the deliberate exception that scrolls — fixed-height
+    // inputs in an overflow-y-auto column. At rest (keyboard closed) the two
+    // fields fit without scrolling; with the keyboard open the user scrolls
+    // within the step while the pinned FlowScreen footer/header stay put.
     return (
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="flex min-h-0 flex-1 flex-col">
-          <p className="mb-1.5 shrink-0 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
+        <div className="shrink-0">
+          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
             {leftLabel}
           </p>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <VoiceInput
-              value={left}
-              onChange={(next) => onChange({ left: next, right })}
-              fill
-              placeholder={leftPlaceholder}
-            />
-          </div>
+          <VoiceInput
+            value={left}
+            onChange={(next) => onChange({ left: next, right })}
+            rows={3}
+            placeholder={leftPlaceholder}
+          />
         </div>
-        <div className="flex min-h-0 flex-1 flex-col">
-          <p className="mb-1.5 shrink-0 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
+        <div className="shrink-0">
+          <p className="mb-1.5 text-[11px] font-bold uppercase tracking-[1px] text-ink-muted">
             {rightLabel}
           </p>
-          <div className="flex min-h-0 flex-1 flex-col">
-            <VoiceInput
-              value={right}
-              onChange={(next) => onChange({ left, right: next })}
-              fill
-              placeholder={rightPlaceholder}
-            />
-          </div>
+          <VoiceInput
+            value={right}
+            onChange={(next) => onChange({ left, right: next })}
+            rows={3}
+            placeholder={rightPlaceholder}
+          />
         </div>
       </div>
     );

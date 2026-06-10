@@ -42,6 +42,7 @@ export function VoiceInput({
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(MAX_RECORDING_SECONDS);
   const [hasRedo, setHasRedo] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
@@ -97,6 +98,12 @@ export function VoiceInput({
 
   async function startRecording() {
     safeSetError(null);
+    // Drop the soft keyboard before recording. In the no-scroll FlowScreen the
+    // record button + "Recording…" indicator sit BELOW the textarea; an open
+    // keyboard shrinks the viewport and clips them out of view, so the user
+    // can't tell recording is live. Blurring restores the full band. (Redo
+    // already starts recording without focusing, for the same reason.)
+    textareaRef.current?.blur();
     // Defensive: abort any still-in-flight transcribe from a previous cycle
     // before we overwrite recorder/stream refs. Redo only renders on idle,
     // but state-machine changes elsewhere could let a recording start while
@@ -267,6 +274,7 @@ export function VoiceInput({
         }`}
       >
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           rows={fill ? undefined : rows}
