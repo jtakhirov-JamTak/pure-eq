@@ -281,6 +281,10 @@ export default function ReviewPage() {
   const [tier, setTier] = useState<AiTier>("quick");
   const [data, setData] = useState<Record<string, unknown>>({});
   const [personId, setPersonId] = useState<string | null>(null);
+  // The exact conversation carried from the Convos→Review handoff, when known.
+  // Sent verbatim so the Review links to THIS thread instead of relying on the
+  // server's 7-day auto-link guess (which orphans reviews of older threads).
+  const [threadId, setThreadId] = useState<string | null>(null);
   // Set when a return-loop handoff (Prepare result / open-loop nudge / thread)
   // pre-selects the person — drives the banner on the person step.
   const [prefillName, setPrefillName] = useState<string | null>(null);
@@ -335,6 +339,7 @@ export default function ReviewPage() {
       const prefilled = parsed;
       setData((d) => ({ ...d, personName: prefilled.personName }));
       if (prefilled.personId) setPersonId(prefilled.personId);
+      if (prefilled.threadId) setThreadId(prefilled.threadId);
       setPrefillName(prefilled.personName ?? null);
     })();
     return () => {
@@ -390,6 +395,7 @@ export default function ReviewPage() {
       dataAndUpdate: data.dataAndUpdate,
       nextMove: data.nextMove,
       personId: personId || null,
+      threadId: threadId || null,
       idempotencyKey: idempotencyKeyRef.current,
       generateAi,
     };

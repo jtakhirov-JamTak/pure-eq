@@ -25,6 +25,12 @@ export type ReviewPrefillSource = "prepare_followup" | "loop_nudge" | "thread";
 export type ReviewPrefill = {
   personName?: string;
   personId?: string | null;
+  // The exact conversation the user is reviewing, when the entry point knows it
+  // (open-loop nudge / thread page). Carried so the Review links to THIS thread
+  // regardless of age — without it the server falls back to a 7-day auto-link
+  // window that silently orphans reviews of older conversations. Best-effort:
+  // the server re-verifies ownership and drops to auto-link if absent/invalid.
+  threadId?: string | null;
   // Why we routed here — drives the banner copy on the Review person step.
   source?: ReviewPrefillSource;
   userId?: string;
@@ -38,6 +44,7 @@ export async function stashReviewPrefill(p: {
   personName: string;
   personId: string | null;
   source: ReviewPrefillSource;
+  threadId?: string | null;
 }): Promise<void> {
   try {
     const { data } = await createClient().auth.getUser();
@@ -46,6 +53,7 @@ export async function stashReviewPrefill(p: {
     const payload: ReviewPrefill = {
       personName: p.personName,
       personId: p.personId,
+      threadId: p.threadId ?? null,
       source: p.source,
       userId,
       stashedAt: Date.now(),

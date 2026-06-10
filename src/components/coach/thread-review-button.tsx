@@ -10,14 +10,16 @@ import { stashReviewPrefill } from "@/lib/coach/review-prefill";
 export function ThreadReviewButton({
   personName,
   personId,
+  threadId,
 }: {
   personName: string;
   personId: string | null;
+  threadId: string;
 }) {
   const router = useRouter();
 
   async function go() {
-    await stashReviewPrefill({ personName, personId, source: "thread" });
+    await stashReviewPrefill({ personName, personId, threadId, source: "thread" });
     router.push("/coach/review");
   }
 

@@ -9,7 +9,7 @@ import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
-import { verifyPersonOwnership } from "@/lib/verify-ownership";
+import { verifyPersonOwnership, verifyThreadOwnership } from "@/lib/verify-ownership";
 import {
   spendCoins,
   refundCoins,
@@ -207,9 +207,18 @@ export async function runCoachModule<
   let effectiveThreadId: string | null = input.threadId ?? null;
   if (config.threadBehavior === "none") {
     effectiveThreadId = null;
-  } else if (config.threadBehavior === "auto_link") {
-    // Review/Repair: auto-link to most recent open thread < 7 days.
-    if (!effectiveThreadId && effectivePersonId) {
+  } else {
+    // A client-provided threadId is untrusted (the Convos→Review return loop
+    // now carries it). Verify it belongs to the user before linking — else a
+    // crafted request could attach an entry to another user's conversation.
+    // On failure, drop to null and let auto-link/auto-create resolve a thread
+    // the normal way rather than hard-failing the user's save.
+    if (effectiveThreadId) {
+      const ownsThread = await verifyThreadOwnership(supabase, user.id, effectiveThreadId);
+      if (!ownsThread) effectiveThreadId = null;
+    }
+    if (config.threadBehavior === "auto_link" && !effectiveThreadId && effectivePersonId) {
+      // Review/Repair: auto-link to most recent open thread < 7 days.
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const { data: recentThread } = await supabase
         .from("conversation_threads")

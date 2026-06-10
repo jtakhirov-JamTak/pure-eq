@@ -21,6 +21,7 @@ export function OpenConversations({ loops }: { loops: OpenLoop[] }) {
     await stashReviewPrefill({
       personName: loop.personName,
       personId: loop.personId,
+      threadId: loop.threadId,
       source: "loop_nudge",
     });
     router.push("/coach/review");

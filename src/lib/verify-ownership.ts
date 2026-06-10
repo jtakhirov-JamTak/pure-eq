@@ -19,3 +19,23 @@ export async function verifyPersonOwnership(
     .maybeSingle();
   return !!data;
 }
+
+/**
+ * Verify that a thread_id belongs to the authenticated user. Same belt-and-
+ * suspenders rationale as verifyPersonOwnership: a client may now hand a
+ * threadId to the coach module (Convos→Review return loop), so a crafted
+ * request could otherwise attach an entry to another user's conversation.
+ */
+export async function verifyThreadOwnership(
+  supabase: SupabaseClient,
+  userId: string,
+  threadId: string
+): Promise<boolean> {
+  const { data } = await supabase
+    .from("conversation_threads")
+    .select("thread_id")
+    .eq("thread_id", threadId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return !!data;
+}

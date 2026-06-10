@@ -164,6 +164,7 @@ export default async function ConversationDetailPage({
             <ThreadReviewButton
               personName={personName}
               personId={thread.person_id}
+              threadId={thread.thread_id}
             />
           ) : (
             <Link
