@@ -22,13 +22,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { isAdmin } from "@/lib/admin";
-import {
-  spendCoins,
-  refundCoins,
-  getBalance,
-  generationSpendKey,
-  nextGenerationAttempt,
-} from "@/lib/coins";
+import { makeGenerationCoinCallbacks } from "@/lib/coins";
 import { COIN_COSTS } from "@/types";
 import {
   generateReflection,
@@ -81,54 +75,29 @@ export async function POST(req: Request) {
   // Service-role client — the INSERT bypasses RLS (no INSERT policy).
   const serviceClient = createServiceClient();
 
-  // Per-attempt spend key, computed lazily inside the reserve callback so a
-  // cache hit never touches the coin ledger. Base is the user + UTC date — the
-  // cache short-circuit guarantees at most one successful generation per 7-day
-  // window, and the `:gen:<attempt>` suffix (count of prior refunds) gives a
-  // genuine retry-after-failure a fresh key while a concurrent double-fire of
-  // the same attempt collapses on the unique (user, ref_key) index to one
-  // charge — the exact retry-leak fix from run-module.ts.
+  // Per-attempt spend key semantics (count prior refunds → `:gen:<n>`, lazy
+  // inside the reserve so a cache hit never touches the ledger) live in
+  // makeGenerationCoinCallbacks — shared verbatim with the monthly-report
+  // route. Base is the user + UTC date. Admins are not charged: omit the
+  // callbacks entirely.
   const spendBase = `weekly_insights:${user.id}:${new Date()
     .toISOString()
     .slice(0, 10)}`;
-  let spendKey: string | null = null;
+  const coinCallbacks = admin
+    ? {}
+    : makeGenerationCoinCallbacks(
+        user.id,
+        insightsCost,
+        "debit_weekly_insights",
+        spendBase,
+      );
 
   try {
-    const result = await generateReflection(serviceClient, user.id, {
-      // Coin reserve — runs after the cache miss, before the Opus call. Admins
-      // are not charged (and never reach this since we omit the callback for
-      // them).
-      reserveCoins: admin
-        ? undefined
-        : async () => {
-            const attempt = await nextGenerationAttempt(user.id, spendBase);
-            spendKey = generationSpendKey(spendBase, attempt);
-            const spend = await spendCoins(
-              user.id,
-              insightsCost,
-              "debit_weekly_insights",
-              spendKey,
-            );
-            if (spend === "insufficient") {
-              return {
-                result: "insufficient",
-                balance: await getBalance(user.id),
-                needed: insightsCost,
-              };
-            }
-            if (spend === "invalid") return { result: "error" };
-            // 'ok' = THIS call charged → fresh (refund on failure). 'already_-
-            // applied' = a concurrent/prior request under this key already paid
-            // → not fresh, so a failure here must NOT refund their charge.
-            return { result: "charged", fresh: spend === "ok" };
-          },
-      // Release the hold if a charged generation fails or downgrades to a
-      // refusal. Keyed on the same per-attempt spend key, so it's idempotent
-      // and lines up with nextGenerationAttempt's refund count.
-      onChargedGenerationFailed: async () => {
-        if (spendKey) await refundCoins(user.id, insightsCost, spendKey);
-      },
-    });
+    const result = await generateReflection(
+      serviceClient,
+      user.id,
+      coinCallbacks,
+    );
 
     if (result.status === "ai_disabled") {
       // DISABLE_AI is set. No charge happened (the switch trips before the coin

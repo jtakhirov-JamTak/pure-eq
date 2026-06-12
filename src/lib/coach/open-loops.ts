@@ -11,6 +11,7 @@
 // Read-only; every query inspects .error per the server-component read lesson.
 import { createClient } from "@/lib/supabase/server";
 import { captureServerRead } from "@/lib/read-capture";
+import { THREADED_RECORD_TYPES } from "@/types";
 
 export type OpenLoop = {
   threadId: string;
@@ -58,9 +59,9 @@ export async function getConversationsOverview(
 
   const [recsRes, personsRes] = await Promise.all([
     // One bounded read serves both derivations: record_type drives loop
-    // detection, and any surviving row marks the thread as non-deleted. Threads
-    // only ever carry prepare/pulse_check/review entries (BYS is stateless,
-    // repair is legacy/null), so this filter never drops a real survivor.
+    // detection, and any surviving row marks the thread as non-deleted. Only
+    // THREADED_RECORD_TYPES carry a thread_id (BYS is stateless, repair is
+    // legacy/null), so this filter never drops a real survivor.
     // .limit(1000) makes the PostgREST cap explicit: with >1000 entries across
     // the 50 newest open threads an older thread could be missed from these
     // browse lists — acceptable for a top-3 surface, not a completeness one.
@@ -69,7 +70,7 @@ export async function getConversationsOverview(
       .select("thread_id, record_type")
       .eq("user_id", userId)
       .in("thread_id", threadIds)
-      .in("record_type", ["prepare", "pulse_check", "review"])
+      .in("record_type", [...THREADED_RECORD_TYPES])
       .eq("is_complete", true)
       .is("deleted_at", null)
       .limit(1000),

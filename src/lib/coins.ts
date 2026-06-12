@@ -175,6 +175,62 @@ export async function refundCoins(
 }
 
 /**
+ * Reserve/refund callback pair for a generator that takes its coin policy as
+ * injected callbacks (Insights weekly `generateReflection`, Monthly Report
+ * `generateMonthlyReport` — both share this exact contract). Extracted because
+ * the two routes previously duplicated these ~30 lines verbatim; the helper
+ * differs per call site only in cost, txn reason, and spendBase.
+ *
+ * Contract (mirrors GenerateOptions docs in src/lib/insights/generate.ts):
+ *  - reserveCoins: per-attempt spend key (count prior refunds → `:gen:<n>`),
+ *    then atomic debit. 'ok' = THIS call charged → fresh:true (refund on
+ *    failure). 'already_applied' = a concurrent/prior request under the same
+ *    key paid → fresh:false (a failure here must NOT refund their charge).
+ *    'insufficient' → caller returns 402 without touching the LLM. 'invalid'
+ *    → error (fail closed).
+ *  - onChargedGenerationFailed: release the hold on the SAME per-attempt key
+ *    (idempotent; refund rows advance nextGenerationAttempt for retries).
+ *
+ * Admins bypass coin debits — callers must pass NO callbacks for an admin
+ * (omit, don't wrap), same as before the extraction.
+ */
+export function makeGenerationCoinCallbacks(
+  userId: string,
+  cost: number,
+  reason: CoinTxnReason,
+  spendBase: string,
+): {
+  reserveCoins: () => Promise<
+    | { result: "charged"; fresh: boolean }
+    | { result: "insufficient"; balance: number; needed: number }
+    | { result: "error" }
+  >;
+  onChargedGenerationFailed: () => Promise<void>;
+} {
+  // Shared closure state: the refund must target the exact key the debit used.
+  let spendKey: string | null = null;
+  return {
+    reserveCoins: async () => {
+      const attempt = await nextGenerationAttempt(userId, spendBase);
+      spendKey = generationSpendKey(spendBase, attempt);
+      const spend = await spendCoins(userId, cost, reason, spendKey);
+      if (spend === "insufficient") {
+        return {
+          result: "insufficient",
+          balance: await getBalance(userId),
+          needed: cost,
+        };
+      }
+      if (spend === "invalid") return { result: "error" };
+      return { result: "charged", fresh: spend === "ok" };
+    },
+    onChargedGenerationFailed: async () => {
+      if (spendKey) await refundCoins(userId, cost, spendKey);
+    },
+  };
+}
+
+/**
  * Grant the one-time 50-coin signup bonus. Idempotent on the fixed
  * SIGNUP_GRANT_REF_KEY — a retake of onboarding, a strict-mode double-fire, or
  * a retry all collapse to a single grant per user. Safe to call on every

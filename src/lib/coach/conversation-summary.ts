@@ -16,7 +16,10 @@
 //
 // Threads whose entries are all soft-deleted (a deleted conversation) drop out:
 // we only fetch is_complete + deleted_at-null entries, and skip any thread with
-// zero surviving entries.
+// zero surviving entries. NB: the three derived tables queried below must stay
+// in lockstep with THREADED_RECORD_TYPES (src/types) — that constant is the
+// single source for "which entry types make a conversation exist"; if a new
+// module ever threads, add its table to these reads.
 import { createClient } from "@/lib/supabase/server";
 import { captureServerRead } from "@/lib/read-capture";
 

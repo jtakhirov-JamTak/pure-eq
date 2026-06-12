@@ -26,6 +26,18 @@ export type ThreadStatus =
   | "worsened"
   | "ended";
 
+// The raw_records record_types that can carry a thread_id — i.e. the entry
+// types that make a conversation "exist". Single source for every reader that
+// decides whether a thread has surviving entries (conversation-stats,
+// open-loops; conversation-summary queries the three derived TABLES, which
+// must stay in lockstep with this list). If a new module ever threads (e.g. a
+// repair re-attach), add it HERE and audit those readers.
+export const THREADED_RECORD_TYPES = [
+  "prepare",
+  "pulse_check",
+  "review",
+] as const;
+
 export type ImprovementGoal =
   | "staying_calm"
   | "understanding_people"

@@ -17,13 +17,7 @@ import { createServiceClient } from "@/lib/supabase/service";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
 import { isAdmin } from "@/lib/admin";
-import {
-  spendCoins,
-  refundCoins,
-  getBalance,
-  generationSpendKey,
-  nextGenerationAttempt,
-} from "@/lib/coins";
+import { makeGenerationCoinCallbacks } from "@/lib/coins";
 import { COIN_COSTS } from "@/types";
 import {
   generateMonthlyReport,
@@ -83,41 +77,28 @@ export async function POST(req: Request) {
   // Service-role client — the INSERT bypasses RLS (no INSERT policy).
   const serviceClient = createServiceClient();
 
-  // Per-attempt spend key (same retry-leak fix as the weekly + Coach): base
-  // is user + UTC date; the :gen:<attempt> suffix gives a genuine retry a
-  // fresh key while a concurrent double-tap collapses to one charge.
+  // Per-attempt spend key semantics (same retry-leak fix as the weekly +
+  // Coach) live in makeGenerationCoinCallbacks — shared verbatim with the
+  // weekly route. Base is user + UTC date. Admins are not charged: omit the
+  // callbacks entirely.
   const spendBase = `monthly_report:${user.id}:${new Date()
     .toISOString()
     .slice(0, 10)}`;
-  let spendKey: string | null = null;
+  const coinCallbacks = admin
+    ? {}
+    : makeGenerationCoinCallbacks(
+        user.id,
+        reportCost,
+        "debit_monthly_report",
+        spendBase,
+      );
 
   try {
-    const result = await generateMonthlyReport(serviceClient, user.id, {
-      reserveCoins: admin
-        ? undefined
-        : async () => {
-            const attempt = await nextGenerationAttempt(user.id, spendBase);
-            spendKey = generationSpendKey(spendBase, attempt);
-            const spend = await spendCoins(
-              user.id,
-              reportCost,
-              "debit_monthly_report",
-              spendKey,
-            );
-            if (spend === "insufficient") {
-              return {
-                result: "insufficient",
-                balance: await getBalance(user.id),
-                needed: reportCost,
-              };
-            }
-            if (spend === "invalid") return { result: "error" };
-            return { result: "charged", fresh: spend === "ok" };
-          },
-      onChargedGenerationFailed: async () => {
-        if (spendKey) await refundCoins(user.id, reportCost, spendKey);
-      },
-    });
+    const result = await generateMonthlyReport(
+      serviceClient,
+      user.id,
+      coinCallbacks,
+    );
 
     if (result.status === "ai_disabled") {
       return NextResponse.json(

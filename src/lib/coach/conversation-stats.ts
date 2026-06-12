@@ -12,7 +12,7 @@
 // Read-only; every query inspects .error per the server-component read lesson.
 import { createClient } from "@/lib/supabase/server";
 import { captureServerRead } from "@/lib/read-capture";
-import type { RelationshipDomain } from "@/types";
+import { THREADED_RECORD_TYPES, type RelationshipDomain } from "@/types";
 
 export type RelationshipGroup =
   | "work"
@@ -77,14 +77,13 @@ export async function getConversationStats(
       .select("thread_id, status, person_id")
       .eq("user_id", userId)
       .limit(1000),
-    // Survival check mirrors open-loops.ts: threads only ever carry
-    // prepare/pulse_check/review entries.
+    // Survival check mirrors open-loops.ts via the shared constant.
     supabase
       .from("raw_records")
       .select("thread_id")
       .eq("user_id", userId)
       .not("thread_id", "is", null)
-      .in("record_type", ["prepare", "pulse_check", "review"])
+      .in("record_type", [...THREADED_RECORD_TYPES])
       .eq("is_complete", true)
       .is("deleted_at", null)
       .limit(1000),
