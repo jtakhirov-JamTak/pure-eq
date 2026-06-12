@@ -27,6 +27,7 @@ export type ConversationOrigin = "prepare" | "pulse_check";
 
 export type ConversationSummary = {
   threadId: string;
+  personId: string | null;
   personName: string;
   topic: string | null;
   origin: ConversationOrigin | null;
@@ -215,6 +216,7 @@ export async function getConversationSummaries(
 
     summaries.push({
       threadId: t.thread_id,
+      personId: t.person_id,
       personName: t.person_id
         ? (nameById.get(t.person_id) ?? "Someone")
         : "General",

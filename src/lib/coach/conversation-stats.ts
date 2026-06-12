@@ -42,6 +42,16 @@ const DOMAIN_TO_GROUP: Record<RelationshipDomain, RelationshipGroup> = {
   other: "other",
 };
 
+// One row in the Convos "People" section — the entry point into the
+// per-person history page (/people/[personId]).
+export type PersonOverviewRow = {
+  personId: string;
+  name: string;
+  conversations: number;
+  open: number; // open + stabilizing
+  lastActivityAt: string | null;
+};
+
 export type ConversationStats = {
   total: number;
   open: number; // open + stabilizing
@@ -51,6 +61,11 @@ export type ConversationStats = {
   // names are NOT unique (dedup is per name+domain), so keying on name
   // collides for "Alex (friend)" + "Alex (coworker)".
   topPeople: { personId: string; name: string; count: number }[];
+  // Everyone with >= 1 surviving conversation, most recent activity first,
+  // capped at 10. Computed in the same read pass as the stats (no extra
+  // queries). Persons with only tools/BYS entries and no conversation don't
+  // appear — the page is conversation-centric (v0).
+  people: PersonOverviewRow[];
   hasAny: boolean;
 };
 
@@ -60,8 +75,11 @@ const EMPTY: ConversationStats = {
   resolved: 0,
   byGroup: [],
   topPeople: [],
+  people: [],
   hasAny: false,
 };
+
+const MAX_PEOPLE_ROWS = 10;
 
 export async function getConversationStats(
   userId: string,
@@ -74,7 +92,7 @@ export async function getConversationStats(
   const [threadsRes, recsRes, personsRes] = await Promise.all([
     supabase
       .from("conversation_threads")
-      .select("thread_id, status, person_id")
+      .select("thread_id, status, person_id, last_activity_at")
       .eq("user_id", userId)
       .limit(1000),
     // Survival check mirrors open-loops.ts via the shared constant.
@@ -135,11 +153,16 @@ export async function getConversationStats(
   let resolved = 0;
   const groupCounts = new Map<RelationshipGroup, number>();
   const personCounts = new Map<string, number>();
+  const personRows = new Map<
+    string,
+    { conversations: number; open: number; lastActivityAt: string | null }
+  >();
 
   for (const t of threadsRes.data ?? []) {
     if (!surviving.has(t.thread_id)) continue; // deleted/empty thread
     total += 1;
-    if (t.status === "open" || t.status === "stabilizing") open += 1;
+    const isOpen = t.status === "open" || t.status === "stabilizing";
+    if (isOpen) open += 1;
     else if (t.status === "resolved" || t.status === "ended") resolved += 1;
 
     const person = t.person_id ? personById.get(t.person_id) : undefined;
@@ -149,6 +172,20 @@ export async function getConversationStats(
     groupCounts.set(group, (groupCounts.get(group) ?? 0) + 1);
     if (t.person_id && person) {
       personCounts.set(t.person_id, (personCounts.get(t.person_id) ?? 0) + 1);
+      const row = personRows.get(t.person_id) ?? {
+        conversations: 0,
+        open: 0,
+        lastActivityAt: null,
+      };
+      row.conversations += 1;
+      if (isOpen) row.open += 1;
+      if (
+        t.last_activity_at &&
+        (!row.lastActivityAt || t.last_activity_at > row.lastActivityAt)
+      ) {
+        row.lastActivityAt = t.last_activity_at;
+      }
+      personRows.set(t.person_id, row);
     }
   }
 
@@ -165,5 +202,22 @@ export async function getConversationStats(
       count,
     }));
 
-  return { total, open, resolved, byGroup, topPeople, hasAny: total > 0 };
+  const people: PersonOverviewRow[] = [...personRows.entries()]
+    .map(([personId, row]) => ({
+      personId,
+      name: personById.get(personId)?.name ?? "Someone",
+      ...row,
+    }))
+    .sort((a, b) => (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? ""))
+    .slice(0, MAX_PEOPLE_ROWS);
+
+  return {
+    total,
+    open,
+    resolved,
+    byGroup,
+    topPeople,
+    people,
+    hasAny: total > 0,
+  };
 }

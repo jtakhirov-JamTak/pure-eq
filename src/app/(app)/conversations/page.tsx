@@ -94,6 +94,35 @@ export default async function ConversationsPage() {
         </div>
       )}
 
+      {/* People — the entry point into per-person relationship history
+          (/people/[personId]): every conversation with that person, open and
+          closed, plus their linked in-the-moment entries. */}
+      {stats.people.length > 0 && (
+        <div className="mt-6">
+          <Kicker className="text-accent-ink">People</Kicker>
+          <ul className="mt-2.5 divide-y divide-hairline rounded-card border border-hairline bg-surface px-4">
+            {stats.people.map((p) => (
+              <li key={p.personId}>
+                <Link
+                  href={`/people/${p.personId}`}
+                  className="flex min-h-11 items-center gap-3 py-3 active:opacity-70"
+                >
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
+                    {p.name}
+                  </span>
+                  <span className="shrink-0 text-[11px] font-medium text-ink-soft">
+                    {p.conversations} conversation
+                    {p.conversations === 1 ? "" : "s"}
+                    {p.open > 0 ? ` · ${p.open} open` : ""}
+                  </span>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-ink-soft" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* See all conversations */}
       <Link
         href="/conversations/all"
