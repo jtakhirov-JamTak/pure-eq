@@ -14,14 +14,17 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Build-time env only. CI deliberately holds NO runtime/god keys: the
+    # service-role key, AI keys, and ADMIN_EMAIL are all read at request time
+    # inside handlers, which CI never executes since the E2E step was removed
+    # (2026-06-11 — it ran one login spec against PROD infra with the prod
+    # service-role key; all risk, near-zero coverage). E2E still runs locally
+    # via ALLOW_E2E_AGAINST_REMOTE=1; the full CI e2e rail against a dedicated
+    # test project is a post-launch item (docs/implementation_plan_2026_06.md
+    # item 1). The NEXT_PUBLIC values are publishable client config, not secrets.
     env:
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
-      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      ADMIN_EMAIL: ${{ secrets.ADMIN_EMAIL }}
-      ALLOW_E2E_AGAINST_REMOTE: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -45,17 +48,3 @@ jobs:
 
       - name: Production build
         run: npm run build
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium
-
-      - name: E2E tests
-        run: npm run test:e2e
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: playwright-report/
-          retention-days: 7
