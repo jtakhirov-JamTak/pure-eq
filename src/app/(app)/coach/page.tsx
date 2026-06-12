@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { readFirstName } from "@/lib/user-metadata";
+import { getConversationsOverview } from "@/lib/coach/open-loops";
+import { OpenConversations } from "@/components/conversations/open-conversations";
 
 function firstNameFromEmail(email: string | null | undefined): string {
   if (!email) return "";
@@ -22,6 +24,10 @@ export default async function CoachPage() {
     readFirstName(user.user_metadata) || firstNameFromEmail(user.email);
   const greeting = firstName ? `Hi, ${firstName}.` : "Hi there.";
 
+  // Open-loop resume cards on Home too (not just Convos): the reminder that
+  // you prepared for a conversation should hit as soon as the app opens.
+  const { openLoops } = await getConversationsOverview(user.id, 3);
+
   return (
     <div className="relative min-h-full px-5 pt-4 pb-32">
       <StormBackground />
@@ -38,6 +44,14 @@ export default async function CoachPage() {
           Prepare for, review, or pressure-check a conversation.
         </p>
       </div>
+
+      {/* Pick up where you left off — renders nothing when there are no open
+          loops, so the hero stays at the top for everyone else. */}
+      {openLoops.length > 0 && (
+        <div className="mb-6">
+          <OpenConversations loops={openLoops} />
+        </div>
+      )}
 
       {/* Before You Send — hero. Harmonized to Storm: the old yellow/orange
           gradient is recolored to a deep sky->navy so it reads as the hero

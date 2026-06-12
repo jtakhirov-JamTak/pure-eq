@@ -6,9 +6,9 @@ import { StormBackground } from "@/components/brand/StormBackground";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
 import { getConversationsOverview } from "@/lib/coach/open-loops";
-import { getActivityStats } from "@/lib/coach/activity-stats";
+import { getConversationStats } from "@/lib/coach/conversation-stats";
 import { OpenConversations } from "@/components/conversations/open-conversations";
-import { ActivityDashboard } from "@/components/conversations/activity-dashboard";
+import { ConversationStatsCard } from "@/components/conversations/conversation-stats";
 
 // Conversations tab landing. Not a wall of conversations — three ways in:
 //   1. Pick up where you left off (most recent open loop) + open conversations
@@ -22,7 +22,7 @@ export default async function ConversationsPage() {
 
   const [{ openLoops, openThreads }, stats] = await Promise.all([
     getConversationsOverview(user.id, 3),
-    getActivityStats(user.id),
+    getConversationStats(user.id),
   ]);
 
   return (
@@ -41,9 +41,10 @@ export default async function ConversationsPage() {
         </p>
       </div>
 
-      {/* Your activity dashboard — at the top: the heatmap is the at-a-glance
-          overview of everything below it. */}
-      <ActivityDashboard stats={stats} />
+      {/* Conversation stats — at the top: the at-a-glance overview of
+          everything below it. (The activity heatmap this replaced now renders
+          inside the Monthly Report instead.) */}
+      <ConversationStatsCard stats={stats} />
 
       <div className="mt-6">
         {openLoops.length > 0 ? (
