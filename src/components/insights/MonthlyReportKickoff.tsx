@@ -8,6 +8,7 @@ import {
 } from "@/lib/ai/schemas";
 import {
   isReportSnapshot,
+  MIN_ENTRIES_FOR_REPORT,
   type ReportSnapshot,
 } from "@/lib/insights/report-snapshot";
 import { COIN_COSTS } from "@/types";
@@ -86,7 +87,8 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
       }
 
       if (res.status === 409 && data?.error === "insufficient_entries") {
-        const needed = typeof data.needed === "number" ? data.needed : 10;
+        const needed =
+          typeof data.needed === "number" ? data.needed : MIN_ENTRIES_FOR_REPORT;
         setState({
           phase: "error",
           message: `You need at least ${needed} entries in the last month before a report. Keep using Coach and the tools.`,
@@ -148,7 +150,9 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
     state.phase === "generating"
       ? "Generating your monthly report. This can take up to a minute."
       : state.phase === "ready"
-        ? "Your monthly report is ready."
+        ? state.report.mode === "refusal"
+          ? "Checked — not enough material for a report this month. You weren't charged."
+          : "Your monthly report is ready."
         : state.phase === "error"
           ? "Could not generate your report. You weren't charged."
           : state.phase === "insufficient"
@@ -208,10 +212,14 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
     body = (
       <Card className="mt-4 p-5">
         <Kicker as="h2">Your monthly report</Kicker>
+        {/* The DIFFERENTIATED message (server copy for 503/429/409, network
+            copy offline) — not a fixed paragraph that claims "we've been
+            notified" on errors nothing captured. */}
         <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
-          Something went wrong generating this month&apos;s report —
-          we&apos;ve been notified. You weren&apos;t charged. Try again in a
-          minute.
+          {state.message}
+        </p>
+        <p className="mt-1.5 text-[12px] font-medium text-ink-soft">
+          You weren&apos;t charged.
         </p>
         {kindLabel ? (
           <p className="mt-2 text-[12px] font-medium text-ink-soft">

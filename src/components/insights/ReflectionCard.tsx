@@ -4,7 +4,12 @@ import { Kicker } from "@/components/ui/kicker";
 
 // Formats "2026-04-20" or ISO timestamp into "Apr 20, 2026".
 function formatDate(input: string): string {
-  const d = new Date(input);
+  // Bare YYYY-MM-DD parses as UTC midnight — rendered client-side west of
+  // UTC that shows the PREVIOUS day. Parse the parts into a local date.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  const d = ymd
+    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    : new Date(input);
   if (Number.isNaN(d.getTime())) return input;
   return d.toLocaleDateString("en-US", {
     month: "short",

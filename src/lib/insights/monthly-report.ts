@@ -25,15 +25,16 @@
 //     schedule (first/gentle/realistic) modulates FRAMING only.
 
 import Anthropic from "@anthropic-ai/sdk";
-import * as Sentry from "@sentry/nextjs";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import {
   buildMonthlyReportPrompt,
+  promptDataLine,
   type ReportFocusHistoryItem,
   type ReportPersonSignal,
   type ReportTone,
 } from "@/lib/ai/prompts";
+import { captureServerRead } from "@/lib/read-capture";
 import {
   monthlyReportOutputSchema,
   reflectionOutputSchema,
@@ -54,11 +55,13 @@ import {
 } from "./generate";
 import {
   bucketFor,
+  BUCKET_PRIORITY,
   type ActivityBucket,
   type DayCell,
 } from "@/lib/coach/activity-types";
 import {
   isReportSnapshot,
+  MIN_ENTRIES_FOR_REPORT,
   REPORT_GRID_WEEKS,
   type ReportSnapshot,
 } from "./report-snapshot";
@@ -66,7 +69,12 @@ import { COIN_COSTS, type ProfileType, type RelationshipDomain } from "@/types";
 
 // Re-export the snapshot surface so server-side consumers can keep importing
 // from this module; client components import from ./report-snapshot directly.
-export { isReportSnapshot, REPORT_GRID_WEEKS, type ReportSnapshot };
+export {
+  isReportSnapshot,
+  MIN_ENTRIES_FOR_REPORT,
+  REPORT_GRID_WEEKS,
+  type ReportSnapshot,
+};
 
 // v1 (2026-06-12): initial shape. Bump on ANY change to ai_json or
 // server_json shape — the reader gates on exact match and falls through to
@@ -74,13 +82,21 @@ export { isReportSnapshot, REPORT_GRID_WEEKS, type ReportSnapshot };
 export const REPORT_GENERATOR_VERSION = "monthly_report_v1";
 
 export const REPORT_IDEMPOTENCY_WINDOW_MS = 28 * 24 * 60 * 60 * 1000;
+// A REFUSAL row caches for one week, not the full 28 days: refusals refund,
+// the user is told "try again in a week or two", and they're presumably
+// adding entries — locking them out of a purchasable report for a month over
+// a thin-data check contradicts the copy AND the business interest. Real
+// reports keep the full window. The page reader applies the SAME mode-aware
+// window (symmetric guard).
+export const REPORT_REFUSAL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 export const REPORT_INPUT_WINDOW_DAYS = 28;
 const REPORT_INPUT_WINDOW_MS = REPORT_INPUT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 
-// Minimum completed entries INSIDE the window before a report can generate.
-// A month-level report over a handful of entries is garbage — silence over
-// garbage. Mirrored in the /insights page UI; this is the un-bypassable half.
-export const MIN_ENTRIES_FOR_REPORT = 10;
+// Grading floor for the LIVE-graded latest focus: a focus younger than this
+// with zero activity is "too recent to grade" (null), not "not acted on" —
+// the weekly cadence gives every focus a full week before it's judged.
+// Any real activity grades it acted-on immediately regardless of age.
+export const FOCUS_GRADING_MIN_AGE_MS = 6 * 24 * 60 * 60 * 1000;
 export const REPORT_GATE_RECORD_TYPES = [
   "prepare",
   "review",
@@ -182,26 +198,32 @@ function startOfDay(d: Date): Date {
 }
 
 /**
- * Build the 4-week heatmap snapshot from window rows. Pure — mirrors
- * activity-stats buildGrid (Mon..Sun rows × week columns, dominant bucket by
- * count with the same priority tie-break) but parameterized on `now` and
- * fixed at REPORT_GRID_WEEKS so the report's grid is reproducible in tests.
+ * Monday of the oldest week in the report grid. Exported so the orchestrator
+ * can window the legend's byType/total to EXACTLY the days the grid shows —
+ * counting the full rolling 28 days while the Monday-aligned grid shows
+ * 22–28 of them would make the legend disagree with the visible cells.
  */
-export function buildReportGrid(
-  items: Array<{ createdAt: string; bucket: ActivityBucket }>,
-  now: Date,
-): DayCell[][] {
-  const priority: ActivityBucket[] = [
-    "conversations",
-    "pulse",
-    "regulation",
-    "beforeSend",
-  ];
+export function reportGridStart(now: Date): Date {
   const daysSinceMonday = (now.getDay() + 6) % 7;
   const thisMonday = startOfDay(now);
   thisMonday.setDate(thisMonday.getDate() - daysSinceMonday);
   const gridStart = new Date(thisMonday);
   gridStart.setDate(thisMonday.getDate() - (REPORT_GRID_WEEKS - 1) * 7);
+  return gridStart;
+}
+
+/**
+ * Build the 4-week heatmap snapshot from window rows. Pure — mirrors
+ * activity-stats buildGrid (Mon..Sun rows × week columns, dominant bucket by
+ * the shared BUCKET_PRIORITY tie-break) but parameterized on `now` and fixed
+ * at REPORT_GRID_WEEKS so the report's grid is reproducible in tests.
+ */
+export function buildReportGrid(
+  items: Array<{ createdAt: string; bucket: ActivityBucket }>,
+  now: Date,
+): DayCell[][] {
+  const priority = BUCKET_PRIORITY;
+  const gridStart = reportGridStart(now);
 
   const byDay = new Map<number, Record<ActivityBucket, number>>();
   for (const item of items) {
@@ -284,6 +306,26 @@ export function toneForReportIndex(index: number): ReportTone {
   if (index === 0) return "first";
   if (index === 1) return "gentle";
   return "realistic";
+}
+
+/**
+ * Grade the latest (successor-less) focus from live activity counts:
+ *   any activity        → acted on (credit early engagement immediately)
+ *   none + under a week → null ("too recent to grade" — the weekly cadence
+ *                         gives every focus a full week before judgment)
+ *   none + a week old   → not acted on
+ * Without the age floor, generating a report minutes after a weekly
+ * reflection would brand the brand-new focus "not acted on" in the card AND
+ * in the prompt's focus block. Exported for unit tests.
+ */
+export function gradeUngradedFocus(
+  activityTotal: number,
+  setAtIso: string,
+  nowMs: number,
+): boolean | null {
+  if (activityTotal >= 1) return true;
+  const ageMs = nowMs - new Date(setAtIso).getTime();
+  return ageMs < FOCUS_GRADING_MIN_AGE_MS ? null : false;
 }
 
 type EntryMeta = {
@@ -413,6 +455,17 @@ async function readCachedReport(
   const aiParse = monthlyReportOutputSchema.safeParse(latest.data.ai_json);
   if (!aiParse.success) return null; // legacy/hand-edited shape → regen
   if (!isReportSnapshot(latest.data.server_json)) return null;
+
+  // Refusal rows expire after a week (REPORT_REFUSAL_WINDOW_MS) so a user
+  // who keeps adding entries can retry — the refusal copy promises exactly
+  // that. Real reports hold the full 28-day window.
+  if (
+    aiParse.data.mode === "refusal" &&
+    Date.now() - new Date(latest.data.generated_at).getTime() >=
+      REPORT_REFUSAL_WINDOW_MS
+  ) {
+    return null;
+  }
 
   return {
     ...latest.data,
@@ -551,10 +604,15 @@ export async function generateMonthlyReport(
         .gte("generated_at", periodStart)
         .order("generated_at", { ascending: true })
         .limit(10),
+      // Tone-schedule index counts REAL reports only — a refunded refusal
+      // month must not consume the "first/baseline" slot (the user has never
+      // actually seen a report). jsonb path filter; mode is Zod-validated
+      // before every INSERT.
       supabase
         .from("monthly_reports")
         .select("report_id", { count: "exact", head: true })
-        .eq("user_id", userId),
+        .eq("user_id", userId)
+        .eq("ai_json->>mode", "report"),
     ]);
 
   if (personsRes.error) {
@@ -577,15 +635,16 @@ export async function generateMonthlyReport(
       "db_read_failed",
     );
   }
+  // Cooldown-latched via captureServerRead (per-area:kind 5-min latch) —
+  // these supplementary reads degrade the report rather than fail it, and an
+  // outage must not emit one event per request (CLAUDE.md latch rule).
   for (const [res, kind] of [
     [bysRes, "bys_window_read"],
     [threadsRes, "threads_window_read"],
     [weekliesRes, "weeklies_window_read"],
   ] as const) {
     if (res.error) {
-      Sentry.captureException(new Error(`${kind}_failed`), {
-        tags: { area: "monthly_report", kind },
-      });
+      captureServerRead("monthly_report", kind, new Error(`${kind}_failed`));
     }
   }
 
@@ -610,8 +669,12 @@ export async function generateMonthlyReport(
   for (const r of rawRecords) {
     entryMeta.set(r.raw_record_id, {
       recordType: r.record_type,
+      // Entries by a person we can't resolve (deactivated since) get NO
+      // context — falling back to "other" would let their quotes pass the
+      // context check for "other" tendencies while the person is excluded
+      // from contextCounts (asymmetric).
       context: r.person_id
-        ? (personById.get(r.person_id)?.context ?? "other")
+        ? (personById.get(r.person_id)?.context ?? null)
         : null,
     });
   }
@@ -658,9 +721,12 @@ export async function generateMonthlyReport(
     .map(([personId, entryCount]): ReportPersonSignal | null => {
       const p = personById.get(personId);
       const t = threadCounts.get(personId) ?? { open: 0, worsened: 0 };
+      // Name sanitized at the SOURCE (not just at prompt interpolation):
+      // the model copies it verbatim and verifyReport matches it against
+      // this same value — sanitizing only one side would break the match.
       return p
         ? {
-            name: p.name,
+            name: promptDataLine(p.name),
             domain: p.context,
             entryCount,
             openThreads: t.open,
@@ -704,7 +770,11 @@ export async function generateMonthlyReport(
         focus.modules,
         generatedAt,
       );
-      tookAction = activity.activityTotal >= 1;
+      tookAction = gradeUngradedFocus(
+        activity.activityTotal,
+        generatedAt,
+        Date.now(),
+      );
     }
     focusHistory.push({
       theme: focus.theme,
@@ -714,10 +784,11 @@ export async function generateMonthlyReport(
   }
 
   // Top-pattern candidates: server-ranked from the weeklies' observations.
+  // Themes sanitized at the source (same reason as signal names above).
   const topPatternCandidates = rankTopPatterns(
     weeklyRows.flatMap((w) =>
       w.reflection.observations.map((o) => ({
-        theme: o.theme,
+        theme: promptDataLine(o.theme),
         confidence: o.confidence,
       })),
     ),
@@ -754,6 +825,13 @@ export async function generateMonthlyReport(
   });
 
   // Server snapshot — computed regardless of what the model returns.
+  // byType/total are windowed to the GRID's Monday-aligned span (22–28 days),
+  // not the full rolling 28-day input window, so the legend always agrees
+  // with the visible cells. (Reads are capped at 100/200 rows — at >3 entries
+  // per day for a month the counts undercount; acceptable for v0, the grid
+  // saturates visually long before that.)
+  const snapshotNow = new Date();
+  const gridStartMs = reportGridStart(snapshotNow).getTime();
   const heatmapItems: Array<{ createdAt: string; bucket: ActivityBucket }> = [];
   const byType: Record<ActivityBucket, number> = {
     conversations: 0,
@@ -761,20 +839,23 @@ export async function generateMonthlyReport(
     regulation: 0,
     beforeSend: 0,
   };
+  const addItem = (createdAt: string, bucket: ActivityBucket) => {
+    heatmapItems.push({ createdAt, bucket });
+    if (new Date(createdAt).getTime() >= gridStartMs) byType[bucket] += 1;
+  };
   for (const r of rawRecords) {
     const bucket = bucketFor(r.record_type);
     if (!bucket || !r.created_at) continue;
-    heatmapItems.push({ createdAt: r.created_at, bucket });
-    byType[bucket] += 1;
+    addItem(r.created_at, bucket);
   }
   for (const b of bysRes.data ?? []) {
-    heatmapItems.push({ createdAt: b.created_at, bucket: "beforeSend" });
-    byType.beforeSend += 1;
+    addItem(b.created_at, "beforeSend");
   }
   const serverSnapshot: ReportSnapshot = {
-    grid: buildReportGrid(heatmapItems, new Date()),
+    grid: buildReportGrid(heatmapItems, snapshotNow),
     byType,
-    total: heatmapItems.length,
+    total:
+      byType.conversations + byType.pulse + byType.regulation + byType.beforeSend,
     focusHistory,
     topPatterns: topPatternCandidates,
   };

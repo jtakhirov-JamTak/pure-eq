@@ -89,9 +89,9 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
             Most conversations with
           </p>
           <ul className="mt-2 space-y-1.5">
-            {stats.topPeople.map(({ name, count }) => (
+            {stats.topPeople.map(({ personId, name, count }) => (
               <li
-                key={name}
+                key={personId}
                 className="flex items-baseline justify-between gap-3"
               >
                 <span className="min-w-0 truncate text-[13px] font-semibold text-ink">

@@ -1,15 +1,16 @@
 // Pure EQ domain — replace in fork.
 //
 // /insights renders:
-//   1. StyleBox — profile from the 9-question quiz
-//   2. Weekly reflection — costs coins (Slice B3). When a fresh row exists in
-//      the 7-day window it renders directly (free); otherwise ReflectionKickoff
-//      shows an explicit "Generate · N coins" button that POSTs on tap.
-//   3. Open conversations — list of active threads, if any exist.
+//   1. Weekly reflection — 20 coins. A fresh row (7-day window) renders
+//      directly (free); otherwise ReflectionKickoff shows the explicit
+//      "Generate · N coins" button, or the locked entries-gate card.
+//   2. Monthly Report (B4) — 80 coins. Same shape: fresh row (28-day window;
+//      refusal rows only 7 days) renders free; otherwise MonthlyReportKickoff
+//      or the locked "N of 10 this month" card.
 //
-// Cost-wise, loading this page repeatedly inside a 7-day window is free:
-// viewing a cached reflection never calls Claude or charges coins. Only an
-// explicit tap on the Generate button (on cache miss) spends coins.
+// Cost-wise, loading this page repeatedly inside the windows is free:
+// viewing cached rows never calls Claude or charges coins. Only an explicit
+// tap on a Generate button (on cache miss) spends coins.
 import Link from "next/link";
 import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -31,6 +32,7 @@ import {
 import {
   REPORT_GENERATOR_VERSION,
   REPORT_IDEMPOTENCY_WINDOW_MS,
+  REPORT_REFUSAL_WINDOW_MS,
   REPORT_INPUT_WINDOW_DAYS,
   MIN_ENTRIES_FOR_REPORT,
   REPORT_GATE_RECORD_TYPES,
@@ -190,8 +192,15 @@ export default async function InsightsPage() {
     const versionOk =
       latestReport.generator_version === REPORT_GENERATOR_VERSION;
     const parsed = monthlyReportOutputSchema.safeParse(latestReport.ai_json);
+    // Mode-aware freshness, symmetric with readCachedReport: refusal rows
+    // expire after a week (the copy says "try again in a week or two") so
+    // the Generate button comes back; real reports hold the full 28 days.
+    const windowMs =
+      parsed.success && parsed.data.mode === "refusal"
+        ? REPORT_REFUSAL_WINDOW_MS
+        : REPORT_IDEMPOTENCY_WINDOW_MS;
     if (
-      ageMs < REPORT_IDEMPOTENCY_WINDOW_MS &&
+      ageMs < windowMs &&
       versionOk &&
       parsed.success &&
       isReportSnapshot(latestReport.server_json)

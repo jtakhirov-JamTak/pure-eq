@@ -59,6 +59,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
   }
 
+  // Per-day attempt cap. The cache only blocks repeat calls after a SUCCESS;
+  // a failing generation refunds and leaves no row, so each retry is a fresh
+  // Opus call — at 6/min that's thousands/day of the most expensive prompt
+  // in the app at zero net coin cost. 10/day is invisible to an honest user
+  // (one tap, a couple of genuine retries) and caps the burn. The weekly
+  // route deliberately has no such cap (B3 removed it); this endpoint's
+  // per-call cost is several times larger, hence the extra rail.
+  const dayRl = await rateLimit(`monthly-report:day:${user.id}`, {
+    limit: 10,
+    windowMs: 24 * 60 * 60 * 1000,
+  });
+  if (!dayRl.allowed) {
+    return NextResponse.json(
+      { error: "Daily limit reached. Try again tomorrow." },
+      { status: 429 },
+    );
+  }
+
   const admin = isAdmin(user.email);
   const reportCost = COIN_COSTS.monthly_report;
 

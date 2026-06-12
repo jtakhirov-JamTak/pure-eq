@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   buildReportGrid,
+  gradeUngradedFocus,
   rankTopPatterns,
   toneForReportIndex,
   verifyReport,
   reportIsViable,
+  FOCUS_GRADING_MIN_AGE_MS,
   REPORT_GRID_WEEKS,
 } from "../monthly-report";
 import { isReportSnapshot } from "../report-snapshot";
@@ -53,15 +55,17 @@ function baseReport(
   return {
     mode: "report",
     summary: "A month of avoiding conflict at work and snapping at home.",
+    // NB: fixtures model the prompt contract — no "In <context> interactions"
+    // / "You're most likely triggered by" lead-ins (the UI renders those).
     tendencies: [
       {
         context: "work",
-        tendency: "In work interactions, you tend to go quiet under pressure.",
+        tendency: "You tend to go quiet under pressure.",
         evidence: [ev("work-1", "avoid the conflict at standup")],
       },
     ],
     trigger_pattern: {
-      statement: "You're most likely triggered by being interrupted.",
+      statement: "Being interrupted mid-sentence, especially in meetings.",
       evidence: [ev("trig-1", "being interrupted mid-sentence")],
     },
     overwhelm_pattern: null,
@@ -268,6 +272,40 @@ describe("toneForReportIndex", () => {
 });
 
 // ---------------------------------------------------------------
+// gradeUngradedFocus
+// ---------------------------------------------------------------
+
+describe("gradeUngradedFocus", () => {
+  const nowMs = new Date("2026-06-12T12:00:00.000Z").getTime();
+  const daysAgo = (n: number) =>
+    new Date(nowMs - n * 24 * 60 * 60 * 1000).toISOString();
+
+  it("credits any activity as acted-on immediately, regardless of age", () => {
+    expect(gradeUngradedFocus(1, daysAgo(0), nowMs)).toBe(true);
+    expect(gradeUngradedFocus(3, daysAgo(10), nowMs)).toBe(true);
+  });
+
+  it("returns null (too recent to grade) for a fresh focus with no activity", () => {
+    // The bug this guards: generating a report minutes after a weekly
+    // reflection must not brand the brand-new focus "not acted on".
+    expect(gradeUngradedFocus(0, daysAgo(0), nowMs)).toBeNull();
+    expect(gradeUngradedFocus(0, daysAgo(5), nowMs)).toBeNull();
+  });
+
+  it("grades a week-old inactive focus as not acted on", () => {
+    expect(gradeUngradedFocus(0, daysAgo(7), nowMs)).toBe(false);
+    // Boundary: exactly at the floor is old enough to judge.
+    expect(
+      gradeUngradedFocus(
+        0,
+        new Date(nowMs - FOCUS_GRADING_MIN_AGE_MS).toISOString(),
+        nowMs,
+      ),
+    ).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------
 // buildReportGrid + isReportSnapshot
 // ---------------------------------------------------------------
 
@@ -342,5 +380,35 @@ describe("isReportSnapshot", () => {
     expect(isReportSnapshot(null)).toBe(false);
     expect(isReportSnapshot("snapshot")).toBe(false);
     expect(isReportSnapshot([])).toBe(false);
+  });
+
+  it("rejects malformed focusHistory / topPatterns items (hand-edited rows)", () => {
+    const now = new Date(2026, 5, 10, 12, 0, 0);
+    const base = {
+      grid: buildReportGrid([], now),
+      byType: { conversations: 0, pulse: 0, regulation: 0, beforeSend: 0 },
+      total: 0,
+      focusHistory: [],
+      topPatterns: [],
+    };
+    expect(
+      isReportSnapshot({
+        ...base,
+        focusHistory: [{ theme: 42, setOn: "2026-06-01", tookAction: null }],
+      }),
+    ).toBe(false);
+    expect(
+      isReportSnapshot({
+        ...base,
+        topPatterns: [{ theme: { nested: true }, confidence: "clear" }],
+      }),
+    ).toBe(false);
+    expect(
+      isReportSnapshot({
+        ...base,
+        focusHistory: [{ theme: "ok", setOn: "2026-06-01", tookAction: true }],
+        topPatterns: [{ theme: "ok", confidence: "clear" }],
+      }),
+    ).toBe(true);
   });
 });

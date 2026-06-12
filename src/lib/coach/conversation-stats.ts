@@ -47,7 +47,10 @@ export type ConversationStats = {
   open: number; // open + stabilizing
   resolved: number; // resolved + ended
   byGroup: { group: RelationshipGroup; count: number }[]; // count > 0, desc
-  topPeople: { name: string; count: number }[]; // top 3 by conversation count
+  // top 3 by conversation count. personId carried for React keys — display
+  // names are NOT unique (dedup is per name+domain), so keying on name
+  // collides for "Alex (friend)" + "Alex (coworker)".
+  topPeople: { personId: string; name: string; count: number }[];
   hasAny: boolean;
 };
 
@@ -158,6 +161,7 @@ export async function getConversationStats(
     .sort((a, b) => b[1] - a[1])
     .slice(0, 3)
     .map(([personId, count]) => ({
+      personId,
       name: personById.get(personId)?.name ?? "Someone",
       count,
     }));

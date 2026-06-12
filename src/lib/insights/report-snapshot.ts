@@ -11,6 +11,13 @@ import type { ActivityBucket, DayCell } from "@/lib/coach/activity-types";
 // report was generated.
 export const REPORT_GRID_WEEKS = 4;
 
+// Minimum completed entries INSIDE the 28-day window before a report can
+// generate. A month-level report over a handful of entries is garbage —
+// silence over garbage. Lives here (not monthly-report.ts) so the client
+// kickoff can show the same number without pulling server deps into the
+// bundle; the generator re-exports it and enforces it server-side.
+export const MIN_ENTRIES_FOR_REPORT = 10;
+
 export type ReportSnapshot = {
   // Columns oldest → newest (length REPORT_GRID_WEEKS); each column is 7 days
   // Mon..Sun (full arity — the renderer assumes the shape).
@@ -32,7 +39,9 @@ export type ReportSnapshot = {
 };
 
 // Runtime shape guard for the jsonb read-back (CLAUDE.md untyped-jsonb rule).
-// Narrow checks on the load-bearing structure; renderers handle the rest.
+// Item-level checks on the strings the renderer prints directly — a
+// hand-edited row with a non-string theme would otherwise throw "Objects are
+// not valid as a React child" instead of falling through to regenerate.
 export function isReportSnapshot(v: unknown): v is ReportSnapshot {
   if (!v || typeof v !== "object" || Array.isArray(v)) return false;
   const s = v as Record<string, unknown>;
@@ -44,6 +53,20 @@ export function isReportSnapshot(v: unknown): v is ReportSnapshot {
     !!s.byType &&
     typeof s.byType === "object" &&
     Array.isArray(s.focusHistory) &&
-    Array.isArray(s.topPatterns)
+    s.focusHistory.every(
+      (f) =>
+        !!f &&
+        typeof f === "object" &&
+        typeof (f as Record<string, unknown>).theme === "string" &&
+        typeof (f as Record<string, unknown>).setOn === "string",
+    ) &&
+    Array.isArray(s.topPatterns) &&
+    s.topPatterns.every(
+      (p) =>
+        !!p &&
+        typeof p === "object" &&
+        typeof (p as Record<string, unknown>).theme === "string" &&
+        typeof (p as Record<string, unknown>).confidence === "string",
+    )
   );
 }

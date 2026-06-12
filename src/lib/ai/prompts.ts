@@ -87,6 +87,13 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // this constant keeps payload_json.prompt_version distinguishable between
 // the SOT era (5.1.0) and the lean era so raw_records stay traceable to
 // the prompt regime that produced them.
+// 2026-06-12 6.3.1: Monthly Report post-review fixes. Tendency/statement
+// field specs now forbid the UI-rendered lead-ins ("In <context>
+// interactions…", "You're most likely triggered by…") — the renderer adds
+// those labels, and the old spec guaranteed a double prefix (the
+// OBSERVATION_TAG_COPY "when when" lesson). Names/themes interpolated
+// outside the entries fence are newline/quote-sanitized (promptDataLine).
+// No output-shape change — patch bump.
 // 2026-06-12 6.3.0: Monthly Report (B4). New buildMonthlyReportPrompt +
 // MONTHLY_REPORT_RULES — month-level tendencies per relationship context,
 // regulation patterns, focus-history narrative, server-ranked top patterns,
@@ -95,7 +102,7 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // Exported so tests can assert equality against the same constant the
 // builders stamp into prompt outputs — pinning a literal in tests next
 // to a moving constant is the canary trap CLAUDE.md warns about.
-export const PROMPT_VERSION = "6.3.0";
+export const PROMPT_VERSION = "6.3.1";
 
 const SHARED_RULES = `
 RULES:
@@ -772,15 +779,22 @@ MONTHLY REPORT RULES:
 - You are writing a month-level report, not a weekly reflection: name the
   user's stable tendencies and trajectory across the whole window, not
   one-off incidents.
-- TENDENCIES: write one "you tend to…" read per relationship context, ONLY
+- TENDENCIES: write one "You tend to…" read per relationship context, ONLY
   for contexts listed under ALLOWED CONTEXTS in the user message. Each needs
   1–3 verbatim quotes as evidence from entries involving people in that
   context. Skip a context (omit it) rather than stretch thin evidence.
+  Do NOT start the tendency with "In <context> interactions" — the UI
+  renders that label itself; the tendency is the standalone sentence that
+  goes under it.
 - TRIGGER / OVERWHELM PATTERNS: trigger_pattern names what most reliably
   triggers the user (from trigger_log entries); overwhelm_pattern what most
   reliably overwhelms them (from overwhelmed entries). Only fill each when
   its entry count in the user message says there is enough material (the
   count is shown); otherwise null. Same verbatim-quote evidence rules.
+  Do NOT start the statement with "You're most likely triggered by" /
+  "You're most likely overwhelmed by" — the UI renders that lead-in; write
+  the trigger/overwhelm itself (e.g. "Being interrupted mid-sentence,
+  especially in front of others.").
 - QUOTES: every evidence quote must be an EXACT verbatim excerpt — no
   paraphrase, no ellipsis, no capitalization or punctuation edits. Copy
   source_record_id and source_date from the entry verbatim. The server
@@ -845,6 +859,18 @@ export type ReportPersonSignal = {
 
 export type ReportTone = "first" | "gentle" | "realistic";
 
+// User-controlled / model-derived strings interpolated OUTSIDE the
+// triple-quoted entries fence (person names, weekly themes): collapse
+// newlines and strip double-quotes so a crafted value can't forge extra
+// prompt lines. The GENERATOR must apply this to the candidate themes and
+// signal names it passes in (and does — monthly-report.ts), because the
+// model copies these strings verbatim and verifyReport matches them against
+// the same values; sanitizing only at interpolation would break that match.
+export function promptDataLine(s: string): string {
+  return s.replace(/[\r\n"]+/g, " ").trim();
+}
+const promptLine = promptDataLine;
+
 const REPORT_TONE_TEXT: Record<ReportTone, string> = {
   first:
     "TONE: This is the user's FIRST monthly report. Be fully realistic and direct — it sets the baseline they will measure every later month against.",
@@ -877,7 +903,7 @@ export function buildMonthlyReportPrompt(params: {
 }) {
   const personsBlock = params.persons.length
     ? params.persons
-        .map((p) => `- ${p.displayName} (${p.relationshipDomain})`)
+        .map((p) => `- ${promptLine(p.displayName)} (${p.relationshipDomain})`)
         .join("\n")
     : "(none named)";
 
@@ -905,7 +931,7 @@ export function buildMonthlyReportPrompt(params: {
       ? `FOCUS HISTORY (weekly focuses set this month; acted-on is server-counted from real tool entries):\n${params.focusHistory
           .map(
             (f) =>
-              `- "${f.theme}" (set ${f.setOn}): ${
+              `- "${promptLine(f.theme)}" (set ${f.setOn}): ${
                 f.tookAction === null
                   ? "too recent to grade"
                   : f.tookAction
@@ -919,7 +945,7 @@ export function buildMonthlyReportPrompt(params: {
   const candidatesBlock =
     params.topPatternCandidates.length > 0
       ? `TOP PATTERN CANDIDATES (from this month's weekly reflections, ranked by evidence confidence — copy themes verbatim):\n${params.topPatternCandidates
-          .map((c) => `- "${c.theme}" (confidence: ${c.confidence})`)
+          .map((c) => `- "${promptLine(c.theme)}" (confidence: ${c.confidence})`)
           .join("\n")}`
       : "TOP PATTERN CANDIDATES: none — return an empty top_patterns array.";
 
@@ -928,7 +954,7 @@ export function buildMonthlyReportPrompt(params: {
       ? `PERSON SIGNALS (this month — pick key_person from THIS list only):\n${params.personSignals
           .map(
             (s) =>
-              `- ${s.name} (${s.domain}): ${s.entryCount} entries, ${s.openThreads} open thread(s), ${s.worsenedThreads} worsened thread(s)`,
+              `- ${promptLine(s.name)} (${s.domain}): ${s.entryCount} entries, ${s.openThreads} open thread(s), ${s.worsenedThreads} worsened thread(s)`,
           )
           .join("\n")}`
       : "PERSON SIGNALS: none — set key_person to null.";
@@ -951,7 +977,7 @@ REPORT MODE (normal):
   "tendencies": [
     {
       "context": "work | family | friend | partner | other — ONLY contexts from ALLOWED CONTEXTS",
-      "tendency": "string, max 300 chars — 'In <context> interactions, you tend to…' as a concrete behavior-level read",
+      "tendency": "string, max 300 chars — 'You tend to…' as a concrete behavior-level read. Do NOT include the 'In <context> interactions' lead-in; the UI adds it.",
       "evidence": [
         {
           "quote": "string, max 240 chars — EXACT verbatim excerpt from one entry's fields",
@@ -961,8 +987,8 @@ REPORT MODE (normal):
       ]
     }
   ],
-  "trigger_pattern": { "statement": "string, max 300 chars — what most reliably triggers them", "evidence": [ ...same evidence shape ] } or null,
-  "overwhelm_pattern": { "statement": "string, max 300 chars — what most reliably overwhelms them", "evidence": [ ...same evidence shape ] } or null,
+  "trigger_pattern": { "statement": "string, max 300 chars — the trigger itself, WITHOUT the 'You're most likely triggered by' lead-in (the UI adds it)", "evidence": [ ...same evidence shape ] } or null,
+  "overwhelm_pattern": { "statement": "string, max 300 chars — the overwhelm source itself, WITHOUT the 'You're most likely overwhelmed by' lead-in (the UI adds it)", "evidence": [ ...same evidence shape ] } or null,
   "focus_trend": "string, max 300 chars — are they completing their weekly focuses and improving? null if no FOCUS HISTORY block",
   "top_patterns": [
     { "theme": "string — copy a candidate theme VERBATIM", "note": "string, max 280 chars — month-level read: held, softened, or sharpened" }

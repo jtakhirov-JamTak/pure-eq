@@ -161,7 +161,9 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
     state.phase === "generating"
       ? "Generating your weekly reflection. This can take up to a minute."
       : state.phase === "ready"
-        ? "Your weekly reflection is ready."
+        ? state.reflection.mode === "refusal"
+          ? "Checked — not enough material for a reflection this week. You weren't charged."
+          : "Your weekly reflection is ready."
         : state.phase === "error"
           ? "Could not generate your reflection. You weren't charged."
           : state.phase === "insufficient"
@@ -220,10 +222,14 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
     body = (
       <Card className="mt-4 p-5">
         <Kicker as="h2">Your weekly reflection</Kicker>
+        {/* The DIFFERENTIATED message (server copy for 503/429/409, network
+            copy offline) — state.message was previously computed but never
+            rendered, so every error showed the same generic paragraph. */}
         <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
-          Something went wrong generating this week&apos;s reflection —
-          we&apos;ve been notified. You weren&apos;t charged. Try again in a
-          minute.
+          {state.message}
+        </p>
+        <p className="mt-1.5 text-[12px] font-medium text-ink-soft">
+          You weren&apos;t charged.
         </p>
         {kindLabel ? (
           <p className="mt-2 text-[12px] font-medium text-ink-soft">

@@ -10,7 +10,12 @@ import { Kicker } from "@/components/ui/kicker";
 // array, a null key_person, etc. simply don't appear.
 
 function formatDate(input: string): string {
-  const d = new Date(input);
+  // Bare YYYY-MM-DD parses as UTC midnight — rendered client-side west of
+  // UTC that shows the PREVIOUS day. Parse the parts into a local date.
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  const d = ymd
+    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
+    : new Date(input);
   if (Number.isNaN(d.getTime())) return input;
   return d.toLocaleDateString("en-US", {
     month: "short",
@@ -44,14 +49,6 @@ const CONFIDENCE_CHIP: Record<string, string> = {
   early: "bg-surface-tint text-ink-soft",
 };
 
-const CONTEXT_LABELS: Record<string, string> = {
-  work: "work",
-  family: "family",
-  friend: "friend",
-  partner: "partner",
-  other: "other",
-};
-
 const EQ_ROWS: { key: keyof EqShape; label: string; sub: string }[] = [
   {
     key: "self_awareness",
@@ -77,11 +74,14 @@ const EQ_ROWS: { key: keyof EqShape; label: string; sub: string }[] = [
 
 type EqShape = Extract<MonthlyReportOutput, { mode: "report" }>["eq_ratings"];
 
+// Real <h3> headings (not styled <p>s): this is the longest card in the app,
+// and a screen reader needs to jump between its sections. ink-soft, not
+// ink-muted — these are must-read labels and ink-muted fails AA at 11px.
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-semibold uppercase tracking-[0.5px] text-ink-muted">
+    <h3 className="text-[11px] font-semibold uppercase tracking-[0.5px] text-ink-soft">
       {children}
-    </p>
+    </h3>
   );
 }
 
@@ -95,7 +95,7 @@ function EvidenceQuote({
   return (
     <blockquote className="border-l-2 border-accent pl-3 text-[12px] italic leading-[1.5] text-ink-soft">
       &ldquo;{quote}&rdquo;
-      <span className="ml-2 not-italic text-[11px] font-medium text-ink-muted">
+      <span className="ml-2 not-italic text-[11px] font-medium text-ink-soft">
         — {formatDate(sourceDate)}
       </span>
     </blockquote>
@@ -117,7 +117,7 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
         <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
           {report.message_to_user}
         </p>
-        <p className="mt-3 text-[11px] font-medium text-ink-muted">
+        <p className="mt-3 text-[11px] font-medium text-ink-soft">
           Checked on {formatDate(generatedAt)}
         </p>
       </Card>
@@ -128,8 +128,9 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
     <Card className="mt-4 p-5">
       <div className="flex items-baseline justify-between gap-3">
         <Kicker as="h2">Your monthly report</Kicker>
-        {/* Byline canary — same migration-0018 defense as the weekly. */}
-        <p className="text-[11px] font-medium text-ink-muted">
+        {/* Byline canary — same migration-0018 defense as the weekly.
+            ink-soft: a canary the user can't read is a weak canary. */}
+        <p className="text-[11px] font-medium text-ink-soft">
           Generated {formatDate(generatedAt)}
         </p>
       </div>
@@ -138,24 +139,27 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
         {report.summary}
       </p>
 
-      {/* 4-week usage heatmap — server snapshot, frozen to the report period. */}
+      {/* 4-week usage heatmap — server snapshot, frozen to the report period.
+          Fixed 24px cells, NOT flex-1/aspect-square: that markup came from
+          the 10-column dashboard, and at 4 columns width-derived cells
+          balloon to ~66px (a half-screen wall of squares at 375px). The grid
+          is aria-hidden — the legend + total carry the same data as text. */}
       <div className="mt-5">
         <SectionLabel>Your last 4 weeks</SectionLabel>
-        <div className="mt-3 flex gap-1.5">
+        <div className="mt-3 flex gap-1.5" aria-hidden="true">
           <div className="flex w-3.5 shrink-0 flex-col gap-[3px]">
             {WEEKDAY_LABELS.map((l, i) => (
               <span
                 key={i}
-                className="flex flex-1 items-center text-[8px] leading-none text-ink-muted"
-                aria-hidden
+                className="flex h-6 items-center text-[8px] leading-none text-ink-muted"
               >
                 {l}
               </span>
             ))}
           </div>
-          <div className="flex flex-1 gap-[3px]">
+          <div className="flex gap-[3px]">
             {snapshot.grid.map((week, wi) => (
-              <div key={wi} className="flex flex-1 flex-col gap-[3px]">
+              <div key={wi} className="flex flex-col gap-[3px]">
                 {week.map((cell) => {
                   const style = cell.dominant
                     ? {
@@ -166,7 +170,7 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
                   return (
                     <div
                       key={cell.date}
-                      className="aspect-square rounded-[2px]"
+                      className="h-6 w-6 rounded-[2px]"
                       style={style}
                     />
                   );
@@ -182,6 +186,7 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
               className="inline-flex items-center gap-1.5 text-[11px] font-medium text-ink-soft"
             >
               <span
+                aria-hidden="true"
                 className="h-2.5 w-2.5 rounded-[2px]"
                 style={{ backgroundColor: BUCKET_COLORS[key] }}
               />
@@ -193,8 +198,8 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
           ))}
         </div>
         <p className="mt-2 text-[12px] font-medium text-ink-soft">
-          {snapshot.total} {snapshot.total === 1 ? "entry" : "entries"} this
-          month
+          {snapshot.total} {snapshot.total === 1 ? "entry" : "entries"} in the
+          last 4 weeks
         </p>
       </div>
 
@@ -211,7 +216,7 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
                 className="border-t border-hairline pt-4 first:border-0 first:pt-0"
               >
                 <p className="text-[14px] font-semibold leading-[1.3] text-ink">
-                  In {CONTEXT_LABELS[t.context] ?? t.context} interactions
+                  In {t.context} interactions
                 </p>
                 <p className="mt-1.5 text-[13px] font-medium leading-[1.55] text-ink-soft">
                   {t.tendency}
@@ -291,7 +296,9 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
                   <p className="text-[13px] font-semibold leading-[1.3] text-ink">
                     {f.theme}
                   </p>
-                  <p className="mt-0.5 text-[11px] font-medium text-ink-muted">
+                  {/* ink-soft: this line is the ONLY textual conveyance of
+                      the aria-hidden ✓/○/– glyph state — it must be legible. */}
+                  <p className="mt-0.5 text-[11px] font-medium text-ink-soft">
                     set {formatDate(f.setOn)} ·{" "}
                     {f.tookAction === true
                       ? "acted on"
@@ -381,10 +388,10 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
                   <p className="text-[13px] font-semibold text-ink">{label}</p>
                   <p className="shrink-0 text-[13px] font-bold text-ink">
                     {r.score}
-                    <span className="font-medium text-ink-muted">/10</span>
+                    <span className="font-medium text-ink-soft">/10</span>
                   </p>
                 </div>
-                <p className="text-[11px] font-medium text-ink-muted">{sub}</p>
+                <p className="text-[11px] font-medium text-ink-soft">{sub}</p>
                 <div
                   className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-surface-tint"
                   role="img"
@@ -402,7 +409,7 @@ export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
             );
           })}
         </div>
-        <p className="mt-3 text-[11px] font-medium leading-[1.5] text-ink-muted">
+        <p className="mt-3 text-[11px] font-medium leading-[1.5] text-ink-soft">
           5 is the everyday baseline. 9–10 is near-unreachable on purpose —
           movement matters more than the number.
         </p>
