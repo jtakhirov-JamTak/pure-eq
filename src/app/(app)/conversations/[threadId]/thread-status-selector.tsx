@@ -5,11 +5,8 @@ import { updateThreadStatus } from "./actions";
 
 const STATUSES = [
   { value: "open", label: "Open" },
-  { value: "stabilizing", label: "Stabilizing" },
-  { value: "resolved", label: "Resolved" },
-  { value: "paused", label: "Paused" },
-  { value: "worsened", label: "Worsened" },
-  { value: "ended", label: "Ended" },
+  { value: "in_progress", label: "In progress" },
+  { value: "completed", label: "Completed" },
 ] as const;
 
 export default function ThreadStatusSelector({

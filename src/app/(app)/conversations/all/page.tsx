@@ -34,7 +34,7 @@ export default async function AllConversationsPage() {
         </div>
         <Link
           href="/conversations"
-          className="shrink-0 rounded-pill border border-hairline bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
+          className="inline-flex min-h-11 shrink-0 items-center rounded-pill border border-hairline bg-surface px-3.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
         >
           Back
         </Link>
@@ -51,8 +51,8 @@ export default async function AllConversationsPage() {
         <>
           <AllConversationsList conversations={conversations} />
           {truncated && (
-            <p className="mt-5 text-center text-[12px] font-medium leading-[1.5] text-ink-muted">
-              Showing your 100 most recent conversations.
+            <p className="mt-5 text-center text-[12px] font-medium leading-[1.5] text-ink-soft">
+              Showing your 1,000 most recent conversations.
             </p>
           )}
         </>

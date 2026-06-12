@@ -33,7 +33,6 @@ const baseParams = {
       domain: "work",
       entryCount: 4,
       openThreads: 1,
-      worsenedThreads: 0,
     },
   ],
   tone: "first" as const,

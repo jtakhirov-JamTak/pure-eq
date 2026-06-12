@@ -3,24 +3,24 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { StormBackground } from "@/components/brand/StormBackground";
-import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
 import { getConversationsOverview } from "@/lib/coach/open-loops";
 import { getConversationStats } from "@/lib/coach/conversation-stats";
-import { OpenConversations } from "@/components/conversations/open-conversations";
 import { ConversationStatsCard } from "@/components/conversations/conversation-stats";
 
 // Conversations tab landing. Not a wall of conversations — three ways in:
-//   1. Pick up where you left off (most recent open loop) + open conversations
-//   2. See all conversations (full history)
-//   3. Your activity dashboard (usage over time)
+//   1. Stats dashboard + open conversations (browse → detail)
+//   2. People (top 3 by open conversations → person history)
+//   3. See all conversations (full history)
+// The "Pick up where you left off" resume cards live on HOME only (founder
+// direction 2026-06-12 — they were removed from this page the same day).
 export default async function ConversationsPage() {
   const {
     data: { user },
   } = await getAuthUser();
   if (!user) redirect("/login");
 
-  const [{ openLoops, openThreads }, stats] = await Promise.all([
+  const [{ openThreads }, stats] = await Promise.all([
     getConversationsOverview(user.id, 3),
     getConversationStats(user.id),
   ]);
@@ -46,27 +46,8 @@ export default async function ConversationsPage() {
           inside the Monthly Report instead.) */}
       <ConversationStatsCard stats={stats} />
 
-      <div className="mt-6">
-        {openLoops.length > 0 ? (
-          <OpenConversations loops={openLoops} />
-        ) : (
-          <Card className="p-5">
-            <p className="text-[14px] font-medium leading-[1.5] text-ink-soft">
-              Nothing in progress right now. When you prepare for a
-              conversation, it shows up here so you can review how it went.
-            </p>
-            <Link
-              href="/coach/prepare"
-              className="mt-3 inline-flex min-h-11 items-center text-[13px] font-bold text-accent-ink active:opacity-70"
-            >
-              Prepare for a conversation →
-            </Link>
-          </Card>
-        )}
-      </div>
-
-      {/* Open conversations — open/stabilizing threads (browse → detail), as
-          distinct from the resume-into-Review loops above. Last 3. */}
+      {/* Open conversations — open/in_progress threads (browse → detail).
+          Last 3. The resume-into-Review loop cards render on Home, not here. */}
       {openThreads.length > 0 && (
         <div className="mt-6">
           <Kicker as="h2" className="text-accent-ink">
@@ -86,8 +67,8 @@ export default async function ConversationsPage() {
                   <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink">
                     {t.personName}
                   </span>
-                  <span className="shrink-0 text-[11px] font-medium capitalize text-ink-soft">
-                    {t.status === "stabilizing" ? "stabilizing" : "open"}
+                  <span className="shrink-0 text-[11px] font-medium text-ink-soft">
+                    {t.status === "in_progress" ? "In progress" : "Open"}
                   </span>
                 </Link>
               </li>

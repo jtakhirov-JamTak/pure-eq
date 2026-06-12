@@ -18,6 +18,7 @@ import { SelectableRow } from "@/components/ui/selectable";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
 import { Kicker } from "@/components/ui/kicker";
 import { Card } from "@/components/ui/card";
+import { PersonPicker } from "@/components/person-picker";
 import { cn, safeUUID } from "@/lib/utils";
 
 const AFTER_FEELINGS = [
@@ -42,6 +43,7 @@ type Step =
   | "regulate"
   | "move"
   | "after-rating"
+  | "person"
   | "close";
 
 type Mode = "idle" | "submitting" | "success" | "error";
@@ -94,6 +96,8 @@ export default function OverwhelmedClient() {
   const [bodyLocation, setBodyLocation] = useState<BodyRegion | null>(null);
   const [feelingLabel, setFeelingLabel] = useState("");
   const [afterRating, setAfterRating] = useState<number | null>(null);
+  const [personId, setPersonId] = useState<string | null>(null);
+  const [personName, setPersonName] = useState("");
   const [afterFeeling, setAfterFeeling] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -112,6 +116,7 @@ export default function OverwhelmedClient() {
     "regulate",
     "move",
     "after-rating",
+    "person",
     "close",
   ];
 
@@ -134,6 +139,10 @@ export default function OverwhelmedClient() {
           feelingLabel,
           afterRating,
           afterFeeling: feeling,
+          // Optional person link: a picked id wins; otherwise a typed name
+          // (the server dedups/creates). Both null = unlinked.
+          personId,
+          personName: personId ? null : personName.trim() || null,
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
@@ -427,9 +436,39 @@ export default function OverwhelmedClient() {
           value={afterRating}
           onPick={(n) => {
             setAfterRating(n);
-            setStep("close");
+            setStep("person");
           }}
         />
+      </FlowScreen>
+    );
+  }
+
+  // Optional — empty never blocks. Links the moment to a person so it shows
+  // up on their /people history page. key forces a fresh PersonPicker mount
+  // (it holds a recorder + async transcript state).
+  if (step === "person") {
+    return (
+      <FlowScreen
+        header={header(() => setStep("after-rating"))}
+        footer={
+          <FlowFooter
+            onBack={() => setStep("after-rating")}
+            primaryLabel={!personId && !personName.trim() ? "Skip" : "Next"}
+            onPrimary={() => setStep("close")}
+          />
+        }
+        title="Was this about someone?"
+        helper="Optional — link this moment to a person to see it in their history."
+      >
+        <div key="person" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          <PersonPicker
+            value={personName}
+            onChange={setPersonName}
+            onPersonSelect={(id) => setPersonId(id)}
+            selectedPersonId={personId}
+            placeholder="Name (optional)"
+          />
+        </div>
       </FlowScreen>
     );
   }
@@ -437,8 +476,8 @@ export default function OverwhelmedClient() {
   // close
   return (
     <FlowScreen
-      header={header(() => setStep("after-rating"))}
-      footer={backOnly(() => setStep("after-rating"))}
+      header={header(() => setStep("person"))}
+      footer={backOnly(() => setStep("person"))}
       title="How do you feel now?"
     >
       <div className="space-y-2">

@@ -13,6 +13,7 @@ import {
 import { SelectableRow } from "@/components/ui/selectable";
 import { PrimaryButton, SecondaryButton } from "@/components/ui/button";
 import { Kicker } from "@/components/ui/kicker";
+import { PersonPicker } from "@/components/person-picker";
 import { cn, safeUUID } from "@/lib/utils";
 
 const EMOTIONS = [
@@ -76,6 +77,14 @@ const STEPS = [
     prompt: "Are you calm now? What would you do differently?",
     type: "textarea" as const,
   },
+  // Optional — empty never blocks Next. Links the moment to a person so it
+  // shows up on their /people history page.
+  {
+    key: "person",
+    title: "Was this about someone?",
+    prompt: "Optional — link this moment to a person to see it in their history.",
+    type: "person" as const,
+  },
 ];
 
 // Reading screen (intro/success/error) — scrollable, renders inside the app
@@ -95,6 +104,7 @@ export default function TriggeredClient() {
   const [data, setData] = useState<Record<string, string>>({});
   const [emotionIntensity, setEmotionIntensity] = useState(5);
   const [urgeIntensity, setUrgeIntensity] = useState(5);
+  const [personId, setPersonId] = useState<string | null>(null);
   const [afterFeeling, setAfterFeeling] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -133,6 +143,10 @@ export default function TriggeredClient() {
           outcome: data.outcome,
           reflection: data.reflection,
           afterFeeling: feeling,
+          // Optional person link: a picked id wins; otherwise a typed name
+          // (the server dedups/creates). Both null = unlinked.
+          personId,
+          personName: personId ? null : data.personName?.trim() || null,
           idempotencyKey: idempotencyKeyRef.current,
         }),
       });
@@ -291,6 +305,7 @@ export default function TriggeredClient() {
     if (currentStep.type === "emotion" && !data.emotion?.trim()) return;
     if (currentStep.type === "urge" && !data.urge?.trim()) return;
     if (currentStep.type === "textarea" && !value.trim()) return;
+    // "person" is optional — never blocks.
     if (step < STEPS.length) {
       setStep(step + 1);
     }
@@ -319,7 +334,13 @@ export default function TriggeredClient() {
       footer={
         <FlowFooter
           onBack={handleBack}
-          primaryLabel="Next"
+          primaryLabel={
+            currentStep.type === "person" &&
+            !personId &&
+            !data.personName?.trim()
+              ? "Skip"
+              : "Next"
+          }
           onPrimary={handleNext}
           primaryDisabled={nextDisabled}
         />
@@ -388,6 +409,18 @@ export default function TriggeredClient() {
               value={urgeIntensity}
               onChange={setUrgeIntensity}
               accentColor="var(--color-accent)"
+            />
+          </div>
+        )}
+
+        {currentStep.type === "person" && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <PersonPicker
+              value={data.personName ?? ""}
+              onChange={(next) => setFieldValue("personName", next)}
+              onPersonSelect={(id) => setPersonId(id)}
+              selectedPersonId={personId}
+              placeholder="Name (optional)"
             />
           </div>
         )}

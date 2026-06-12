@@ -1,12 +1,12 @@
 // ============================================================
 // Conversations-tab overview — open loops + open conversations, one read pass
 // ============================================================
-// Both sections of the Conversations tab derive from the same open/stabilizing
-// threads, so we read threads + their entries + persons ONCE and split:
+// Both sections derive from the same open/in_progress threads, so we read
+// threads + their entries + persons ONCE and split:
 //   - openLoops:   a thread you prepared/pulse-checked but haven't reviewed
 //                  (status "open", person set) — tapping resumes into Review.
-//   - openThreads: any open|stabilizing thread with a surviving entry — tapping
-//                  opens the conversation detail.
+//   - openThreads: any open|in_progress thread with a surviving entry —
+//                  tapping opens the conversation detail.
 //
 // Read-only; every query inspects .error per the server-component read lesson.
 import { createClient } from "@/lib/supabase/server";
@@ -42,7 +42,7 @@ export async function getConversationsOverview(
     .from("conversation_threads")
     .select("thread_id, status, person_id, last_activity_at")
     .eq("user_id", userId)
-    .in("status", ["open", "stabilizing"])
+    .in("status", ["open", "in_progress"])
     .order("last_activity_at", { ascending: false })
     .limit(50);
   if (threadsRes.error) {
@@ -112,7 +112,7 @@ export async function getConversationsOverview(
   const openLoops: OpenLoop[] = [];
   const openThreads: OpenThread[] = [];
   for (const t of threads) {
-    // Open conversation (browse): open|stabilizing with a surviving entry.
+    // Open conversation (browse): open|in_progress with a surviving entry.
     if (openThreads.length < limit && surviving.has(t.thread_id)) {
       openThreads.push({
         threadId: t.thread_id,

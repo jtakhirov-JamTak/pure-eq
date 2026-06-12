@@ -364,6 +364,7 @@ export type Database = {
           overwhelm_after: number | null
           overwhelm_before: number | null
           overwhelmed_entry_id: string
+          person_id: string | null
           raw_record_id: string | null
           technique_used: string | null
           user_id: string
@@ -380,6 +381,7 @@ export type Database = {
           overwhelm_after?: number | null
           overwhelm_before?: number | null
           overwhelmed_entry_id?: string
+          person_id?: string | null
           raw_record_id?: string | null
           technique_used?: string | null
           user_id: string
@@ -396,12 +398,20 @@ export type Database = {
           overwhelm_after?: number | null
           overwhelm_before?: number | null
           overwhelmed_entry_id?: string
+          person_id?: string | null
           raw_record_id?: string | null
           technique_used?: string | null
           user_id?: string
           what_happened?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "overwhelmed_entries_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "persons"
+            referencedColumns: ["person_id"]
+          },
           {
             foreignKeyName: "overwhelmed_entries_raw_record_id_fkey"
             columns: ["raw_record_id"]

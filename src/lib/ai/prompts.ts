@@ -87,6 +87,10 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // this constant keeps payload_json.prompt_version distinguishable between
 // the SOT era (5.1.0) and the lean era so raw_records stay traceable to
 // the prompt regime that produced them.
+// 2026-06-12 6.3.2: thread-status collapse (migration 0050). PERSON SIGNALS
+// lines drop the "N worsened thread(s)" column and the key-person guidance
+// drops "worsened" — the status no longer exists; openThreads now counts
+// open + in_progress. No output-shape change — patch bump.
 // 2026-06-12 6.3.1: Monthly Report post-review fixes. Tendency/statement
 // field specs now forbid the UI-rendered lead-ins ("In <context>
 // interactions…", "You're most likely triggered by…") — the renderer adds
@@ -102,7 +106,7 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // Exported so tests can assert equality against the same constant the
 // builders stamp into prompt outputs — pinning a literal in tests next
 // to a moving constant is the canary trap CLAUDE.md warns about.
-export const PROMPT_VERSION = "6.3.1";
+export const PROMPT_VERSION = "6.3.2";
 
 const SHARED_RULES = `
 RULES:
@@ -810,7 +814,7 @@ MONTHLY REPORT RULES:
   present, set focus_trend to null.
 - KEY PERSON: pick from the PERSON SIGNALS table ONLY (the server drops any
   other name). Choose the person the month's emotional investment
-  concentrates on — entry volume, open or worsened threads, regulation
+  concentrates on — entry volume, open threads, regulation
   entries around them. "why" names the signals concretely without blame;
   "tip" is ONE doable action to improve that relationship this coming month.
   If the table is absent or no one stands out, set key_person to null.
@@ -849,12 +853,13 @@ export type ReportFocusHistoryItem = {
 
 // Per-person month signals for the key-person pick. Only persons with
 // meaningful volume are listed (the generator filters before calling).
+// openThreads counts open + in_progress (the worsened status was removed in
+// the 3-state collapse, migration 0050).
 export type ReportPersonSignal = {
   name: string;
   domain: string;
   entryCount: number;
   openThreads: number;
-  worsenedThreads: number;
 };
 
 export type ReportTone = "first" | "gentle" | "realistic";
@@ -954,7 +959,7 @@ export function buildMonthlyReportPrompt(params: {
       ? `PERSON SIGNALS (this month — pick key_person from THIS list only):\n${params.personSignals
           .map(
             (s) =>
-              `- ${promptLine(s.name)} (${s.domain}): ${s.entryCount} entries, ${s.openThreads} open thread(s), ${s.worsenedThreads} worsened thread(s)`,
+              `- ${promptLine(s.name)} (${s.domain}): ${s.entryCount} entries, ${s.openThreads} open thread(s)`,
           )
           .join("\n")}`
       : "PERSON SIGNALS: none — set key_person to null.";

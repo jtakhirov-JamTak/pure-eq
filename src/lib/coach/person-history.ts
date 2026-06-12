@@ -20,10 +20,10 @@ import {
 // Non-conversation entries linked to this person: in-the-moment regulation
 // logs + Before-You-Send draft checks. Date + type only (v0) — the value is
 // seeing WHEN the relationship spiked, not re-reading each entry.
-// NB: DORMANT until a writer exists — today NO write path sets person_id on
-// these record types (the tools routes collect no person; BYS runs with
-// personBehavior "skip"), so this list is always empty. The read is kept so
-// the section lights up the moment person capture ships in the tools.
+// Writers: the Triggered/Overwhelmed tools' optional "was this about
+// someone?" step (2026-06-12). BYS stays personless (personBehavior "skip"),
+// so before_you_send is here only for forward-compat — it matches nothing
+// today.
 export type PersonMoment = {
   recordType: "trigger_log" | "overwhelmed" | "before_you_send";
   createdAt: string;
@@ -36,7 +36,8 @@ export type PersonHistory = {
     domain: RelationshipDomain;
     createdAt: string; // tracking since
   };
-  stats: { total: number; open: number; resolved: number };
+  // open counts open + in_progress (anything still live).
+  stats: { total: number; open: number; completed: number };
   conversations: ConversationSummary[]; // newest first
   moments: PersonMoment[]; // newest first
 };
@@ -83,9 +84,9 @@ export async function getPersonHistory(
 
   const [{ summaries }, momentsRes] = await Promise.all([
     // Reuse the All-conversations data layer, narrowed to this person IN THE
-    // QUERY — so the 100-conversation cap applies per person, and the page
-    // can't disagree with the People-row counts once the user's total thread
-    // count passes 100.
+    // QUERY — so the 1000-row cap applies per person, and the page can't
+    // disagree with the People-row counts once the user's total thread count
+    // passes the cap.
     getConversationSummaries(userId, { personId }),
     supabase
       .from("raw_records")
@@ -107,13 +108,14 @@ export async function getPersonHistory(
     );
   }
 
-  // Already narrowed to this person at the query level.
+  // Already narrowed to this person at the query level. The 3 statuses
+  // partition cleanly: open counts open + in_progress, the rest is completed.
   const conversations = summaries;
   let open = 0;
   let resolved = 0;
   for (const c of conversations) {
-    if (c.status === "open" || c.status === "stabilizing") open += 1;
-    else if (c.status === "resolved" || c.status === "ended") resolved += 1;
+    if (c.status === "completed") resolved += 1;
+    else open += 1;
   }
 
   const rawDomain = personRes.data.relationship_domain;
@@ -130,7 +132,7 @@ export async function getPersonHistory(
       domain,
       createdAt: personRes.data.created_at,
     },
-    stats: { total: conversations.length, open, resolved },
+    stats: { total: conversations.length, open, completed: resolved },
     conversations,
     moments: (momentsRes.data ?? [])
       .filter((m) => (MOMENT_TYPES as readonly string[]).includes(m.record_type))

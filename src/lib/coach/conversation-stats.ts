@@ -48,23 +48,26 @@ export type PersonOverviewRow = {
   personId: string;
   name: string;
   conversations: number;
-  open: number; // open + stabilizing
+  open: number; // open + in_progress (anything not completed)
   lastActivityAt: string | null;
 };
 
 export type ConversationStats = {
+  // The three states partition cleanly: total = open + inProgress + completed.
   total: number;
-  open: number; // open + stabilizing
-  resolved: number; // resolved + ended
+  open: number;
+  inProgress: number;
+  completed: number;
   byGroup: { group: RelationshipGroup; count: number }[]; // count > 0, desc
   // top 3 by conversation count. personId carried for React keys — display
   // names are NOT unique (dedup is per name+domain), so keying on name
   // collides for "Alex (friend)" + "Alex (coworker)".
   topPeople: { personId: string; name: string; count: number }[];
-  // Everyone with >= 1 surviving conversation, most recent activity first,
-  // capped at 10. Computed in the same read pass as the stats (no extra
-  // queries). Persons with only tools/BYS entries and no conversation don't
-  // appear — the page is conversation-centric (v0).
+  // Top 3 people by OPEN conversation count (founder direction 2026-06-12:
+  // "People should only show the top three with the most conversations that
+  // are open"). Only people with >= 1 non-completed conversation appear; the
+  // full set of people is reachable through See-all-conversations. Persons
+  // with only tools/BYS entries and no conversation don't appear (v0).
   people: PersonOverviewRow[];
   hasAny: boolean;
 };
@@ -72,14 +75,15 @@ export type ConversationStats = {
 const EMPTY: ConversationStats = {
   total: 0,
   open: 0,
-  resolved: 0,
+  inProgress: 0,
+  completed: 0,
   byGroup: [],
   topPeople: [],
   people: [],
   hasAny: false,
 };
 
-const MAX_PEOPLE_ROWS = 10;
+const MAX_PEOPLE_ROWS = 3;
 
 export async function getConversationStats(
   userId: string,
@@ -158,7 +162,8 @@ export async function getConversationStats(
 
   let total = 0;
   let open = 0;
-  let resolved = 0;
+  let inProgress = 0;
+  let completed = 0;
   const groupCounts = new Map<RelationshipGroup, number>();
   const personCounts = new Map<string, number>();
   const personRows = new Map<
@@ -169,9 +174,10 @@ export async function getConversationStats(
   for (const t of threadsRes.data ?? []) {
     if (!surviving.has(t.thread_id)) continue; // deleted/empty thread
     total += 1;
-    const isOpen = t.status === "open" || t.status === "stabilizing";
-    if (isOpen) open += 1;
-    else if (t.status === "resolved" || t.status === "ended") resolved += 1;
+    const isActive = t.status !== "completed"; // open | in_progress
+    if (t.status === "open") open += 1;
+    else if (t.status === "in_progress") inProgress += 1;
+    else completed += 1;
 
     const person = t.person_id ? personById.get(t.person_id) : undefined;
     const group: RelationshipGroup = person
@@ -186,7 +192,7 @@ export async function getConversationStats(
         lastActivityAt: null,
       };
       row.conversations += 1;
-      if (isOpen) row.open += 1;
+      if (isActive) row.open += 1;
       if (
         t.last_activity_at &&
         (!row.lastActivityAt ||
@@ -212,23 +218,28 @@ export async function getConversationStats(
       count,
     }));
 
+  // Top 3 by open-conversation count (ties broken by most recent activity);
+  // people with nothing open don't appear.
   const people: PersonOverviewRow[] = [...personRows.entries()]
     .map(([personId, row]) => ({
       personId,
       name: personById.get(personId)?.name ?? "Someone",
       ...row,
     }))
+    .filter((p) => p.open > 0)
     .sort(
       (a, b) =>
+        b.open - a.open ||
         new Date(b.lastActivityAt ?? 0).getTime() -
-        new Date(a.lastActivityAt ?? 0).getTime(),
+          new Date(a.lastActivityAt ?? 0).getTime(),
     )
     .slice(0, MAX_PEOPLE_ROWS);
 
   return {
     total,
     open,
-    resolved,
+    inProgress,
+    completed,
     byGroup,
     topPeople,
     people,

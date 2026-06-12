@@ -34,13 +34,19 @@ const MOMENT_LABELS: Record<PersonMoment["recordType"], string> = {
   before_you_send: "Before-send check",
 };
 
-// Worsened gets the legible warm-red from the Threads chip lesson; open gets
-// accent so "still live" reads at a glance; everything else stays quiet.
+// Open gets accent so "still live" reads at a glance; in progress warm;
+// completed stays quiet.
 function statusClass(status: string): string {
-  if (status === "worsened") return "text-[#ec9a8f]";
-  if (status === "open" || status === "stabilizing") return "text-accent-ink";
+  if (status === "open") return "text-accent-ink";
+  if (status === "in_progress") return "text-warm";
   return "text-ink-soft";
 }
+
+const STATUS_TEXT: Record<string, string> = {
+  open: "Open",
+  in_progress: "In progress",
+  completed: "Completed",
+};
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -122,8 +128,8 @@ export default async function PersonHistoryPage({
               aria-hidden="true"
               className="h-1.5 w-1.5 rounded-full bg-positive"
             />
-            <span className="font-bold text-ink">{stats.resolved}</span>{" "}
-            resolved
+            <span className="font-bold text-ink">{stats.completed}</span>{" "}
+            completed
           </span>
         </div>
       </Card>
@@ -156,7 +162,7 @@ export default async function PersonHistoryPage({
                   <span
                     className={`flex-1 text-[11px] font-bold uppercase tracking-[0.5px] ${statusClass(c.status)}`}
                   >
-                    {c.status}
+                    {STATUS_TEXT[c.status] ?? c.status}
                   </span>
                   <span className="shrink-0 text-[11px] font-medium text-ink-soft">
                     {formatDate(c.lastActivityAt)}
@@ -181,10 +187,9 @@ export default async function PersonHistoryPage({
         )}
       </div>
 
-      {/* Regulation moments + draft checks linked to this person. Renders
-          only when any exist (silence over empty sections). NB: dormant until
-          the tools capture a person — see the PersonMoment note in
-          person-history.ts. */}
+      {/* Regulation moments linked to this person via the tools' optional
+          "was this about someone?" step. Renders only when any exist
+          (silence over empty sections). */}
       {moments.length > 0 && (
         <div className="mt-6">
           <Kicker as="h2">In-the-moment entries</Kicker>

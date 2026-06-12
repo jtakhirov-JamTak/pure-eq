@@ -706,21 +706,21 @@ export async function generateMonthlyReport(
   const triggerOk = triggerCount >= MIN_REGULATION_ENTRIES;
   const overwhelmOk = overwhelmCount >= MIN_REGULATION_ENTRIES;
 
-  // Person signals for the key-person pick: window entry volume + open/
-  // worsened threads (current status, window-active).
-  const threadCounts = new Map<string, { open: number; worsened: number }>();
+  // Person signals for the key-person pick: window entry volume + live
+  // threads (current status, window-active). "Open" counts open +
+  // in_progress — the 3-state collapse (migration 0050) removed worsened.
+  const threadCounts = new Map<string, { open: number }>();
   for (const t of threadsRes.data ?? []) {
     if (!t.person_id) continue;
-    const c = threadCounts.get(t.person_id) ?? { open: 0, worsened: 0 };
-    if (t.status === "open" || t.status === "stabilizing") c.open += 1;
-    if (t.status === "worsened") c.worsened += 1;
+    const c = threadCounts.get(t.person_id) ?? { open: 0 };
+    if (t.status === "open" || t.status === "in_progress") c.open += 1;
     threadCounts.set(t.person_id, c);
   }
   const personSignals: ReportPersonSignal[] = [...personEntryCounts.entries()]
     .filter(([, n]) => n >= MIN_PERSON_ENTRIES)
     .map(([personId, entryCount]): ReportPersonSignal | null => {
       const p = personById.get(personId);
-      const t = threadCounts.get(personId) ?? { open: 0, worsened: 0 };
+      const t = threadCounts.get(personId) ?? { open: 0 };
       // Name sanitized at the SOURCE (not just at prompt interpolation):
       // the model copies it verbatim and verifyReport matches it against
       // this same value — sanitizing only one side would break the match.
@@ -730,7 +730,6 @@ export async function generateMonthlyReport(
             domain: p.context,
             entryCount,
             openThreads: t.open,
-            worsenedThreads: t.worsened,
           }
         : null;
     })

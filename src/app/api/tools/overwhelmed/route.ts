@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createOverwhelmedSchema } from "@/lib/validation";
 import { rateLimit } from "@/lib/rate-limit";
 import { checkOrigin } from "@/lib/check-origin";
+import { resolveToolsPerson } from "@/lib/tools/resolve-person";
 
 export const runtime = "nodejs";
 
@@ -82,6 +83,18 @@ export async function POST(req: Request) {
     );
   }
 
+  // 3b. Optional "who was this about?" link — verify a picked id, or
+  // dedup/create a typed name (relationship "other"). Never trust client ids.
+  const person = await resolveToolsPerson(
+    supabase,
+    user.id,
+    input.personId,
+    input.personName,
+  );
+  if (!person.ok) {
+    return NextResponse.json({ error: "Invalid person" }, { status: 400 });
+  }
+
   // 4. Idempotency check — reuse existing raw row on retry.
   const { data: existingRaw, error: existingErr } = await supabase
     .from("raw_records")
@@ -105,6 +118,7 @@ export async function POST(req: Request) {
         record_type: "overwhelmed",
         module_type: "tools",
         source_session_id: idempotencyKey,
+        person_id: person.personId,
         payload_json: {
           fields: {
             beforeRating: input.beforeRating,
@@ -112,6 +126,8 @@ export async function POST(req: Request) {
             feelingLabel: input.feelingLabel,
             afterRating: input.afterRating,
             afterFeeling: input.afterFeeling,
+            personId: input.personId ?? null,
+            personName: input.personName ?? null,
           },
         },
         schema_version: 1,
@@ -152,6 +168,7 @@ export async function POST(req: Request) {
       .insert({
         user_id: user.id,
         raw_record_id: rawRecordId,
+        person_id: person.personId,
         what_happened: input.feelingLabel,
         body_sensations: input.bodyLocation ?? null,
         overwhelm_before: input.beforeRating,

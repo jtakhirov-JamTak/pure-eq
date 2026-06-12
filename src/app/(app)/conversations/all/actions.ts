@@ -14,16 +14,9 @@ import type { ThreadStatus } from "@/types";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const VALID_STATUSES: ThreadStatus[] = [
-  "open",
-  "stabilizing",
-  "resolved",
-  "paused",
-  "worsened",
-  "ended",
-];
+const VALID_STATUSES: ThreadStatus[] = ["open", "in_progress", "completed"];
 
-const TERMINAL_STATUSES = new Set(["resolved", "ended"]);
+const TERMINAL_STATUSES = new Set(["completed"]);
 
 // Cap selection size so one request can't fan out unbounded writes.
 const MAX_BULK = 100;

@@ -18,13 +18,10 @@ export type RelationshipDomain =
   | "client"
   | "other";
 
-export type ThreadStatus =
-  | "open"
-  | "stabilizing"
-  | "resolved"
-  | "paused"
-  | "worsened"
-  | "ended";
+// Collapsed from 6 states to 3 (founder decision 2026-06-12, migration 0050):
+// open = not yet worked through; in_progress = happened/evolving (absorbed
+// stabilizing/paused/worsened); completed = done (absorbed resolved/ended).
+export type ThreadStatus = "open" | "in_progress" | "completed";
 
 // The raw_records record_types that can carry a thread_id — i.e. the entry
 // types that make a conversation "exist". Single source for every reader that

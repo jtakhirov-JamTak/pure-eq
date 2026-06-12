@@ -38,6 +38,8 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
           conversation{stats.total === 1 ? "" : "s"}
         </span>
       </div>
+      {/* The 3 states partition cleanly: open + in progress + completed =
+          total, so nothing is ever unaccounted for. */}
       <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
         <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
           <span
@@ -49,9 +51,18 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
         <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
           <span
             aria-hidden="true"
+            className="h-1.5 w-1.5 rounded-full bg-warm"
+          />
+          <span className="font-bold text-ink">{stats.inProgress}</span> in
+          progress
+        </span>
+        <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-ink-soft">
+          <span
+            aria-hidden="true"
             className="h-1.5 w-1.5 rounded-full bg-positive"
           />
-          <span className="font-bold text-ink">{stats.resolved}</span> resolved
+          <span className="font-bold text-ink">{stats.completed}</span>{" "}
+          completed
         </span>
       </div>
 

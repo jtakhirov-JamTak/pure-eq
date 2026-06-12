@@ -77,12 +77,14 @@ export async function getConversationSummaries(
 ): Promise<ConversationSummaryResult> {
   const supabase = await createClient();
 
-  // Cap at 100 conversations (v0). RPC-upgrade path if a user ever exceeds it:
-  // paginate by last_activity_at. We fetch 101 so we can tell the caller when
-  // the list was truncated (and the page shows a "newest 100" notice).
+  // "All conversations shows everything" (founder direction 2026-06-12): cap
+  // raised to 1000, the PostgREST db-max-rows ceiling — asking for more gets
+  // silently truncated anyway, so 1000 is the honest maximum without
+  // pagination. At exactly 1000 rows we surface the truncation notice (count
+  // == cap rule). RPC/pagination is the upgrade path beyond that.
   // opts.personId narrows IN THE QUERY (person-history page) — filtering the
-  // newest-100 after the fact would drop a person's older conversations once
-  // the user's total thread count passes 100.
+  // newest-N after the fact would drop a person's older conversations once
+  // the user's total thread count passes the cap.
   let threadsQuery = supabase
     .from("conversation_threads")
     .select("thread_id, title, status, person_id, last_activity_at")
@@ -91,7 +93,7 @@ export async function getConversationSummaries(
     threadsQuery = threadsQuery.eq("person_id", opts.personId);
   }
   const [threadsRes, personsRes] = await Promise.all([
-    threadsQuery.order("last_activity_at", { ascending: false }).limit(101),
+    threadsQuery.order("last_activity_at", { ascending: false }).limit(1000),
     supabase
       .from("persons")
       .select("person_id, display_name")
@@ -115,11 +117,9 @@ export async function getConversationSummaries(
     );
   }
 
-  // We asked for 101; if we got more than 100 the list is truncated. Trim to
-  // the 100 newest before building summaries.
-  const allThreads = threadsRes.data ?? [];
-  const truncated = allThreads.length > 100;
-  const threads = truncated ? allThreads.slice(0, 100) : allThreads;
+  // count == cap means PostgREST may have cut the result — show the notice.
+  const threads = threadsRes.data ?? [];
+  const truncated = threads.length >= 1000;
   const threadIds = threads.map((t) => t.thread_id);
   if (threadIds.length === 0) return { summaries: [], truncated: false };
 
@@ -130,29 +130,46 @@ export async function getConversationSummaries(
   // Pull the three threaded module tables in bulk (no N+1). Each row carries its
   // topic column + the denormalized ai_headline string (stamped at generation
   // time by run-module via extractHeadline) — NOT the full AI jsonb blob, which
-  // would be 100s of KB across up to 100 threads just to read one line each.
+  // would be 100s of KB across up to 1000 threads just to read one line each.
+  //
+  // Filter shape differs by mode: the per-person path narrows by thread ids
+  // (small list); the list-everything path reads user-wide instead — an
+  // `.in()` with up to 1000 uuids would blow past practical URL limits.
+  // Entries for threads we didn't fetch are simply never looked up when
+  // building summaries. Newest-first + explicit 1000 cap (PostgREST ceiling):
+  // at the cap it's the OLDEST conversations that degrade, matching the
+  // newest-first thread list.
+  let prepQ = supabase
+    .from("prepare_entries")
+    .select("thread_id, situation_text, ai_headline, created_at")
+    .eq("user_id", userId)
+    .eq("is_complete", true)
+    .is("deleted_at", null);
+  let reviewQ = supabase
+    .from("review_entries")
+    .select("thread_id, what_happened, ai_headline, created_at")
+    .eq("user_id", userId)
+    .eq("is_complete", true)
+    .is("deleted_at", null);
+  let pulseQ = supabase
+    .from("pulse_check_entries")
+    .select("thread_id, what_feels_off, ai_headline, created_at")
+    .eq("user_id", userId)
+    .eq("is_complete", true)
+    .is("deleted_at", null);
+  if (opts?.personId) {
+    prepQ = prepQ.in("thread_id", threadIds);
+    reviewQ = reviewQ.in("thread_id", threadIds);
+    pulseQ = pulseQ.in("thread_id", threadIds);
+  } else {
+    prepQ = prepQ.not("thread_id", "is", null);
+    reviewQ = reviewQ.not("thread_id", "is", null);
+    pulseQ = pulseQ.not("thread_id", "is", null);
+  }
   const [prepRes, reviewRes, pulseRes] = await Promise.all([
-    supabase
-      .from("prepare_entries")
-      .select("thread_id, situation_text, ai_headline, created_at")
-      .eq("user_id", userId)
-      .in("thread_id", threadIds)
-      .eq("is_complete", true)
-      .is("deleted_at", null),
-    supabase
-      .from("review_entries")
-      .select("thread_id, what_happened, ai_headline, created_at")
-      .eq("user_id", userId)
-      .in("thread_id", threadIds)
-      .eq("is_complete", true)
-      .is("deleted_at", null),
-    supabase
-      .from("pulse_check_entries")
-      .select("thread_id, what_feels_off, ai_headline, created_at")
-      .eq("user_id", userId)
-      .in("thread_id", threadIds)
-      .eq("is_complete", true)
-      .is("deleted_at", null),
+    prepQ.order("created_at", { ascending: false }).limit(1000),
+    reviewQ.order("created_at", { ascending: false }).limit(1000),
+    pulseQ.order("created_at", { ascending: false }).limit(1000),
   ]);
 
   for (const [res, kind] of [

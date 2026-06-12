@@ -391,6 +391,15 @@ export const TOOLS_AFTER_FEELING_VALUES = [
   "Same",
 ] as const;
 
+// Optional "who was this about?" person link, shared by both tools (founder
+// direction 2026-06-12; BYS deliberately excluded — it has no person concept).
+// personId = picked an existing person; personName = typed a new name (the
+// route dedups/creates server-side, same as the coach modules).
+const toolsPersonFields = {
+  personId: z.string().uuid().nullable().optional(),
+  personName: z.string().trim().max(200).nullable().optional(),
+};
+
 // Tools — Overwhelmed
 export const createOverwhelmedSchema = z.object({
   beforeRating: z.number().int().min(1).max(5),
@@ -398,6 +407,7 @@ export const createOverwhelmedSchema = z.object({
   feelingLabel: z.string().trim().min(1).max(5000),
   afterRating: z.number().int().min(1).max(5),
   afterFeeling: z.enum(TOOLS_AFTER_FEELING_VALUES),
+  ...toolsPersonFields,
 });
 
 // Tools — Trigger Log
@@ -412,6 +422,7 @@ export const createTriggerSchema = z.object({
   outcome: z.string().trim().min(1).max(5000),
   reflection: z.string().trim().min(1).max(5000),
   afterFeeling: z.enum(TOOLS_AFTER_FEELING_VALUES),
+  ...toolsPersonFields,
 });
 
 // Persons

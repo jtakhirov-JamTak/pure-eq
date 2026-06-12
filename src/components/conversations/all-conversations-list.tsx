@@ -21,22 +21,17 @@ const ORIGIN_LABELS: Record<string, { label: string; className: string }> = {
   },
 };
 
+// Three states since migration 0050 (open / in_progress / completed).
 const STATUS_LABELS: Record<string, { label: string; className: string }> = {
   open: { label: "Open", className: "bg-accent-soft text-accent-ink" },
-  stabilizing: { label: "Stabilizing", className: "bg-warm-soft text-warm" },
-  resolved: { label: "Resolved", className: "bg-positive/15 text-positive" },
-  paused: { label: "Paused", className: "bg-surface-tint text-ink-soft" },
-  worsened: { label: "Worsened", className: "bg-danger/15 text-[#ec9a8f]" },
-  ended: { label: "Ended", className: "bg-surface-tint text-ink-soft" },
+  in_progress: { label: "In progress", className: "bg-warm-soft text-warm" },
+  completed: { label: "Completed", className: "bg-positive/15 text-positive" },
 };
 
 const STATUS_OPTIONS = [
   { value: "open", label: "Open" },
-  { value: "stabilizing", label: "Stabilizing" },
-  { value: "resolved", label: "Resolved" },
-  { value: "paused", label: "Paused" },
-  { value: "worsened", label: "Worsened" },
-  { value: "ended", label: "Ended" },
+  { value: "in_progress", label: "In progress" },
+  { value: "completed", label: "Completed" },
 ] as const;
 
 // The "All conversations" list with an opt-in multi-select mode. Out of select
