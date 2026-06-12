@@ -14,7 +14,7 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
   if (!stats.hasAny) {
     return (
       <Card className="p-5">
-        <Kicker>Your conversations</Kicker>
+        <Kicker as="h2">Your conversations</Kicker>
         <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
           Once you work through a conversation with Coach, the numbers show up
           here — who they&rsquo;re with, and how many are still open.
@@ -27,7 +27,7 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
 
   return (
     <Card className="p-5">
-      <Kicker>Your conversations</Kicker>
+      <Kicker as="h2">Your conversations</Kicker>
 
       {/* Totals + status: total / open / resolved. */}
       <div className="mt-3 flex items-baseline gap-2">
@@ -58,7 +58,7 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
       {/* By relationship group — only groups with at least one conversation. */}
       {stats.byGroup.length > 0 && (
         <div className="mt-5">
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-soft">
             By relationship
           </p>
           <ul className="mt-2.5 space-y-2">
@@ -67,11 +67,14 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
                 <span className="w-16 shrink-0 text-[12px] font-semibold text-ink-soft">
                   {GROUP_LABELS[group]}
                 </span>
+                {/* Largest group = 60% of the row; everything else scales
+                    proportionally (a flat maxWidth clamp made 0.6x–1x of the
+                    max render as identical bars). 8% floor keeps tiny counts
+                    visible. */}
                 <span
                   className="h-2 rounded-full bg-accent/70"
                   style={{
-                    width: `${Math.max((count / maxGroup) * 100, 8)}%`,
-                    maxWidth: "60%",
+                    width: `${Math.max((count / maxGroup) * 60, 8)}%`,
                   }}
                   aria-hidden="true"
                 />
@@ -85,7 +88,7 @@ export function ConversationStatsCard({ stats }: { stats: ConversationStats }) {
       {/* Top people by conversation count. */}
       {stats.topPeople.length > 0 && (
         <div className="mt-5">
-          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-muted">
+          <p className="text-[11px] font-bold uppercase tracking-[1.5px] text-ink-soft">
             Most conversations with
           </p>
           <ul className="mt-2 space-y-1.5">

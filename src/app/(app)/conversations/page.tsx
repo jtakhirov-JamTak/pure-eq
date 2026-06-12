@@ -69,7 +69,9 @@ export default async function ConversationsPage() {
           distinct from the resume-into-Review loops above. Last 3. */}
       {openThreads.length > 0 && (
         <div className="mt-6">
-          <Kicker className="text-accent-ink">Open conversations</Kicker>
+          <Kicker as="h2" className="text-accent-ink">
+            Open conversations
+          </Kicker>
           <ul className="mt-2.5 divide-y divide-hairline rounded-card border border-hairline bg-surface px-4">
             {openThreads.map((t) => (
               <li key={t.threadId}>
@@ -99,7 +101,9 @@ export default async function ConversationsPage() {
           closed, plus their linked in-the-moment entries. */}
       {stats.people.length > 0 && (
         <div className="mt-6">
-          <Kicker className="text-accent-ink">People</Kicker>
+          <Kicker as="h2" className="text-accent-ink">
+            People
+          </Kicker>
           <ul className="mt-2.5 divide-y divide-hairline rounded-card border border-hairline bg-surface px-4">
             {stats.people.map((p) => (
               <li key={p.personId}>

@@ -20,6 +20,10 @@ import {
 // Non-conversation entries linked to this person: in-the-moment regulation
 // logs + Before-You-Send draft checks. Date + type only (v0) — the value is
 // seeing WHEN the relationship spiked, not re-reading each entry.
+// NB: DORMANT until a writer exists — today NO write path sets person_id on
+// these record types (the tools routes collect no person; BYS runs with
+// personBehavior "skip"), so this list is always empty. The read is kept so
+// the section lights up the moment person capture ships in the tools.
 export type PersonMoment = {
   recordType: "trigger_log" | "overwhelmed" | "before_you_send";
   createdAt: string;
@@ -31,7 +35,6 @@ export type PersonHistory = {
     name: string;
     domain: RelationshipDomain;
     createdAt: string; // tracking since
-    isActive: boolean;
   };
   stats: { total: number; open: number; resolved: number };
   conversations: ConversationSummary[]; // newest first
@@ -39,6 +42,19 @@ export type PersonHistory = {
 };
 
 const MOMENT_TYPES = ["trigger_log", "overwhelmed", "before_you_send"] as const;
+
+// The 8 valid relationship domains, for runtime narrowing of the DB string
+// (§16.14: no blind `as` on union-typed columns). Unknown values → "other".
+const KNOWN_DOMAINS: readonly RelationshipDomain[] = [
+  "partner",
+  "friend",
+  "family",
+  "manager",
+  "direct_report",
+  "coworker",
+  "client",
+  "other",
+];
 
 export async function getPersonHistory(
   userId: string,
@@ -49,25 +65,28 @@ export async function getPersonHistory(
   // Ownership + existence: filter by user_id (never trust a client id alone).
   const personRes = await supabase
     .from("persons")
-    .select("person_id, display_name, relationship_domain, created_at, is_active")
+    .select("person_id, display_name, relationship_domain, created_at")
     .eq("user_id", userId)
     .eq("person_id", personId)
     .maybeSingle();
   if (personRes.error) {
+    // Fail loudly: a transient DB error must NOT render as a 404 ("this page
+    // doesn't exist") — throw so the error boundary shows a retryable state.
     captureServerRead(
       "person_history",
       "persons",
       new Error("person_history_person_read_failed"),
     );
-    return null;
+    throw new Error("person_history_person_read_failed");
   }
   if (!personRes.data) return null;
 
   const [{ summaries }, momentsRes] = await Promise.all([
-    // Reuse the All-conversations data layer and filter to this person — the
-    // 100-thread cap is shared (acceptable: a single person's conversations
-    // are a subset of the newest 100).
-    getConversationSummaries(userId),
+    // Reuse the All-conversations data layer, narrowed to this person IN THE
+    // QUERY — so the 100-conversation cap applies per person, and the page
+    // can't disagree with the People-row counts once the user's total thread
+    // count passes 100.
+    getConversationSummaries(userId, { personId }),
     supabase
       .from("raw_records")
       .select("record_type, created_at")
@@ -88,7 +107,8 @@ export async function getPersonHistory(
     );
   }
 
-  const conversations = summaries.filter((s) => s.personId === personId);
+  // Already narrowed to this person at the query level.
+  const conversations = summaries;
   let open = 0;
   let resolved = 0;
   for (const c of conversations) {
@@ -96,13 +116,19 @@ export async function getPersonHistory(
     else if (c.status === "resolved" || c.status === "ended") resolved += 1;
   }
 
+  const rawDomain = personRes.data.relationship_domain;
+  const domain: RelationshipDomain = (
+    KNOWN_DOMAINS as readonly string[]
+  ).includes(rawDomain)
+    ? (rawDomain as RelationshipDomain)
+    : "other";
+
   return {
     person: {
       personId: personRes.data.person_id,
       name: personRes.data.display_name,
-      domain: personRes.data.relationship_domain as RelationshipDomain,
+      domain,
       createdAt: personRes.data.created_at,
-      isActive: personRes.data.is_active,
     },
     stats: { total: conversations.length, open, resolved },
     conversations,

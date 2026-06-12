@@ -73,19 +73,25 @@ export type ConversationSummaryResult = {
 
 export async function getConversationSummaries(
   userId: string,
+  opts?: { personId?: string },
 ): Promise<ConversationSummaryResult> {
   const supabase = await createClient();
 
   // Cap at 100 conversations (v0). RPC-upgrade path if a user ever exceeds it:
   // paginate by last_activity_at. We fetch 101 so we can tell the caller when
   // the list was truncated (and the page shows a "newest 100" notice).
+  // opts.personId narrows IN THE QUERY (person-history page) — filtering the
+  // newest-100 after the fact would drop a person's older conversations once
+  // the user's total thread count passes 100.
+  let threadsQuery = supabase
+    .from("conversation_threads")
+    .select("thread_id, title, status, person_id, last_activity_at")
+    .eq("user_id", userId);
+  if (opts?.personId) {
+    threadsQuery = threadsQuery.eq("person_id", opts.personId);
+  }
   const [threadsRes, personsRes] = await Promise.all([
-    supabase
-      .from("conversation_threads")
-      .select("thread_id, title, status, person_id, last_activity_at")
-      .eq("user_id", userId)
-      .order("last_activity_at", { ascending: false })
-      .limit(101),
+    threadsQuery.order("last_activity_at", { ascending: false }).limit(101),
     supabase
       .from("persons")
       .select("person_id, display_name")

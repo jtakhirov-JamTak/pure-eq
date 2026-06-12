@@ -90,10 +90,13 @@ export async function getConversationStats(
   // a user ever exceeds them). At the 1000-row PostgREST cap these counts can
   // undercount — acceptable for an at-a-glance dashboard, not an export.
   const [threadsRes, recsRes, personsRes] = await Promise.all([
+    // .order() makes each cap deterministic: "the newest 1000", not an
+    // arbitrary 1000 chosen by the planner once a user exceeds the cap.
     supabase
       .from("conversation_threads")
       .select("thread_id, status, person_id, last_activity_at")
       .eq("user_id", userId)
+      .order("last_activity_at", { ascending: false })
       .limit(1000),
     // Survival check mirrors open-loops.ts via the shared constant.
     supabase
@@ -104,6 +107,7 @@ export async function getConversationStats(
       .in("record_type", [...THREADED_RECORD_TYPES])
       .eq("is_complete", true)
       .is("deleted_at", null)
+      .order("created_at", { ascending: false })
       .limit(1000),
     supabase
       .from("persons")
@@ -129,11 +133,15 @@ export async function getConversationStats(
     return EMPTY;
   }
   if (personsRes.error) {
+    // Without persons, byGroup would confidently misattribute EVERY
+    // conversation to "Other" and People/topPeople would vanish — wrong data,
+    // not degraded data. Return the empty state like the other two arms.
     captureServerRead(
       "conversation_stats",
       "persons",
       new Error("conversation_stats_persons_read_failed"),
     );
+    return EMPTY;
   }
 
   const surviving = new Set<string>();
@@ -181,7 +189,9 @@ export async function getConversationStats(
       if (isOpen) row.open += 1;
       if (
         t.last_activity_at &&
-        (!row.lastActivityAt || t.last_activity_at > row.lastActivityAt)
+        (!row.lastActivityAt ||
+          new Date(t.last_activity_at).getTime() >
+            new Date(row.lastActivityAt).getTime())
       ) {
         row.lastActivityAt = t.last_activity_at;
       }
@@ -208,7 +218,11 @@ export async function getConversationStats(
       name: personById.get(personId)?.name ?? "Someone",
       ...row,
     }))
-    .sort((a, b) => (b.lastActivityAt ?? "").localeCompare(a.lastActivityAt ?? ""))
+    .sort(
+      (a, b) =>
+        new Date(b.lastActivityAt ?? 0).getTime() -
+        new Date(a.lastActivityAt ?? 0).getTime(),
+    )
     .slice(0, MAX_PEOPLE_ROWS);
 
   return {

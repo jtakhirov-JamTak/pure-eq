@@ -77,7 +77,7 @@ export default async function PersonHistoryPage({
       <div className="flex items-center justify-between">
         <Link
           href="/conversations"
-          className="rounded-pill border border-hairline bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
+          className="inline-flex min-h-11 items-center rounded-pill border border-hairline bg-surface px-3.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
         >
           Back
         </Link>
@@ -89,7 +89,7 @@ export default async function PersonHistoryPage({
           {DOMAIN_LABELS[person.domain] ?? person.domain}
         </Kicker>
         <h1
-          className="mt-1.5 font-display text-[28px] font-medium leading-[1.1] text-ink"
+          className="mt-1.5 break-words font-display text-[28px] font-medium leading-[1.1] text-ink"
           style={{ letterSpacing: "-0.7px" }}
         >
           {person.name}
@@ -182,8 +182,9 @@ export default async function PersonHistoryPage({
       </div>
 
       {/* Regulation moments + draft checks linked to this person. Renders
-          only when any exist — most persons won't have these (silence over
-          empty sections). */}
+          only when any exist (silence over empty sections). NB: dormant until
+          the tools capture a person — see the PersonMoment note in
+          person-history.ts. */}
       {moments.length > 0 && (
         <div className="mt-6">
           <Kicker as="h2">In-the-moment entries</Kicker>

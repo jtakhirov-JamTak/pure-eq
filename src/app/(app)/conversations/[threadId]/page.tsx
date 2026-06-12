@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { captureServerRead } from "@/lib/read-capture";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { StormBackground } from "@/components/brand/StormBackground";
@@ -7,6 +8,9 @@ import ThreadStatusSelector from "./thread-status-selector";
 import { DeleteConversationButton } from "./delete-conversation-button";
 import { ThreadReviewButton } from "@/components/coach/thread-review-button";
 import { getThreadEntries } from "@/lib/coach/conversation-summary";
+
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const MODULE_BADGES: Record<string, { label: string; color: string }> = {
   prepare: { label: "Prepare", color: "bg-accent-soft text-accent-ink" },
@@ -21,6 +25,9 @@ export default async function ConversationDetailPage({
   params: Promise<{ threadId: string }>;
 }) {
   const { threadId } = await params;
+  // Clean 404 on a malformed id instead of a PostgREST uuid-cast error.
+  if (!UUID_RE.test(threadId)) notFound();
+
   const supabase = await createClient();
   const {
     data: { user },
@@ -29,13 +36,22 @@ export default async function ConversationDetailPage({
 
   // Coins redesign Phase 3: viewing your own thread is free (login-only).
   // Fetch thread (RLS ensures user ownership).
-  const { data: thread } = await supabase
+  const { data: thread, error: threadErr } = await supabase
     .from("conversation_threads")
     .select("thread_id, title, status, person_id, last_activity_at, started_at")
     .eq("thread_id", threadId)
     .eq("user_id", user.id)
     .maybeSingle();
 
+  if (threadErr) {
+    // Fail loudly: a transient DB error must not render as a silent 404.
+    captureServerRead(
+      "thread_detail",
+      "conversation_threads",
+      new Error("thread_detail_thread_read_failed"),
+    );
+    throw new Error("thread_detail_thread_read_failed");
+  }
   if (!thread) notFound();
 
   // Fetch person name and the thread timeline (each entry carries the user's
@@ -45,6 +61,7 @@ export default async function ConversationDetailPage({
       ? supabase
           .from("persons")
           .select("display_name")
+          .eq("user_id", user.id)
           .eq("person_id", thread.person_id)
           .maybeSingle()
       : Promise.resolve({ data: null }),
