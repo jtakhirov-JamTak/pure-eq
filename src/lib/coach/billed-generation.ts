@@ -129,44 +129,60 @@ export async function runBilledGeneration<TAiOutput>(
     coinsCharged = spend === "ok";
   }
 
-  // Generate (the AI call + retry loop live in the caller's closure).
-  const gen = await args.generate();
-  const aiOutput = gen.aiOutput;
+  // Generate → persist, with a refund backstop on a THROWN error. The resolved
+  // failure paths below (aiOutput null, persist {error:true}) refund explicitly;
+  // the catch covers the window where `generate` or `persist` THROWS instead of
+  // resolving — without it a fresh charge would be stranded with no refund row.
+  // Mirrors the outer catch in the Insights twin (generate.ts) — keep them
+  // symmetric. Safe against double-refund: refunds are idempotent on the
+  // per-attempt `:refund` key.
+  try {
+    const gen = await args.generate();
+    const aiOutput = gen.aiOutput;
 
-  if (!aiOutput) {
-    Sentry.captureException(gen.lastErr, {
-      tags: { area: "coach", module, kind: gen.failureKind },
-    });
-    // Release the reservation — generation failed before any output was saved.
+    if (!aiOutput) {
+      Sentry.captureException(gen.lastErr, {
+        tags: { area: "coach", module, kind: gen.failureKind },
+      });
+      // Release the reservation — generation failed before any output was saved.
+      if (coinsCharged && spendKey) {
+        await coins.refundCoins(userId, coinCost, spendKey);
+      }
+    }
+
+    // Persist the output to the derived row.
+    let saveWarning = false;
+    if (aiOutput) {
+      const res = await args.persist(aiOutput);
+      if (res.error) {
+        saveWarning = true;
+        // Output generated but not saved to history — treat as a failure for
+        // billing: release the hold, symmetric with the AI-failure refund above
+        // and the Insights insert-failure path. Clearing coinsCharged nets
+        // coinsSpent to 0 for this stranded run; a retry regenerates + charges.
+        if (coinsCharged && spendKey) {
+          await coins.refundCoins(userId, coinCost, spendKey);
+          coinsCharged = false;
+        }
+      }
+    }
+
+    return {
+      kind: "complete",
+      aiOutput,
+      coinsSpent: aiOutput && coinsCharged ? coinCost : 0,
+      saveWarning,
+      failureKind: gen.failureKind,
+      attempts: gen.attempts,
+      latencyMs: gen.latencyMs,
+    };
+  } catch (err) {
+    // Only a FRESH charge is refundable here — same invariant as the resolved
+    // paths: reversing an 'already_applied' spend would refund the request
+    // that actually paid.
     if (coinsCharged && spendKey) {
       await coins.refundCoins(userId, coinCost, spendKey);
     }
+    throw err;
   }
-
-  // Persist the output to the derived row.
-  let saveWarning = false;
-  if (aiOutput) {
-    const res = await args.persist(aiOutput);
-    if (res.error) {
-      saveWarning = true;
-      // Output generated but not saved to history — treat as a failure for
-      // billing: release the hold, symmetric with the AI-failure refund above
-      // and the Insights insert-failure path. Clearing coinsCharged nets
-      // coinsSpent to 0 for this stranded run; a retry regenerates + charges.
-      if (coinsCharged && spendKey) {
-        await coins.refundCoins(userId, coinCost, spendKey);
-        coinsCharged = false;
-      }
-    }
-  }
-
-  return {
-    kind: "complete",
-    aiOutput,
-    coinsSpent: aiOutput && coinsCharged ? coinCost : 0,
-    saveWarning,
-    failureKind: gen.failureKind,
-    attempts: gen.attempts,
-    latencyMs: gen.latencyMs,
-  };
 }

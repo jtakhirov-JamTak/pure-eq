@@ -212,4 +212,45 @@ describe("runBilledGeneration — Coach coin charge", () => {
       latencyMs: 5,
     });
   });
+
+  it("refunds a fresh charge and propagates when persist THROWS (not resolves {error:true})", async () => {
+    // The thrown-error backstop: a derived-write that throws (instead of
+    // resolving { error: true }) must not strand the charge. Mirrors the
+    // Insights outer catch (generate.ts).
+    const coins = makeCoins();
+    const persist = vi.fn().mockRejectedValue(new Error("derived write blew up"));
+
+    await expect(
+      runBilledGeneration(baseArgs({ coins, persist })),
+    ).rejects.toThrow("derived write blew up");
+    expect(coins.refundCoins).toHaveBeenCalledWith("u1", 4, "idem-1:gen:0");
+    expect(coins.refundCoins).toHaveBeenCalledTimes(1);
+  });
+
+  it("refunds a fresh charge and propagates when generate THROWS", async () => {
+    // run-module's generate closure catches its own AI errors today, but the
+    // backstop must hold if a future closure throws from outside its loop.
+    const coins = makeCoins();
+    const generate = vi.fn().mockRejectedValue(new Error("closure escaped"));
+    const persist = vi.fn();
+
+    await expect(
+      runBilledGeneration(baseArgs({ coins, generate, persist })),
+    ).rejects.toThrow("closure escaped");
+    expect(coins.refundCoins).toHaveBeenCalledWith("u1", 4, "idem-1:gen:0");
+    expect(coins.refundCoins).toHaveBeenCalledTimes(1);
+    expect(persist).not.toHaveBeenCalled();
+  });
+
+  it("does NOT refund an 'already_applied' charge when persist throws (not ours to reverse)", async () => {
+    const coins = makeCoins({
+      spendCoins: vi.fn().mockResolvedValue("already_applied"),
+    });
+    const persist = vi.fn().mockRejectedValue(new Error("derived write blew up"));
+
+    await expect(
+      runBilledGeneration(baseArgs({ coins, persist })),
+    ).rejects.toThrow("derived write blew up");
+    expect(coins.refundCoins).not.toHaveBeenCalled();
+  });
 });
