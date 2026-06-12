@@ -188,7 +188,8 @@ export interface GenerateOptions {
 // contains enum tokens (apologize, boundary, clarify, etc.) that are also common
 // in user text — a single-word "quote" would verify trivially via substring
 // match but carry no evidentiary weight, so require at least one internal space.
-function quoteVerifies(
+// Exported for reuse by the monthly report generator (same grounding regime).
+export function quoteVerifies(
   ev: { quote: string; source_record_id: string },
   entryLookup: Map<string, string>,
 ): boolean {
@@ -420,9 +421,10 @@ export function aggregateBehavioralContext(
 
 /**
  * Build a flat searchable-text index per raw_record, so quote verification
- * is O(observations × evidence) with O(1) per check.
+ * is O(observations × evidence) with O(1) per check. Exported for reuse by
+ * the monthly report generator.
  */
-function buildEntryLookup(
+export function buildEntryLookup(
   rawRecords: Array<{ raw_record_id: string; payload_json: unknown }>,
 ): Map<string, string> {
   const map = new Map<string, string>();

@@ -15,6 +15,8 @@ import { createClient, getAuthUser } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ReflectionCard } from "@/components/insights/ReflectionCard";
 import { ReflectionKickoff } from "@/components/insights/ReflectionKickoff";
+import { MonthlyReportCard } from "@/components/insights/MonthlyReportCard";
+import { MonthlyReportKickoff } from "@/components/insights/MonthlyReportKickoff";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
@@ -26,7 +28,21 @@ import {
   MIN_ENTRIES_FOR_REFLECTION,
   REFLECTION_GATE_RECORD_TYPES,
 } from "@/lib/insights/generate";
-import { reflectionOutputSchema } from "@/lib/ai/schemas";
+import {
+  REPORT_GENERATOR_VERSION,
+  REPORT_IDEMPOTENCY_WINDOW_MS,
+  REPORT_INPUT_WINDOW_DAYS,
+  MIN_ENTRIES_FOR_REPORT,
+  REPORT_GATE_RECORD_TYPES,
+} from "@/lib/insights/monthly-report";
+import {
+  isReportSnapshot,
+  type ReportSnapshot,
+} from "@/lib/insights/report-snapshot";
+import {
+  reflectionOutputSchema,
+  monthlyReportOutputSchema,
+} from "@/lib/ai/schemas";
 import { captureServerRead } from "@/lib/read-capture";
 
 export default async function InsightsPage() {
@@ -42,26 +58,53 @@ export default async function InsightsPage() {
   // ReflectionKickoff → /api/insights/generate); viewing an already-generated
   // reflection inside the 7-day window is free.
 
-  const [latestReflectionRes, entryCountRes] = await Promise.all([
-    supabase
-      .from("weekly_reflections")
-      .select("generated_at, generator_version, ai_json")
-      .eq("user_id", user.id)
-      .order("generated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    // All-time count of completed entries across the four reflective modules —
-    // the gate for the first weekly reflection. head:true = COUNT only, no rows.
-    // The server re-counts in generateReflection (the real gate); this drives
-    // the locked vs. generate UI state.
-    supabase
-      .from("raw_records")
-      .select("raw_record_id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .in("record_type", [...REFLECTION_GATE_RECORD_TYPES])
-      .eq("is_complete", true)
-      .is("deleted_at", null),
-  ]);
+  // Async Server Component renders once per request — current-time logic here
+  // is genuine staleness math, not a render-loop impurity.
+  // eslint-disable-next-line react-hooks/purity
+  const nowMs = Date.now();
+  const reportWindowStart = new Date(
+    nowMs - REPORT_INPUT_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  ).toISOString();
+
+  const [latestReflectionRes, entryCountRes, latestReportRes, reportCountRes] =
+    await Promise.all([
+      supabase
+        .from("weekly_reflections")
+        .select("generated_at, generator_version, ai_json")
+        .eq("user_id", user.id)
+        .order("generated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // All-time count of completed entries across the four reflective modules —
+      // the gate for the first weekly reflection. head:true = COUNT only, no rows.
+      // The server re-counts in generateReflection (the real gate); this drives
+      // the locked vs. generate UI state.
+      supabase
+        .from("raw_records")
+        .select("raw_record_id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .in("record_type", [...REFLECTION_GATE_RECORD_TYPES])
+        .eq("is_complete", true)
+        .is("deleted_at", null),
+      supabase
+        .from("monthly_reports")
+        .select("generated_at, generator_version, ai_json, server_json")
+        .eq("user_id", user.id)
+        .order("generated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      // In-WINDOW count for the Monthly Report gate (last 28 days, broader
+      // record-type set incl. the Tools). Server re-counts in
+      // generateMonthlyReport; this drives the locked vs. generate UI state.
+      supabase
+        .from("raw_records")
+        .select("raw_record_id", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .in("record_type", [...REPORT_GATE_RECORD_TYPES])
+        .eq("is_complete", true)
+        .is("deleted_at", null)
+        .gte("created_at", reportWindowStart),
+    ]);
 
   if (latestReflectionRes.error) {
     captureServerRead(
@@ -75,6 +118,20 @@ export default async function InsightsPage() {
       "insights",
       "entry_count_read",
       new Error("entry_count_read_failed"),
+    );
+  }
+  if (latestReportRes.error) {
+    captureServerRead(
+      "insights",
+      "monthly_reports_read",
+      new Error("monthly_reports_read_failed"),
+    );
+  }
+  if (reportCountRes.error) {
+    captureServerRead(
+      "insights",
+      "report_entry_count_read",
+      new Error("report_entry_count_read_failed"),
     );
   }
 
@@ -99,11 +156,7 @@ export default async function InsightsPage() {
   let hasStaleCached = false;
 
   if (latest) {
-    // Async Server Component renders once per request — Date.now() here is
-    // genuine current-time logic (reflection staleness), not a client
-    // render-loop impurity the rule targets.
-    // eslint-disable-next-line react-hooks/purity
-    const ageMs = Date.now() - new Date(latest.generated_at).getTime();
+    const ageMs = nowMs - new Date(latest.generated_at).getTime();
     const versionOk = latest.generator_version === GENERATOR_VERSION;
     const parsed = reflectionOutputSchema.safeParse(latest.ai_json);
     if (ageMs < IDEMPOTENCY_WINDOW_MS && versionOk && parsed.success) {
@@ -113,6 +166,43 @@ export default async function InsightsPage() {
       };
     } else {
       hasStaleCached = true;
+    }
+  }
+
+  // Monthly Report: same fresh-vs-stale-vs-locked decision, 28-day window.
+  // Gate fails OPEN on a count error (server re-counts and is authoritative).
+  const reportEntryCount = reportCountRes.count ?? 0;
+  const canGenerateReport =
+    !!reportCountRes.error || reportEntryCount >= MIN_ENTRIES_FOR_REPORT;
+
+  const latestReport = latestReportRes.data;
+  let freshReport:
+    | {
+        generatedAt: string;
+        report: import("@/lib/ai/schemas").MonthlyReportOutput;
+        snapshot: ReportSnapshot;
+      }
+    | null = null;
+  let hasStaleReport = false;
+
+  if (latestReport) {
+    const ageMs = nowMs - new Date(latestReport.generated_at).getTime();
+    const versionOk =
+      latestReport.generator_version === REPORT_GENERATOR_VERSION;
+    const parsed = monthlyReportOutputSchema.safeParse(latestReport.ai_json);
+    if (
+      ageMs < REPORT_IDEMPOTENCY_WINDOW_MS &&
+      versionOk &&
+      parsed.success &&
+      isReportSnapshot(latestReport.server_json)
+    ) {
+      freshReport = {
+        generatedAt: latestReport.generated_at,
+        report: parsed.data,
+        snapshot: latestReport.server_json,
+      };
+    } else {
+      hasStaleReport = true;
     }
   }
 
@@ -155,6 +245,31 @@ export default async function InsightsPage() {
           >
             Go to Coach
           </Link>
+        </Card>
+      )}
+
+      {/* Monthly Report (B4) — below the weekly. Fresh row renders free;
+          otherwise the explicit 80-coin Generate button, or the locked
+          "N of 10 this month" state. */}
+      {freshReport ? (
+        <MonthlyReportCard
+          report={freshReport.report}
+          snapshot={freshReport.snapshot}
+          generatedAt={freshReport.generatedAt}
+        />
+      ) : canGenerateReport ? (
+        <MonthlyReportKickoff hasStaleCached={hasStaleReport} />
+      ) : (
+        <Card className="mt-4 p-5">
+          <Kicker as="h2">Your monthly report</Kicker>
+          <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
+            Your monthly report unlocks after {MIN_ENTRIES_FOR_REPORT} entries
+            in the last {REPORT_INPUT_WINDOW_DAYS} days — a month of real usage
+            to ground tendencies, patterns, and an EQ read.
+          </p>
+          <p className="mt-3 text-[13px] font-semibold text-ink">
+            {reportEntryCount} of {MIN_ENTRIES_FOR_REPORT} entries this month
+          </p>
         </Card>
       )}
     </div>

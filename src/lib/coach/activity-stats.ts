@@ -1,9 +1,14 @@
 // ============================================================
-// Activity stats — the "Your activity" dashboard on the Conversations tab
+// Activity stats — usage-over-time aggregation (raw_records)
 // ============================================================
-// Replaces the flat per-module count boxes that used to live on /history with
-// a usage-over-time read: an 8-week bar trend, this-month total vs. last month,
-// a by-type breakdown, and a recent-consistency stat.
+// Originally the "Your activity" heatmap dashboard on the Conversations tab;
+// that slot now shows conversation stats (conversation-stats.ts) and the
+// heatmap UI lives inside the Monthly Report (a 4-week snapshot built by
+// monthly-report.ts on the shared primitives in activity-types.ts).
+// getActivityStats currently has no renderer — kept because the 10-week
+// dashboard is a likely re-add and the math is tested/correct. If it's still
+// unconsumed after the Monthly Report ships and settles, delete it in a
+// techdebt pass.
 //
 // Source is raw_records (one row per completed module run). We fetch a single
 // bounded window (since the start of last month OR 8 weeks ago, whichever is
@@ -11,22 +16,21 @@
 // path (date_trunc GROUP BY) for when a user exceeds it.
 import { createClient } from "@/lib/supabase/server";
 import { captureServerRead } from "@/lib/read-capture";
+import {
+  bucketFor,
+  BUCKET_PRIORITY,
+  type ActivityBucket,
+  type DayCell,
+} from "./activity-types";
+
+// Re-export the shared primitives so existing imports keep working.
+export { bucketFor, type ActivityBucket, type DayCell };
 
 export const ACTIVITY_WEEKS = 8;
 
 // Heatmap grid: trailing N weeks, columns = weeks (oldest → newest), rows =
 // weekdays Mon..Sun. Each day cell is colored by its dominant activity type.
 export const ACTIVITY_GRID_WEEKS = 10;
-
-export type ActivityBucket = "conversations" | "pulse" | "regulation" | "beforeSend";
-
-// One day in the heatmap. dominant = the bucket with the most runs that day
-// (null on an empty day); total = all completed runs that day (drives intensity).
-export type DayCell = {
-  date: string; // local start-of-day ISO
-  dominant: ActivityBucket | null;
-  total: number;
-};
 
 export type ActivityStats = {
   // Oldest → newest. Length === ACTIVITY_WEEKS. count = completed runs that week.
@@ -40,14 +44,6 @@ export type ActivityStats = {
   activeDaysLast7: number;
   hasAny: boolean;
 };
-
-// Fixed tie-break order when a day has equal counts across types.
-const BUCKET_PRIORITY: ActivityBucket[] = [
-  "conversations",
-  "pulse",
-  "regulation",
-  "beforeSend",
-];
 
 // Build the Mon..Sun × weeks grid from a day-key → per-bucket-count map.
 // gridStart must be the Monday of the oldest week. An empty map yields an
@@ -79,23 +75,6 @@ function buildGrid(
     weeks.push(col);
   }
   return weeks;
-}
-
-function bucketFor(recordType: string): ActivityBucket | null {
-  switch (recordType) {
-    case "prepare":
-    case "review":
-      return "conversations";
-    case "pulse_check":
-      return "pulse";
-    case "trigger_log":
-    case "overwhelmed":
-      return "regulation";
-    case "before_you_send":
-      return "beforeSend";
-    default:
-      return null; // onboarding_profile, outcome_tracking, etc.
-  }
 }
 
 function startOfDay(d: Date): Date {

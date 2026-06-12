@@ -255,6 +255,113 @@ export type FocusFollowup = z.infer<typeof focusFollowupShape>;
 export type ReflectionObservation = z.infer<typeof observationShape>;
 export type ReflectionEvidence = z.infer<typeof evidenceShape>;
 
+// ============================================================
+// Monthly Report output (B4, 2026-06-12)
+// ============================================================
+// The 80-coin month-level report. Same grounding regime as the weekly
+// reflection: every quoted claim carries evidenceShape items that the server
+// substring-verifies against the cited source entries, and every section is
+// independently droppable (silence over garbage) — the generator filters
+// unverifiable items and downgrades to refusal when nothing grounded
+// survives. Sections the server can compute itself (heatmap, focus history,
+// top-pattern ranking) live in monthly_reports.server_json, NOT here — the
+// model only narrates them.
+
+// Relationship contexts a tendency can be about. The server tells the model
+// which contexts have enough entries this month (>= 2); tendencies for other
+// contexts are dropped server-side.
+export const REPORT_TENDENCY_CONTEXTS = [
+  "work",
+  "family",
+  "friend",
+  "partner",
+  "other",
+] as const;
+export const tendencyContextEnum = z.enum(REPORT_TENDENCY_CONTEXTS);
+
+// "In <context> interactions, you tend to…" — grounded like an observation.
+export const reportTendencyShape = z.object({
+  context: tendencyContextEnum,
+  tendency: z.string().trim().min(1).max(300),
+  evidence: z.array(evidenceShape).min(1).max(3),
+});
+
+// "You're most likely triggered/overwhelmed by…" — from the Tools entries.
+export const reportRegulationPatternShape = z.object({
+  statement: z.string().trim().min(1).max(300),
+  evidence: z.array(evidenceShape).min(1).max(3),
+});
+
+// Month-level note on one of the server-ranked top patterns. theme must be
+// copied VERBATIM from the candidate list the server provides — the generator
+// drops any entry whose theme isn't in that list (the ranking + confidence
+// labels are server-derived from the month's weekly reflections, never the
+// model's call).
+export const reportTopPatternShape = z.object({
+  theme: z.string().trim().min(1).max(120),
+  note: z.string().trim().min(1).max(280),
+});
+
+// The person the month's emotional investment concentrates on. name must
+// match one of the persons in the server-provided signal table (validated
+// server-side; section is dropped otherwise).
+export const reportKeyPersonShape = z.object({
+  name: z.string().trim().min(1).max(80),
+  why: z.string().trim().min(1).max(300),
+  tip: z.string().trim().min(1).max(280),
+});
+
+// The four EQ components. Scores are integers 1–10, baseline 5; the prompt
+// holds 9–10 as near-unreachable and requires each `why` to reference the
+// user's actual entries. Scores are ALWAYS honest — the report-index tone
+// schedule (first/gentle/realistic) modulates written framing only.
+export const EQ_COMPONENTS = [
+  "self_awareness",
+  "self_management",
+  "social_awareness",
+  "relationship_management",
+] as const;
+export const eqComponentScoreShape = z.object({
+  score: z.number().int().min(1).max(10),
+  why: z.string().trim().min(1).max(280),
+});
+export const eqRatingsShape = z.object({
+  self_awareness: eqComponentScoreShape,
+  self_management: eqComponentScoreShape,
+  social_awareness: eqComponentScoreShape,
+  relationship_management: eqComponentScoreShape,
+});
+
+export const monthlyReportNormalShape = z.object({
+  mode: z.literal("report"),
+  summary: z.string().trim().min(1).max(300),
+  tendencies: z.array(reportTendencyShape).max(5).default([]),
+  trigger_pattern: reportRegulationPatternShape.nullable().default(null),
+  overwhelm_pattern: reportRegulationPatternShape.nullable().default(null),
+  // Narrative on the month's weekly focuses. Forced null server-side when the
+  // month had no focus history (no hallucinated look-back, same rule as
+  // focus_followup on the weekly).
+  focus_trend: z.string().trim().min(1).max(300).nullable().default(null),
+  top_patterns: z.array(reportTopPatternShape).max(3).default([]),
+  key_person: reportKeyPersonShape.nullable().default(null),
+  eq_ratings: eqRatingsShape,
+});
+
+export const monthlyReportOutputSchema = z.discriminatedUnion("mode", [
+  monthlyReportNormalShape,
+  refusalShape,
+]);
+
+export type EqComponentKey = (typeof EQ_COMPONENTS)[number];
+export type ReportTendencyContext = (typeof REPORT_TENDENCY_CONTEXTS)[number];
+export type MonthlyReportOutput = z.infer<typeof monthlyReportOutputSchema>;
+export type MonthlyReportNormal = z.infer<typeof monthlyReportNormalShape>;
+export type ReportTendency = z.infer<typeof reportTendencyShape>;
+export type ReportRegulationPattern = z.infer<typeof reportRegulationPatternShape>;
+export type ReportTopPattern = z.infer<typeof reportTopPatternShape>;
+export type ReportKeyPerson = z.infer<typeof reportKeyPersonShape>;
+export type EqRatings = z.infer<typeof eqRatingsShape>;
+
 /**
  * Check AI output for banned phrases before displaying to user.
  * Returns the first banned phrase found, or null if clean.

@@ -304,6 +304,54 @@ export type Database = {
           },
         ]
       }
+      monthly_reports: {
+        Row: {
+          ai_duration_ms: number
+          ai_json: Json
+          generated_at: string
+          generator_version: string
+          input_entry_count: number
+          input_window_days: number
+          period_end: string
+          period_start: string
+          prompt_version: string
+          report_id: string
+          report_index: number
+          server_json: Json
+          user_id: string
+        }
+        Insert: {
+          ai_duration_ms: number
+          ai_json: Json
+          generated_at?: string
+          generator_version: string
+          input_entry_count: number
+          input_window_days?: number
+          period_end: string
+          period_start: string
+          prompt_version: string
+          report_id?: string
+          report_index: number
+          server_json: Json
+          user_id: string
+        }
+        Update: {
+          ai_duration_ms?: number
+          ai_json?: Json
+          generated_at?: string
+          generator_version?: string
+          input_entry_count?: number
+          input_window_days?: number
+          period_end?: string
+          period_start?: string
+          prompt_version?: string
+          report_id?: string
+          report_index?: number
+          server_json?: Json
+          user_id?: string
+        }
+        Relationships: []
+      }
       overwhelmed_entries: {
         Row: {
           after_feeling: string | null
