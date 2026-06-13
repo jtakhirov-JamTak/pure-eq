@@ -162,24 +162,30 @@ describe("createReviewSchema — lean tiered shape", () => {
 });
 
 // ============================================================
-// Prepare — lean 8-field tiered schema (coins redesign 2026-05-29)
+// Prepare — 10-screen redesigned schema (2026-06-13)
 // ============================================================
 const validPrepareBase = {
   tier: "quick" as const,
   personName: "Alex",
   relationship: "romantic" as const,
-  conversationMove: "boundary" as const,
+  conversationTypePrimary: "align" as const,
+  conversationTypeSecondary: "connect" as const,
   situation: "Need to talk about how chores are getting split.",
+  feelingAndWhy:
+    "I feel resentful because it keeps landing on me; it matters because it says I'm not a real partner.",
+  myPattern: "I go quiet and keep score instead of saying it out loud.",
   fairestVersion:
     "They've been picking up extra at work and aren't dodging on purpose.",
+  theirFeelingWant:
+    "They probably feel stretched and want credit for the overtime.",
   hiddenAskAndFloor:
     "I'm hoping they take over the dishes; floor is naming that this keeps recurring.",
   opener: "Hey, can we talk about how we split things up at home?",
   triggerPlan: "If I feel chest-tightening, I'll pause and ask one question.",
 };
 
-describe("createPrepareSchema — lean tiered shape", () => {
-  it("accepts a fully-populated lean payload", () => {
+describe("createPrepareSchema — redesigned shape", () => {
+  it("accepts a fully-populated payload", () => {
     const result = createPrepareSchema.safeParse(validPrepareBase);
     expect(result.success).toBe(true);
   });
@@ -208,30 +214,82 @@ describe("createPrepareSchema — lean tiered shape", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects an unknown conversationMove", () => {
+  it("rejects an unknown conversationTypePrimary", () => {
     const result = createPrepareSchema.safeParse({
       ...validPrepareBase,
-      conversationMove: "vent",
+      conversationTypePrimary: "vent",
     });
     expect(result.success).toBe(false);
   });
 
-  it("accepts every conversation move (6 values)", () => {
-    const moves = [
-      "clarify",
-      "ask",
-      "boundary",
-      "share",
+  it("accepts every conversation type (8 values) as primary", () => {
+    const types = [
+      "understand",
       "decide",
-      "pause",
+      "connect",
+      "align",
+      "repair",
+      "listen",
+      "collaborate",
+      "deliver",
     ] as const;
-    for (const move of moves) {
+    for (const t of types) {
       const result = createPrepareSchema.safeParse({
         ...validPrepareBase,
-        conversationMove: move,
+        conversationTypePrimary: t,
+        // keep secondary distinct from primary so the refine passes
+        conversationTypeSecondary: t === "understand" ? "decide" : "understand",
       });
       expect(result.success).toBe(true);
     }
+  });
+
+  it("accepts an omitted secondary (optional)", () => {
+    const { conversationTypeSecondary: _omit, ...minus } = validPrepareBase;
+    void _omit;
+    const result = createPrepareSchema.safeParse(minus);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a null secondary", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      conversationTypeSecondary: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a secondary equal to the primary", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      conversationTypePrimary: "align",
+      conversationTypeSecondary: "align",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty feelingAndWhy", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      feelingAndWhy: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty myPattern", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      myPattern: "",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an empty theirFeelingWant", () => {
+    const result = createPrepareSchema.safeParse({
+      ...validPrepareBase,
+      theirFeelingWant: "",
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects an empty situation", () => {
@@ -274,8 +332,8 @@ describe("createPrepareSchema — lean tiered shape", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects omitted conversationMove (required)", () => {
-    const { conversationMove: _omit, ...minus } = validPrepareBase;
+  it("rejects omitted conversationTypePrimary (required)", () => {
+    const { conversationTypePrimary: _omit, ...minus } = validPrepareBase;
     void _omit;
     const result = createPrepareSchema.safeParse(minus);
     expect(result.success).toBe(false);

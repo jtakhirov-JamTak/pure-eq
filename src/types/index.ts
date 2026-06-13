@@ -105,6 +105,10 @@ export type PreparePath = "path_a" | "path_b";
 // Lean Prepare conversation-move chip (redesign). What kind of conversation
 // this is — drives the AI prompt framing. Stored on
 // prepare_entries.conversation_move (migration 0040).
+// Legacy Prepare routing chip (column prepare_entries.conversation_move).
+// Superseded by CONVERSATION_TYPES in the 2026-06-13 Prepare redesign; the
+// column + its CHECK stay for legacy /history + export reads, but new Prepare
+// posts no longer write it.
 export const CONVERSATION_MOVES = [
   "clarify",
   "ask",
@@ -114,6 +118,22 @@ export const CONVERSATION_MOVES = [
   "pause",
 ] as const;
 export type ConversationMove = (typeof CONVERSATION_MOVES)[number];
+
+// Prepare redesign 2026-06-13 — "What kind of outcome are you seeking?"
+// The user picks a primary outcome and an optional secondary. Each value names
+// what changes by the end of the conversation. Stored in
+// prepare_entries.conversation_type_primary / _secondary and fed to the AI.
+export const CONVERSATION_TYPES = [
+  "understand",
+  "decide",
+  "connect",
+  "align",
+  "repair",
+  "listen",
+  "collaborate",
+  "deliver",
+] as const;
+export type ConversationType = (typeof CONVERSATION_TYPES)[number];
 
 // Before-You-Send: message_type and verdict enums.
 export type BeforeYouSendMessageType =

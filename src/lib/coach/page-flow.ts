@@ -58,8 +58,10 @@ export function deriveRepairBranchActive(input: {
 
 export type StepKind =
   | "person"
+  | "person_with_relationship"
   | "select"
   | "select_conversation_move"
+  | "select_conversation_type"
   | "select_review_next_move"
   | "textarea"
   | "textarea_with_body_chip"
@@ -102,6 +104,12 @@ export type StepDef = {
    * #16 — Pulse Check Page 1 density).
    */
   rows?: number;
+  /**
+   * Optional placeholder for free-text steps (textarea). Lets a single step
+   * scaffold its input (e.g. Prepare's "I feel…" box) without a dedicated
+   * kind. Ignored by non-text kinds.
+   */
+  placeholder?: string;
   /**
    * For object-valued steps (e.g. textarea_three_field_lesson), names the
    * sub-fields that MUST be non-empty for advance. Other sub-fields are

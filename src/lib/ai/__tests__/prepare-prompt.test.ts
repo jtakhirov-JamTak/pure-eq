@@ -5,15 +5,22 @@ import {
   PROMPT_VERSION,
 } from "../prompts";
 
-// Coins redesign Slice A 2026-05-29: lean 8-field Prepare + Quick/Deep tier.
+// Prepare redesign 2026-06-13: 10-screen flow, conversation-type primary +
+// optional secondary, three new reflective inputs, Quick/Deep tier.
 const baseParams = {
   profile: "reflective" as const,
   tier: "quick" as const,
   personName: "Alex",
   relationship: "romantic",
-  conversationMove: "boundary",
+  conversationTypePrimary: "align",
+  conversationTypeSecondary: "connect" as string | null,
   situation: "How we split chores at home.",
+  feelingAndWhy:
+    "I feel resentful because it keeps landing on me; it matters because it says I'm not a real partner.",
+  myPattern: "I go quiet and keep score instead of saying it out loud.",
   fairestVersion: "Picking up overtime, not dodging on purpose.",
+  theirFeelingWant:
+    "They probably feel stretched and want credit for the overtime.",
   hiddenAskAndFloor:
     "Hoping they'll take over the dishes; floor is naming it keeps recurring.",
   opener: "Hey, can we talk about how we split things up?",
@@ -24,7 +31,7 @@ describe("buildPreparePrompt — lean tiered shape", () => {
   it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
-    expect(PROMPT_VERSION).toBe("6.3.2");
+    expect(PROMPT_VERSION).toBe("6.4.0");
   });
 
   it("includes the PREPARE OPENER RULE in the system prompt", () => {
@@ -34,12 +41,19 @@ describe("buildPreparePrompt — lean tiered shape", () => {
     expect(out.system).toContain("BLAME patterns");
   });
 
-  it("renders all 8 lean fields verbatim in the user block", () => {
+  it("renders all redesign fields verbatim in the user block", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.user).toContain("Alex (romantic)");
-    expect(out.user).toContain("boundary");
+    // Conversation type renders the gloss for primary + secondary.
+    expect(out.user).toContain("Align — expectations change");
+    expect(out.user).toContain("secondary: Connect — feelings change");
     expect(out.user).toContain("How we split chores at home.");
+    expect(out.user).toContain(
+      "I feel resentful because it keeps landing on me",
+    );
+    expect(out.user).toContain("I go quiet and keep score");
     expect(out.user).toContain("Picking up overtime, not dodging on purpose.");
+    expect(out.user).toContain("They probably feel stretched and want credit");
     expect(out.user).toContain(
       "Hoping they'll take over the dishes; floor is naming it keeps recurring.",
     );
@@ -49,6 +63,15 @@ describe("buildPreparePrompt — lean tiered shape", () => {
     expect(out.user).toContain(
       "If I feel chest-tightening, I'll pause and ask one question.",
     );
+  });
+
+  it("omits the secondary gloss when only a primary outcome is picked", () => {
+    const out = buildPreparePrompt({
+      ...baseParams,
+      conversationTypeSecondary: null,
+    });
+    expect(out.user).toContain("Align — expectations change");
+    expect(out.user).not.toContain("secondary:");
   });
 
   it("Quick tier omits the two Deep card DEFINITIONS from the output schema", () => {

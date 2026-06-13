@@ -26,8 +26,7 @@ import {
   type StepDef,
 } from "@/lib/coach/page-flow";
 import { safeUUID } from "@/lib/utils";
-import { CONVERSATION_MOVES } from "@/types";
-import type { AiTier, ConversationMove, RelationshipDomain } from "@/types";
+import type { AiTier, ConversationType, RelationshipDomain } from "@/types";
 import {
   GetFeedbackScreen,
   useCoinBalance,
@@ -42,50 +41,43 @@ const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-// Conversation-move chip labels (column conversation_move). The move frames
-// the AI prompt — what KIND of conversation this is.
-const CONVERSATION_MOVE_LABELS: Record<ConversationMove, string> = {
-  clarify: "Clear up a misunderstanding",
-  ask: "Ask for something",
-  boundary: "Set a boundary",
-  share: "Share how I feel",
-  decide: "Decide something together",
-  pause: "Take a pause / cool down",
-};
+// "What kind of outcome are you seeking?" (redesign 2026-06-13). Each option
+// names what changes by the end. The user picks a primary (1st) and an
+// optional secondary (2nd). Stored in conversation_type_primary/_secondary.
+const CONVERSATION_TYPE_OPTIONS: {
+  value: ConversationType;
+  label: string;
+  description: string;
+}[] = [
+  { value: "understand", label: "Understand", description: "Beliefs change — now I know what's going on." },
+  { value: "decide", label: "Decide", description: "Actions change — now we know what to do." },
+  { value: "connect", label: "Connect", description: "Feelings change — now we feel closer." },
+  { value: "align", label: "Align", description: "Expectations change — now we know if we're on the same page." },
+  { value: "repair", label: "Repair", description: "Trust changes — now the damage is fixed or lessened." },
+  { value: "listen", label: "Listen", description: "Emotional load changes — they feel seen and heard." },
+  { value: "collaborate", label: "Collaborate", description: "The approach changes — now we're solving this together." },
+  { value: "deliver", label: "Deliver", description: "Awareness changes — now they know the thing I needed to say." },
+];
 
-// Coins redesign Slice A 2026-05-29: lean 8-field Prepare across 3 pages.
-//   1 setup:   personName, relationship, conversationMove
-//   2 context: situation (facts), fairestVersion
-//   3 plan:    hiddenAskAndFloor, opener, triggerPlan
-// Redesign §5: the 3 pages stay as the progress MODEL (3 section dots); the
-// user advances one question at a time across the 8 flattened questions.
+type ConversationTypeSel = { primary?: ConversationType; secondary?: ConversationType };
+
+// Prepare redesign 2026-06-13 — 10 one-question screens grouped into 4
+// sections (the section dots). flattenVisibleSteps yields the 10 screens in
+// order; screen 1 (person_with_relationship) is the only one with two inputs.
+//   1 Setup: who + relationship, what it's about, outcome sought
+//   2 You:   feeling + why, your pattern
+//   3 Them:  fairest version of their side, what they might feel/want
+//   4 Plan:  hidden ask + floor, opener, trigger plan
 const PREPARE_PAGES: PageDef[] = [
   {
     pageKey: "setup",
     qs: [
       {
-        key: "personName",
+        key: "personWithRelationship",
         title: "Who is this with?",
-        prompt: "Start typing to see people you've mentioned before.",
-        kind: "person",
+        prompt: "Start typing to see people you've mentioned before, then pick your relationship.",
+        kind: "person_with_relationship",
       },
-      {
-        key: "relationship",
-        title: "What is your relationship?",
-        prompt: null,
-        kind: "select",
-      },
-      {
-        key: "conversationMove",
-        title: "What kind of conversation is this?",
-        prompt: "The move you're trying to make. It shapes the feedback.",
-        kind: "select_conversation_move",
-      },
-    ],
-  },
-  {
-    pageKey: "context",
-    qs: [
       {
         key: "situation",
         title: "What is this conversation about?",
@@ -94,10 +86,49 @@ const PREPARE_PAGES: PageDef[] = [
         kind: "textarea",
       },
       {
-        key: "fairestVersion",
-        title: "The fairest version of them you can name",
+        key: "conversationType",
+        title: "What kind of outcome are you seeking?",
         prompt:
-          "Not the worst-case read. The most charitable take that still fits what you've observed.",
+          "Pick the main outcome (1st), and an optional second (2nd). What changes by the end?",
+        kind: "select_conversation_type",
+        requiredSubFields: ["primary"],
+      },
+    ],
+  },
+  {
+    pageKey: "you",
+    qs: [
+      {
+        key: "feelingAndWhy",
+        title: "What are you feeling and why?",
+        prompt:
+          "I feel ___ · because ___ · this matters because ___ (what it says about you, them, or us).",
+        kind: "textarea",
+        placeholder: "I feel…",
+      },
+      {
+        key: "myPattern",
+        title: "When you feel that, what do you do that gets in the way?",
+        prompt: "Name the pattern.",
+        kind: "textarea",
+      },
+    ],
+  },
+  {
+    pageKey: "them",
+    qs: [
+      {
+        key: "fairestVersion",
+        title: "The fairest version of their side",
+        prompt:
+          "Name the part of their side they'd say you got right — not the worst-case read.",
+        kind: "textarea",
+      },
+      {
+        key: "theirFeelingWant",
+        title: "What might they be feeling or wanting?",
+        prompt:
+          "Based on what you've observed — what might they feel or want, and what outcome are they probably trying to get?",
         kind: "textarea",
       },
     ],
@@ -107,7 +138,7 @@ const PREPARE_PAGES: PageDef[] = [
     qs: [
       {
         key: "hiddenAskAndFloor",
-        title: "What are you secretly hoping for — and what would be good enough?",
+        title: "What are you hoping for that they don't know — and what would be good enough?",
         prompt:
           "The thing you haven't said out loud, plus the outcome floor you could still live with.",
         kind: "textarea",
@@ -291,6 +322,17 @@ function EmptyOutputCard({
   );
 }
 
+// Advance gate. Most steps defer to questionCanAdvance, but the combined
+// who+relationship screen stores its two answers under separate top-level keys
+// (personName + relationship), so it needs both checked together.
+function stepSatisfied(q: StepDef, data: Record<string, unknown>): boolean {
+  if (q.kind === "person_with_relationship") {
+    const name = (data.personName as string | undefined)?.trim();
+    return !!name && !!data.relationship;
+  }
+  return questionCanAdvance(q, data);
+}
+
 export default function PreparePage() {
   const router = useRouter();
   const [stepIndex, setStepIndex] = useState(0);
@@ -325,14 +367,14 @@ export default function PreparePage() {
   const safeIndex = Math.min(stepIndex, steps.length - 1);
   const current = steps[safeIndex];
   const isLastStep = safeIndex === steps.length - 1;
-  const canAdvance = questionCanAdvance(current.q, data);
+  const canAdvance = stepSatisfied(current.q, data);
 
   function setFieldValue(key: string, next: unknown) {
     setData((d) => ({ ...d, [key]: next }));
   }
 
   function handleNext() {
-    if (!questionCanAdvance(current.q, data)) return;
+    if (!stepSatisfied(current.q, data)) return;
     // Terminal-button branching keys off whether a later visible step exists,
     // not an index constant (CLAUDE.md dynamic-STEPS rule).
     if (safeIndex < steps.length - 1) {
@@ -351,13 +393,18 @@ export default function PreparePage() {
   // the paid generate to ONE entry — the generate call reuses the saved row and
   // only the coin debit is new.
   function buildBody(generateAi: boolean) {
+    const convo = (data.conversationType as ConversationTypeSel | undefined) ?? {};
     return {
       tier,
       personName: data.personName,
       relationship: data.relationship,
-      conversationMove: data.conversationMove,
+      conversationTypePrimary: convo.primary,
+      conversationTypeSecondary: convo.secondary ?? null,
       situation: data.situation,
+      feelingAndWhy: data.feelingAndWhy,
+      myPattern: data.myPattern,
       fairestVersion: data.fairestVersion,
+      theirFeelingWant: data.theirFeelingWant,
       hiddenAskAndFloor: data.hiddenAskAndFloor,
       opener: data.opener,
       triggerPlan: data.triggerPlan,
@@ -543,50 +590,99 @@ export default function PreparePage() {
 
   // --- Form: one question per screen (no-scroll FlowScreen) ---
   function renderStep(step: StepDef) {
-    if (step.kind === "person") {
+    if (step.kind === "person_with_relationship") {
+      const rel = (data.relationship as string | undefined) ?? "";
       return (
-        <PersonPicker
-          value={(data.personName as string | undefined) ?? ""}
-          onChange={(next) => setFieldValue("personName", next)}
-          onPersonSelect={(id, relationship) => {
-            setPersonId(id);
-            if (id && relationship) {
-              setFieldValue("relationship", relationship);
-            }
-          }}
-          selectedPersonId={personId}
-        />
-      );
-    }
-    if (step.kind === "select") {
-      const value = (data[step.key] as string | undefined) ?? "";
-      return (
-        <div className="space-y-2">
-          {RELATIONSHIPS.map((rel) => (
-            <SelectableRow
-              key={rel.value}
-              selected={value === rel.value}
-              onClick={() => setFieldValue(step.key, rel.value)}
-            >
-              {rel.label}
-            </SelectableRow>
-          ))}
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+          <PersonPicker
+            value={(data.personName as string | undefined) ?? ""}
+            onChange={(next) => setFieldValue("personName", next)}
+            onPersonSelect={(id, relationship) => {
+              setPersonId(id);
+              if (id && relationship) {
+                setFieldValue("relationship", relationship);
+              }
+            }}
+            selectedPersonId={personId}
+          />
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-ink-soft">
+              Relationship
+            </p>
+            <div className="space-y-2">
+              {RELATIONSHIPS.map((r) => (
+                <SelectableRow
+                  key={r.value}
+                  selected={rel === r.value}
+                  onClick={() => setFieldValue("relationship", r.value)}
+                >
+                  {r.label}
+                </SelectableRow>
+              ))}
+            </div>
+          </div>
         </div>
       );
     }
-    if (step.kind === "select_conversation_move") {
-      const value = (data[step.key] as string | undefined) ?? "";
+    if (step.kind === "select_conversation_type") {
+      const sel =
+        (data.conversationType as ConversationTypeSel | undefined) ?? {};
+      // First tap -> primary; next distinct tap -> secondary. Tapping the
+      // current primary clears it and promotes secondary; tapping secondary
+      // clears it. With both set, a tap on a third option is ignored.
+      const onTap = (value: ConversationType) => {
+        setData((d) => {
+          const cur =
+            (d.conversationType as ConversationTypeSel | undefined) ?? {};
+          let primary = cur.primary;
+          let secondary = cur.secondary;
+          if (primary === value) {
+            primary = secondary;
+            secondary = undefined;
+          } else if (secondary === value) {
+            secondary = undefined;
+          } else if (!primary) {
+            primary = value;
+          } else if (!secondary) {
+            secondary = value;
+          }
+          const next: ConversationTypeSel = {};
+          if (primary) next.primary = primary;
+          if (secondary) next.secondary = secondary;
+          return { ...d, conversationType: next };
+        });
+      };
       return (
-        <div className="space-y-2">
-          {CONVERSATION_MOVES.map((move) => (
-            <SelectableRow
-              key={move}
-              selected={value === move}
-              onClick={() => setFieldValue(step.key, move)}
-            >
-              {CONVERSATION_MOVE_LABELS[move]}
-            </SelectableRow>
-          ))}
+        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+          {CONVERSATION_TYPE_OPTIONS.map((opt) => {
+            const badge =
+              sel.primary === opt.value
+                ? "1st"
+                : sel.secondary === opt.value
+                  ? "2nd"
+                  : null;
+            return (
+              <SelectableRow
+                key={opt.value}
+                selected={badge !== null}
+                onClick={() => onTap(opt.value)}
+              >
+                <span className="flex items-center gap-2">
+                  {badge && (
+                    <span className="shrink-0 rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold leading-none">
+                      {badge}
+                    </span>
+                  )}
+                  <span className="min-w-0">
+                    <span className="block font-medium">{opt.label}</span>
+                    <span className="block text-[12px] font-normal opacity-80">
+                      {opt.description}
+                    </span>
+                  </span>
+                </span>
+              </SelectableRow>
+            );
+          })}
         </div>
       );
     }
@@ -597,7 +693,7 @@ export default function PreparePage() {
           value={value}
           onChange={(next) => setFieldValue(step.key, next)}
           fill
-          placeholder="Type or tap the mic to speak..."
+          placeholder={step.placeholder ?? "Type or tap the mic to speak..."}
         />
       );
     }

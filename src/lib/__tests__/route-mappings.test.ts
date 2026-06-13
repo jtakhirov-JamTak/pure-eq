@@ -58,9 +58,13 @@ const basePrepareInput: PrepareInput = {
   tier: "quick",
   personName: "Alex",
   relationship: "romantic",
-  conversationMove: "boundary",
+  conversationTypePrimary: "align",
+  conversationTypeSecondary: "connect",
   situation: "Chores split.",
+  feelingAndWhy: "I feel resentful because it keeps landing on me; it matters because it says I'm not a partner.",
+  myPattern: "I go quiet and keep score instead of saying it.",
   fairestVersion: "picking up overtime",
+  theirFeelingWant: "They probably feel stretched and want credit for the overtime.",
   hiddenAskAndFloor: "they volunteer for dishes; floor is naming the recurrence",
   opener: "Hey, can we talk about how we split things?",
   triggerPlan: "If chest-tight, pause and ask one question.",
@@ -120,10 +124,14 @@ describe("prepareModuleConfig.buildDerivedInsert — lean column mapping", () =>
       unknown
     >;
 
-    expect(insert.path).toBe("lean_v1");
+    expect(insert.path).toBe("lean_v2");
     expect(insert.situation_text).toBe(basePrepareInput.situation);
-    expect(insert.conversation_move).toBe("boundary");
+    expect(insert.conversation_type_primary).toBe("align");
+    expect(insert.conversation_type_secondary).toBe("connect");
+    expect(insert.feeling_and_why).toBe(basePrepareInput.feelingAndWhy);
+    expect(insert.my_pattern).toBe(basePrepareInput.myPattern);
     expect(insert.fairest_version).toBe(basePrepareInput.fairestVersion);
+    expect(insert.their_feeling_want).toBe(basePrepareInput.theirFeelingWant);
     expect(insert.hidden_ask_and_floor).toBe(basePrepareInput.hiddenAskAndFloor);
     expect(insert.opener).toBe(basePrepareInput.opener);
     expect(insert.trigger_plan).toBe(basePrepareInput.triggerPlan);
@@ -196,9 +204,13 @@ describe("prepareModuleConfig.buildPayloadFields — lean field passthrough", ()
     expect(payload.tier).toBe("quick");
     expect(payload.personName).toBe(basePrepareInput.personName);
     expect(payload.relationship).toBe(basePrepareInput.relationship);
-    expect(payload.conversationMove).toBe("boundary");
+    expect(payload.conversationTypePrimary).toBe("align");
+    expect(payload.conversationTypeSecondary).toBe("connect");
     expect(payload.situation).toBe(basePrepareInput.situation);
+    expect(payload.feelingAndWhy).toBe(basePrepareInput.feelingAndWhy);
+    expect(payload.myPattern).toBe(basePrepareInput.myPattern);
     expect(payload.fairestVersion).toBe(basePrepareInput.fairestVersion);
+    expect(payload.theirFeelingWant).toBe(basePrepareInput.theirFeelingWant);
     expect(payload.hiddenAskAndFloor).toBe(basePrepareInput.hiddenAskAndFloor);
     expect(payload.opener).toBe(basePrepareInput.opener);
     expect(payload.triggerPlan).toBe(basePrepareInput.triggerPlan);

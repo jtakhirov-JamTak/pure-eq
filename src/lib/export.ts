@@ -192,6 +192,14 @@ type PrepareRow = Pick<
   | "outcome_floor"
   | "opener"
   | "trigger_plan"
+  // Lean (0040) + redesign (0053) inputs
+  | "conversation_move"
+  | "conversation_type_primary"
+  | "conversation_type_secondary"
+  | "feeling_and_why"
+  | "my_pattern"
+  | "their_feeling_want"
+  | "hidden_ask_and_floor"
   | "person_id"
   | "thread_id"
 >;
@@ -249,6 +257,14 @@ export function formatPrepareSection(
     appendField(lines, "Neutral question to ask instead of assume", r.neutral_check_question);
     appendField(lines, "Specific shift I want", r.specific_shift);
     appendField(lines, "Floor — what's good enough", r.outcome_floor);
+    // Lean (0040) + redesign (0053) inputs.
+    appendField(lines, "Kind of conversation (legacy)", r.conversation_move);
+    appendField(lines, "Outcome sought (primary)", r.conversation_type_primary);
+    appendField(lines, "Outcome sought (secondary)", r.conversation_type_secondary);
+    appendField(lines, "What I'm feeling and why", r.feeling_and_why);
+    appendField(lines, "My pattern that gets in the way", r.my_pattern);
+    appendField(lines, "What they might feel or want", r.their_feeling_want);
+    appendField(lines, "Hidden hope + good-enough floor", r.hidden_ask_and_floor);
     appendField(lines, "Opener", r.opener);
     appendField(lines, "If-then trigger plan", r.trigger_plan);
     blocks.push(lines.join("\n"));
@@ -710,7 +726,7 @@ export async function buildExportText(
     supabase
       .from("prepare_entries")
       .select(
-        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, signal_noise_observation, primary_emotion, body_location, emotion_as_data, default_pattern, observed_from_them, their_state_hedged, fairest_version, predicted_reaction, hidden_expectation, neutral_check_question, specific_shift, outcome_floor, opener, trigger_plan, person_id, thread_id",
+        "created_at, path, situation_text, desired_outcome, primary_value, their_need, how_to_make_them_feel, what_feels_off, what_changed, story_telling_yourself, afraid_it_means, signal_noise_observation, primary_emotion, body_location, emotion_as_data, default_pattern, observed_from_them, their_state_hedged, fairest_version, predicted_reaction, hidden_expectation, neutral_check_question, specific_shift, outcome_floor, opener, trigger_plan, conversation_move, conversation_type_primary, conversation_type_secondary, feeling_and_why, my_pattern, their_feeling_want, hidden_ask_and_floor, person_id, thread_id",
       )
       .eq("user_id", userId)
       .is("deleted_at", null)

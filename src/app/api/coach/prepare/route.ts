@@ -8,17 +8,19 @@ import type { CoachModuleConfig } from "@/lib/coach/types";
 export const runtime = "nodejs";
 
 // ============================================================
-// Prepare — lean 8-field flow, tier-aware cards (coins redesign 2026-05-29)
+// Prepare — 10-screen flow, tier-aware cards (redesign 2026-06-13)
 // ============================================================
-// The lean form sends 8 fields + a Quick/Deep tier. Removed SOT inputs
-// (primary_emotion, emotion_as_data, default_pattern, observed_from_them,
-// their_state_hedged, specific_shift, hidden_expectation, outcome_floor,
-// neutral_check_question, body_location) keep their columns nullable for
-// legacy export reads; new posts do not write them. predicted_reaction is
-// no longer a user input — it is now written from the AI Quick "Predicted
-// Reaction" card via extractDerivedFromAi, so calibration.ts is unchanged.
-// hidden_expectation + outcome_floor are merged into hidden_ask_and_floor;
-// conversation_move is the new routing chip.
+// The form sends 11 inputs across 10 screens + a Quick/Deep tier:
+//   personName, relationship, conversationTypePrimary (+ optional
+//   conversationTypeSecondary), situation, feelingAndWhy, myPattern,
+//   fairestVersion, theirFeelingWant, hiddenAskAndFloor, opener, triggerPlan.
+// New columns (migration 0053): conversation_type_primary/_secondary,
+// feeling_and_why, my_pattern, their_feeling_want. The prior conversation_move
+// chip and the older SOT inputs keep their columns nullable for legacy export
+// reads; new posts do not write them. predicted_reaction is still an AI Quick
+// card (written via extractDerivedFromAi), so calibration.ts is unchanged.
+// This round changes INPUTS only — the AI output cards are unchanged, so
+// ai_plan_version stays 9; path = 'lean_v2' marks the new input shape.
 
 const requestSchema = createPrepareSchema.extend({
   idempotencyKey: z.string().uuid(),
@@ -57,24 +59,32 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
     tier: input.tier,
     personName: input.personName,
     relationship: input.relationship,
-    conversationMove: input.conversationMove,
+    conversationTypePrimary: input.conversationTypePrimary,
+    // null (not undefined) when omitted — keep raw + derived layers consistent.
+    conversationTypeSecondary: input.conversationTypeSecondary ?? null,
     situation: input.situation,
+    feelingAndWhy: input.feelingAndWhy,
+    myPattern: input.myPattern,
     fairestVersion: input.fairestVersion,
+    theirFeelingWant: input.theirFeelingWant,
     hiddenAskAndFloor: input.hiddenAskAndFloor,
     opener: input.opener,
     triggerPlan: input.triggerPlan,
   }),
 
   buildDerivedInsert: (input) => ({
-    // `path` is the legacy discriminator kept for export readers and
-    // export.ts row labels. ai_plan_version (aiVersionValue 9) is the
-    // authoritative shape selector — readers gate on it, not on `path`.
-    // We still write a non-null value so legacy filter-by-path queries
-    // don't drop new rows.
-    path: "lean_v1",
+    // `path` is the legacy filter-by-path discriminator; ai_plan_version
+    // (aiVersionValue 9) stays the authoritative OUTPUT-shape selector (the
+    // cards aren't changing this round). 'lean_v2' marks the redesigned INPUT
+    // shape so export/legacy queries can still distinguish eras.
+    path: "lean_v2",
     situation_text: input.situation,
-    conversation_move: input.conversationMove,
+    conversation_type_primary: input.conversationTypePrimary,
+    conversation_type_secondary: input.conversationTypeSecondary ?? null,
+    feeling_and_why: input.feelingAndWhy,
+    my_pattern: input.myPattern,
     fairest_version: input.fairestVersion,
+    their_feeling_want: input.theirFeelingWant,
     hidden_ask_and_floor: input.hiddenAskAndFloor,
     opener: input.opener,
     trigger_plan: input.triggerPlan,
@@ -90,9 +100,13 @@ export const prepareModuleConfig: CoachModuleConfig<Input, AiOutput> = {
       tier: input.tier,
       personName: input.personName,
       relationship: input.relationship,
-      conversationMove: input.conversationMove,
+      conversationTypePrimary: input.conversationTypePrimary,
+      conversationTypeSecondary: input.conversationTypeSecondary ?? null,
       situation: input.situation,
+      feelingAndWhy: input.feelingAndWhy,
+      myPattern: input.myPattern,
       fairestVersion: input.fairestVersion,
+      theirFeelingWant: input.theirFeelingWant,
       hiddenAskAndFloor: input.hiddenAskAndFloor,
       opener: input.opener,
       triggerPlan: input.triggerPlan,

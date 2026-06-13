@@ -556,16 +556,20 @@ export type Database = {
           body_location: string | null
           completed_at: string | null
           conversation_move: string | null
+          conversation_type_primary: string | null
+          conversation_type_secondary: string | null
           created_at: string
           default_pattern: string | null
           deleted_at: string | null
           desired_outcome: string | null
           emotion_as_data: string | null
           fairest_version: string | null
+          feeling_and_why: string | null
           hidden_ask_and_floor: string | null
           hidden_expectation: string | null
           how_to_make_them_feel: string | null
           is_complete: boolean
+          my_pattern: string | null
           needs_user_confirmation: boolean
           neutral_check_question: string | null
           observed_from_them: string | null
@@ -586,6 +590,7 @@ export type Database = {
           situation_text: string | null
           specific_shift: string | null
           story_telling_yourself: string | null
+          their_feeling_want: string | null
           their_need: string | null
           their_state_hedged: string | null
           thread_id: string | null
@@ -604,16 +609,20 @@ export type Database = {
           body_location?: string | null
           completed_at?: string | null
           conversation_move?: string | null
+          conversation_type_primary?: string | null
+          conversation_type_secondary?: string | null
           created_at?: string
           default_pattern?: string | null
           deleted_at?: string | null
           desired_outcome?: string | null
           emotion_as_data?: string | null
           fairest_version?: string | null
+          feeling_and_why?: string | null
           hidden_ask_and_floor?: string | null
           hidden_expectation?: string | null
           how_to_make_them_feel?: string | null
           is_complete?: boolean
+          my_pattern?: string | null
           needs_user_confirmation?: boolean
           neutral_check_question?: string | null
           observed_from_them?: string | null
@@ -634,6 +643,7 @@ export type Database = {
           situation_text?: string | null
           specific_shift?: string | null
           story_telling_yourself?: string | null
+          their_feeling_want?: string | null
           their_need?: string | null
           their_state_hedged?: string | null
           thread_id?: string | null
@@ -652,16 +662,20 @@ export type Database = {
           body_location?: string | null
           completed_at?: string | null
           conversation_move?: string | null
+          conversation_type_primary?: string | null
+          conversation_type_secondary?: string | null
           created_at?: string
           default_pattern?: string | null
           deleted_at?: string | null
           desired_outcome?: string | null
           emotion_as_data?: string | null
           fairest_version?: string | null
+          feeling_and_why?: string | null
           hidden_ask_and_floor?: string | null
           hidden_expectation?: string | null
           how_to_make_them_feel?: string | null
           is_complete?: boolean
+          my_pattern?: string | null
           needs_user_confirmation?: boolean
           neutral_check_question?: string | null
           observed_from_them?: string | null
@@ -682,6 +696,7 @@ export type Database = {
           situation_text?: string | null
           specific_shift?: string | null
           story_telling_yourself?: string | null
+          their_feeling_want?: string | null
           their_need?: string | null
           their_state_hedged?: string | null
           thread_id?: string | null

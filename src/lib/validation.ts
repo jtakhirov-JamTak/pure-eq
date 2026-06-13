@@ -1,7 +1,7 @@
 // Pure EQ domain — replace in fork.
 import { z } from "zod";
 import {
-  CONVERSATION_MOVES,
+  CONVERSATION_TYPES,
   REVIEW_NEXT_MOVE_VALUES,
   PULSE_NEXT_MOVE_V2_VALUES,
   CHECK_WINDOW_VALUES,
@@ -180,25 +180,45 @@ export const CALIBRATION_FLOOR_VALUES = ["yes", "mostly", "no"] as const;
 //     via extractDerivedFromAi); no longer a form field.
 //   - hiddenExpectation + outcomeFloor → merged into hiddenAskAndFloor
 //     (new column hidden_ask_and_floor, migration 0040).
-// New: conversationMove (routing chip, column conversation_move) + tier.
-// Pages: 1) personName, relationship, conversationMove
-//        2) situation, fairestVersion
-//        3) hiddenAskAndFloor, opener, triggerPlan
-export const createPrepareSchema = z.object({
-  // Quick = 3 AI cards (lower coin cost), Deep = 5. Persisted to ai_tier.
-  tier: z.enum(["quick", "deep"]).default("quick"),
-  personName: z.string().trim().min(1).max(200),
-  relationship: RELATIONSHIP_ENUM,
-  conversationMove: z.enum(CONVERSATION_MOVES),
-  situation: z.string().trim().min(1).max(5000),
-  fairestVersion: z.string().trim().min(1).max(2000),
-  hiddenAskAndFloor: z.string().trim().min(1).max(2000),
-  opener: z.string().trim().min(1).max(1000),
-  triggerPlan: z.string().trim().min(1).max(2000),
-  // Person/thread + idempotency. idempotencyKey is injected by route layer.
-  personId: z.string().uuid().nullable().optional(),
-  threadId: z.string().uuid().nullable().optional(),
-});
+// Prepare redesign 2026-06-13: 10 one-question screens. conversationMove is
+// replaced by conversationTypePrimary (+ optional conversationTypeSecondary),
+// and three reflective inputs are added (feelingAndWhy, myPattern,
+// theirFeelingWant). conversation_move stays a dormant column for legacy reads.
+// Screens: 1) personName + relationship   2) situation
+//          3) conversationType (primary + optional secondary)
+//          4) feelingAndWhy   5) myPattern   6) fairestVersion
+//          7) theirFeelingWant   8) hiddenAskAndFloor   9) opener   10) triggerPlan
+export const createPrepareSchema = z
+  .object({
+    // Quick = 3 AI cards (lower coin cost), Deep = 5. Persisted to ai_tier.
+    tier: z.enum(["quick", "deep"]).default("quick"),
+    personName: z.string().trim().min(1).max(200),
+    relationship: RELATIONSHIP_ENUM,
+    // "What kind of outcome are you seeking?" — primary required, secondary
+    // optional. Secondary must differ from primary (refine below).
+    conversationTypePrimary: z.enum(CONVERSATION_TYPES),
+    conversationTypeSecondary: z.enum(CONVERSATION_TYPES).nullable().optional(),
+    situation: z.string().trim().min(1).max(5000),
+    feelingAndWhy: z.string().trim().min(1).max(2000),
+    myPattern: z.string().trim().min(1).max(2000),
+    fairestVersion: z.string().trim().min(1).max(2000),
+    theirFeelingWant: z.string().trim().min(1).max(2000),
+    hiddenAskAndFloor: z.string().trim().min(1).max(2000),
+    opener: z.string().trim().min(1).max(1000),
+    triggerPlan: z.string().trim().min(1).max(2000),
+    // Person/thread + idempotency. idempotencyKey is injected by route layer.
+    personId: z.string().uuid().nullable().optional(),
+    threadId: z.string().uuid().nullable().optional(),
+  })
+  .refine(
+    (d) =>
+      d.conversationTypeSecondary == null ||
+      d.conversationTypeSecondary !== d.conversationTypePrimary,
+    {
+      message: "Secondary outcome must differ from the primary",
+      path: ["conversationTypeSecondary"],
+    },
+  );
 
 // ============================================================
 // Coach — Review (Coach redesign 2026-04-23: new fields + repair branch)
