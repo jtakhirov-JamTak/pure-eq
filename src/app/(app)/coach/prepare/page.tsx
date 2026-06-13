@@ -87,7 +87,7 @@ const PREPARE_PAGES: PageDef[] = [
       },
       {
         key: "conversationType",
-        title: "What kind of outcome are you seeking?",
+        title: "What kind of interaction is this?",
         prompt:
           "Pick the main outcome (1st), and an optional second (2nd). What changes by the end?",
         kind: "select_conversation_type",
