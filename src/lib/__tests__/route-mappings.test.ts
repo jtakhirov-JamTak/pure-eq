@@ -57,7 +57,7 @@ const baseReviewInput: ReviewInput = {
 const basePrepareInput: PrepareInput = {
   tier: "quick",
   personName: "Alex",
-  relationship: "partner",
+  relationship: "romantic",
   conversationMove: "boundary",
   situation: "Chores split.",
   fairestVersion: "picking up overtime",

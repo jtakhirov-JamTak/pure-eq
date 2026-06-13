@@ -26,13 +26,10 @@ type Props = {
 };
 
 const RELATIONSHIP_LABELS: Record<RelationshipDomain, string> = {
-  partner: "Partner",
+  romantic: "Romantic",
   friend: "Friend",
   family: "Family",
-  manager: "Manager",
-  direct_report: "Direct Report",
-  coworker: "Coworker",
-  client: "Client",
+  work: "Work",
   other: "Other",
 };
 

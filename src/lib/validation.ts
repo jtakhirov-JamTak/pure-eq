@@ -50,9 +50,10 @@ export const submitQuizSchema = z
 // Defined ABOVE the schemas that consume them so the file reads top-to-
 // bottom without forward references.
 
+// 5 condensed domains (migration 0052). See RelationshipDomain in @/types.
+// Single source for both the Prepare schema and createPersonSchema.
 const RELATIONSHIP_ENUM = z.enum([
-  "partner", "friend", "family", "manager",
-  "direct_report", "coworker", "client", "other",
+  "romantic", "friend", "family", "work", "other",
 ]);
 
 /**
@@ -428,10 +429,7 @@ export const createTriggerSchema = z.object({
 // Persons
 export const createPersonSchema = z.object({
   displayName: z.string().trim().min(1).max(200),
-  relationshipDomain: z.enum([
-    "partner", "friend", "family", "manager",
-    "direct_report", "coworker", "client", "other",
-  ]),
+  relationshipDomain: RELATIONSHIP_ENUM,
   relationshipSubtype: z.string().max(200).nullable().optional(),
 });
 

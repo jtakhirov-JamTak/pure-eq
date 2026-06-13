@@ -10,7 +10,7 @@ const baseParams = {
   profile: "reflective" as const,
   tier: "quick" as const,
   personName: "Alex",
-  relationship: "partner",
+  relationship: "romantic",
   conversationMove: "boundary",
   situation: "How we split chores at home.",
   fairestVersion: "Picking up overtime, not dodging on purpose.",
@@ -36,7 +36,7 @@ describe("buildPreparePrompt — lean tiered shape", () => {
 
   it("renders all 8 lean fields verbatim in the user block", () => {
     const out = buildPreparePrompt(baseParams);
-    expect(out.user).toContain("Alex (partner)");
+    expect(out.user).toContain("Alex (romantic)");
     expect(out.user).toContain("boundary");
     expect(out.user).toContain("How we split chores at home.");
     expect(out.user).toContain("Picking up overtime, not dodging on purpose.");

@@ -9,7 +9,7 @@ describe("buildReflectionInput", () => {
   const samplePerson = {
     person_id: "p-1",
     display_name: "Jessie",
-    relationship_domain: "partner",
+    relationship_domain: "romantic",
   };
 
   const sampleRaw = {
@@ -29,7 +29,7 @@ describe("buildReflectionInput", () => {
   it("passes through valid entries with person name resolved", () => {
     const out = buildReflectionInput([sampleRaw], [samplePerson]);
     expect(out.persons).toEqual([
-      { displayName: "Jessie", relationshipDomain: "partner" },
+      { displayName: "Jessie", relationshipDomain: "romantic" },
     ]);
     expect(out.entries).toHaveLength(1);
     expect(out.entries[0].person_display_name).toBe("Jessie");

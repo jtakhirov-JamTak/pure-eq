@@ -8,14 +8,17 @@ export type ProfileType =
   | "perceptive"
   | "intense";
 
+// Condensed from 8 values to 5 (founder decision 2026-06-13, migration 0052):
+// romantic (was partner); work absorbs the four work-flavored domains
+// (manager, direct_report, coworker, client); friend/family/other unchanged.
+// relationship_domain lives on the shared persons table, so this is an
+// app-wide taxonomy — every consumer (person picker, People-tab grouping,
+// person history, monthly report, export) maps over these five.
 export type RelationshipDomain =
-  | "partner"
+  | "romantic"
   | "friend"
   | "family"
-  | "manager"
-  | "direct_report"
-  | "coworker"
-  | "client"
+  | "work"
   | "other";
 
 // Collapsed from 6 states to 3 (founder decision 2026-06-12, migration 0050):

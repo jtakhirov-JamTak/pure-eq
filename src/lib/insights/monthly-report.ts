@@ -118,17 +118,16 @@ const MODEL = "claude-opus-4-7";
 const MAX_TOKENS = 2500;
 const ANTHROPIC_TIMEOUT_MS = 50_000;
 
-// Same work roll-up as the Convos stats dashboard (GROUP_LABELS in
-// conversation-stats.ts) — kept local so this module never imports the
-// request-scoped server client and stays unit-testable.
+// Maps the 5 relationship domains (migration 0052) onto the report's tendency
+// contexts. The context enum (REPORT_TENDENCY_CONTEXTS) is part of the AI
+// OUTPUT schema, so it is deliberately NOT renamed — changing it would force a
+// REPORT_GENERATOR_VERSION bump (and re-charge the month). The new "romantic"
+// domain therefore maps to the existing "partner" context bucket.
 const DOMAIN_TO_CONTEXT: Record<RelationshipDomain, ReportTendencyContext> = {
-  partner: "partner",
+  romantic: "partner",
   friend: "friend",
   family: "family",
-  manager: "work",
-  direct_report: "work",
-  coworker: "work",
-  client: "work",
+  work: "work",
   other: "other",
 };
 

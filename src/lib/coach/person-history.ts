@@ -44,16 +44,14 @@ export type PersonHistory = {
 
 const MOMENT_TYPES = ["trigger_log", "overwhelmed", "before_you_send"] as const;
 
-// The 8 valid relationship domains, for runtime narrowing of the DB string
-// (§16.14: no blind `as` on union-typed columns). Unknown values → "other".
+// The 5 valid relationship domains (migration 0052), for runtime narrowing of
+// the DB string (§16.14: no blind `as` on union-typed columns). Unknown or
+// un-migrated legacy values (e.g. an old 'partner'/'coworker') → "other".
 const KNOWN_DOMAINS: readonly RelationshipDomain[] = [
-  "partner",
+  "romantic",
   "friend",
   "family",
-  "manager",
-  "direct_report",
-  "coworker",
-  "client",
+  "work",
   "other",
 ];
 

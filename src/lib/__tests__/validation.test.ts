@@ -167,7 +167,7 @@ describe("createReviewSchema — lean tiered shape", () => {
 const validPrepareBase = {
   tier: "quick" as const,
   personName: "Alex",
-  relationship: "partner" as const,
+  relationship: "romantic" as const,
   conversationMove: "boundary" as const,
   situation: "Need to talk about how chores are getting split.",
   fairestVersion:

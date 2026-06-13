@@ -8,7 +8,7 @@ import {
 
 const baseParams = {
   profile: "reflective" as const,
-  persons: [{ displayName: "Jessie", relationshipDomain: "partner" }],
+  persons: [{ displayName: "Jessie", relationshipDomain: "romantic" }],
   entries: [
     {
       raw_record_id: "r-1",

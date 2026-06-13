@@ -35,13 +35,10 @@ import {
 } from "@/components/coach/coin-ui";
 
 const RELATIONSHIPS: { value: RelationshipDomain; label: string }[] = [
-  { value: "partner", label: "Partner" },
+  { value: "romantic", label: "Romantic" },
   { value: "friend", label: "Friend" },
   { value: "family", label: "Family" },
-  { value: "manager", label: "Manager" },
-  { value: "direct_report", label: "Direct Report" },
-  { value: "coworker", label: "Coworker" },
-  { value: "client", label: "Client" },
+  { value: "work", label: "Work" },
   { value: "other", label: "Other" },
 ];
 

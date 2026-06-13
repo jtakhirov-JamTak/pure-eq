@@ -17,28 +17,27 @@ import { THREADED_RECORD_TYPES, type RelationshipDomain } from "@/types";
 export type RelationshipGroup =
   | "work"
   | "family"
-  | "partner"
+  | "romantic"
   | "friend"
   | "other";
 
 export const GROUP_LABELS: Record<RelationshipGroup, string> = {
   work: "Work",
   family: "Family",
-  partner: "Partner",
+  romantic: "Romantic",
   friend: "Friends",
   other: "Other",
 };
 
-// The app tracks 8 relationship domains; the dashboard rolls the four
-// work-flavored ones into a single "Work" row so the list stays scannable.
+// Since migration 0052 the 5 relationship domains map 1:1 onto the dashboard
+// groups (work already absorbed the old manager/coworker/client/direct_report
+// at the domain level). The indirection stays so a future domain split can
+// re-roll without touching every reader.
 const DOMAIN_TO_GROUP: Record<RelationshipDomain, RelationshipGroup> = {
-  partner: "partner",
+  romantic: "romantic",
   friend: "friend",
   family: "family",
-  manager: "work",
-  direct_report: "work",
-  coworker: "work",
-  client: "work",
+  work: "work",
   other: "other",
 };
 
