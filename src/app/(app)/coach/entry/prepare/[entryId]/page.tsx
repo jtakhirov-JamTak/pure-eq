@@ -34,7 +34,7 @@ export default async function PrepareEntryPage({
   const { data: entry, error } = await supabase
     .from("prepare_entries")
     .select(
-      "prepare_entry_id, ai_plan_json, ai_tier, situation_text, person_id, thread_id, created_at",
+      "prepare_entry_id, ai_plan_json, ai_plan_version, ai_tier, situation_text, person_id, thread_id, created_at",
     )
     .eq("prepare_entry_id", entryId)
     .eq("user_id", user.id)
@@ -58,9 +58,13 @@ export default async function PrepareEntryPage({
   const personName = personRes.data?.display_name ?? "Someone";
 
   const tier: AiTier = entry.ai_tier === "deep" ? "deep" : "quick";
+  // ai_plan_json is an untyped jsonb blob — gate rendering on the version stamp,
+  // never blind-trust the cast (CLAUDE.md jsonb-shape-guard rule). Only v10 rows
+  // match PrepareResultCards' field set; older rows (v9 lean / v8 SOT) fall to
+  // the "regenerate to refresh" state instead of rendering a blank/mislabeled set.
   const ai = entry.ai_plan_json as PrepareAiOutput | null;
-  const isNormal = ai?.mode === "normal";
-  const isRefusal = ai?.mode === "refusal";
+  const isCurrentShape = entry.ai_plan_version === 10;
+  const staleShape = ai?.mode === "normal" && !isCurrentShape;
 
   const backHref = entry.thread_id
     ? `/conversations/${entry.thread_id}`
@@ -72,7 +76,7 @@ export default async function PrepareEntryPage({
 
       <Link
         href={backHref}
-        className="rounded-pill border border-hairline bg-surface px-3.5 py-1.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
+        className="inline-flex min-h-11 items-center rounded-pill border border-hairline bg-surface px-3.5 text-[13px] font-semibold text-ink-soft active:opacity-80"
       >
         Back
       </Link>
@@ -99,9 +103,9 @@ export default async function PrepareEntryPage({
       )}
 
       <div className="mt-3">
-        {isNormal ? (
+        {ai?.mode === "normal" && isCurrentShape ? (
           <PrepareResultCards output={ai} entryId={entryId} />
-        ) : isRefusal ? (
+        ) : ai?.mode === "refusal" ? (
           <Card>
             <p className="text-[14px] font-medium leading-[1.55] text-ink">
               {ai.message_to_user}
@@ -110,14 +114,15 @@ export default async function PrepareEntryPage({
         ) : (
           <Card>
             <p className="text-[14px] font-medium leading-[1.5] text-ink-soft">
-              No coaching feedback is saved for this entry yet — regenerate below
-              to create it.
+              {staleShape
+                ? "This entry predates the current card format — regenerate below to refresh it."
+                : "No coaching feedback is saved for this entry yet — regenerate below to create it."}
             </p>
           </Card>
         )}
       </div>
 
-      <p className="mt-8 text-[12px] font-medium leading-[1.5] text-ink-muted">
+      <p className="mt-8 text-[12px] font-medium leading-[1.5] text-ink-soft">
         Want a fresh take? Regenerating spends coins and replaces the cards above.
       </p>
       <div className="mt-2">

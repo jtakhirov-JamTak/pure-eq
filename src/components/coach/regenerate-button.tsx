@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SecondaryButton } from "@/components/ui/button";
@@ -30,8 +30,22 @@ export function RegenerateButton({
   const [error, setError] = useState<string | null>(null);
   const cost = coinCostForTier(tier);
 
+  // `busy` is async state — not a reliable double-fire guard on a money path.
+  // useRef is the guarantee (same pattern as the OAuth oauthInFlight lesson).
+  // The nonce is minted once per dialog-open so even a slipped double-fire reuses
+  // one idempotency key (server collapses it) instead of charging twice.
+  const inFlight = useRef(false);
+  const nonceRef = useRef<string>("");
+
+  function openDialog() {
+    setError(null);
+    nonceRef.current = safeUUID();
+    setOpen(true);
+  }
+
   async function run() {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -41,7 +55,7 @@ export function RegenerateButton({
         body: JSON.stringify({
           module: "prepare",
           entryId,
-          regenerateNonce: safeUUID(),
+          regenerateNonce: nonceRef.current,
         }),
       });
       if (res.status === 402) {
@@ -69,18 +83,13 @@ export function RegenerateButton({
       setError("Couldn't regenerate. Check your connection and try again.");
     } finally {
       setBusy(false);
+      inFlight.current = false;
     }
   }
 
   return (
     <>
-      <SecondaryButton
-        onClick={() => {
-          setError(null);
-          setOpen(true);
-        }}
-        className="w-full"
-      >
+      <SecondaryButton onClick={openDialog} className="w-full">
         Regenerate feedback · {cost} coins
       </SecondaryButton>
       <ConfirmDialog

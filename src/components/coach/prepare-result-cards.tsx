@@ -86,7 +86,7 @@ export function PrepareResultCards({
         ) : (
           <Card key={key} className="animate-card-in">
             <Kicker>{label}</Kicker>
-            <p className="mt-1.5 whitespace-pre-line text-[14px] font-medium leading-[1.5] text-ink">
+            <p className="mt-1.5 whitespace-pre-line break-words text-[14px] font-medium leading-[1.5] text-ink">
               {text}
             </p>
           </Card>

@@ -65,8 +65,9 @@ export async function POST(req: Request) {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
-  if (!user) {
+  if (authError || !user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -153,6 +154,13 @@ export async function POST(req: Request) {
       .limit(1)
       .maybeSingle(),
   ]);
+  // Fail loud on the raw read — this is a PAID path, so charging the user for a
+  // generically-degraded prompt (personName/relationship lost) is worse than a
+  // retryable 500. (maybeSingle() returns {error} rather than throwing.)
+  if (rawRes.error) {
+    console.error("regenerate: raw payload load failed", rawRes.error.code);
+    return NextResponse.json({ error: "Could not load entry" }, { status: 500 });
+  }
   if (profileRes.error || !profileRes.data) {
     return NextResponse.json(
       { error: "Could not load profile" },

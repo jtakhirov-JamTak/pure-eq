@@ -154,6 +154,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={busy}
+            aria-busy={busy}
             className="h-12 flex-1 rounded-pill bg-danger text-[14px] font-bold text-white active:opacity-90 disabled:opacity-50"
           >
             {busy ? (busyLabel ?? "Working…") : confirmLabel}

@@ -182,6 +182,7 @@ function NormalResultCard({
   output,
   entryId,
   tier,
+  regenSeq = 0,
   onBack,
   onRegenerated,
   personName,
@@ -190,9 +191,11 @@ function NormalResultCard({
   output: AiNormal;
   entryId: string | null;
   tier: AiTier;
+  // Increments each regenerate; used as the cards' remount key so a fresh take
+  // always starts the EditableCards clean, even if the card text is identical.
+  regenSeq?: number;
   onBack: () => void;
-  // Swap the freshly-regenerated output in place. Keyed below so the
-  // EditableCards remount with the new text instead of keeping stale verdicts.
+  // Swap the freshly-regenerated output in place.
   onRegenerated?: (next: AiOutput) => void;
   // Return-loop (Phase 2): after the conversation happens, route into Review
   // pre-attached to this person. Shown only when a person was named.
@@ -213,7 +216,7 @@ function NormalResultCard({
       </p>
       <div className="mt-5">
         <PrepareResultCards
-          key={output.conversation_mode}
+          key={regenSeq}
           output={output}
           entryId={entryId}
         />
@@ -319,6 +322,10 @@ export default function PreparePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
   const [aiOutput, setAiOutput] = useState<AiOutput | null>(null);
+  // Bumped on each regenerate so the result cards remount with fresh edit state
+  // even when two regens return identical card text (a model-text key could
+  // collide and leave a stale Accept/Edit verdict on screen).
+  const [regenSeq, setRegenSeq] = useState(0);
   const [prepareEntryId, setPrepareEntryId] = useState<string | null>(null);
   // Save-first coins flow (Slice B Phase 2b). After the free save succeeds we
   // land on the "Get AI feedback" screen instead of generating immediately.
@@ -492,7 +499,11 @@ export default function PreparePage() {
           entryId={prepareEntryId}
           tier={tier}
           onBack={() => router.push("/coach")}
-          onRegenerated={(next) => setAiOutput(next)}
+          regenSeq={regenSeq}
+          onRegenerated={(next) => {
+            setAiOutput(next);
+            setRegenSeq((s) => s + 1);
+          }}
           personName={(data.personName as string | undefined) ?? null}
           onReviewLater={async () => {
             await stashReviewPrefill({
