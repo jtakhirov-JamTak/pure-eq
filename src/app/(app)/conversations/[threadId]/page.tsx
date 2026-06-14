@@ -166,6 +166,17 @@ export default async function ConversationDetailPage({
                       </p>
                     </div>
                   )}
+
+                  {/* Prepare entries open the full-card view (where you can
+                      regenerate). Other module types have no view yet. */}
+                  {entry.entryTable === "prepare_entries" && (
+                    <Link
+                      href={`/coach/entry/prepare/${entry.entryId}`}
+                      className="mt-3 inline-flex min-h-11 items-center text-[12px] font-semibold text-accent-ink underline active:opacity-80"
+                    >
+                      View full cards &amp; regenerate →
+                    </Link>
+                  )}
                 </div>
               );
             })}

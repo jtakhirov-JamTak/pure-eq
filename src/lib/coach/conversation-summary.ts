@@ -277,6 +277,10 @@ export type ThreadTimelineEntry = {
   createdAt: string;
   inputSummary: string | null;
   aiHeadline: string | null;
+  // Derived entry id + table — lets the timeline link to the entry view page
+  // (Phase 1: only Prepare has a view + regenerate).
+  entryId: string;
+  entryTable: "prepare_entries" | "review_entries" | "pulse_check_entries";
 };
 
 function clip(s: string | null | undefined, max = 240): string | null {
@@ -295,21 +299,21 @@ export async function getThreadEntries(
   const [prepRes, reviewRes, pulseRes] = await Promise.all([
     supabase
       .from("prepare_entries")
-      .select("situation_text, ai_headline, created_at")
+      .select("prepare_entry_id, situation_text, ai_headline, created_at")
       .eq("user_id", userId)
       .eq("thread_id", threadId)
       .eq("is_complete", true)
       .is("deleted_at", null),
     supabase
       .from("review_entries")
-      .select("what_happened, ai_headline, created_at")
+      .select("review_entry_id, what_happened, ai_headline, created_at")
       .eq("user_id", userId)
       .eq("thread_id", threadId)
       .eq("is_complete", true)
       .is("deleted_at", null),
     supabase
       .from("pulse_check_entries")
-      .select("what_feels_off, ai_headline, created_at")
+      .select("pulse_check_entry_id, what_feels_off, ai_headline, created_at")
       .eq("user_id", userId)
       .eq("thread_id", threadId)
       .eq("is_complete", true)
@@ -337,6 +341,8 @@ export async function getThreadEntries(
       createdAt: r.created_at,
       inputSummary: clip(r.situation_text),
       aiHeadline: r.ai_headline,
+      entryId: r.prepare_entry_id,
+      entryTable: "prepare_entries",
     });
   }
   for (const r of reviewRes.data ?? []) {
@@ -345,6 +351,8 @@ export async function getThreadEntries(
       createdAt: r.created_at,
       inputSummary: clip(r.what_happened),
       aiHeadline: r.ai_headline,
+      entryId: r.review_entry_id,
+      entryTable: "review_entries",
     });
   }
   for (const r of pulseRes.data ?? []) {
@@ -353,6 +361,8 @@ export async function getThreadEntries(
       createdAt: r.created_at,
       inputSummary: clip(r.what_feels_off),
       aiHeadline: r.ai_headline,
+      entryId: r.pulse_check_entry_id,
+      entryTable: "pulse_check_entries",
     });
   }
 

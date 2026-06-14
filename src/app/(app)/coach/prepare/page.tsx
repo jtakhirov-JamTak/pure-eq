@@ -4,7 +4,13 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { VoiceInput } from "@/components/voice-input";
 import { PersonPicker } from "@/components/person-picker";
-import { EditableCard } from "@/components/coach/editable-card";
+import {
+  PrepareResultCards,
+  type PrepareAiNormal as AiNormal,
+  type PrepareAiRefusal as AiRefusal,
+  type PrepareAiOutput as AiOutput,
+} from "@/components/coach/prepare-result-cards";
+import { RegenerateButton } from "@/components/coach/regenerate-button";
 import { isRefusal } from "@/lib/coach/output-shape";
 import { stashReviewPrefill } from "@/lib/coach/review-prefill";
 import { StormBackground } from "@/components/brand/StormBackground";
@@ -161,55 +167,6 @@ const PREPARE_PAGES: PageDef[] = [
   },
 ];
 
-type AiNormal = {
-  mode: "normal";
-  // Quick (4 coins) — 6 framing cards.
-  conversation_mode: string;
-  // Structured classification — drives the stored type, not rendered as a card.
-  classified_primary: string;
-  classified_secondary: string | null;
-  hot_layer: string;
-  goal_gap: string;
-  posture: string;
-  do_dont: string;
-  carry_in: string;
-  // Deep (6 coins) — the original 5, present only on Deep output.
-  pressure_check?: string;
-  cleaner_opener?: string;
-  predicted_reaction?: string;
-  neutral_check_question?: string;
-  deeper_read?: string;
-  pattern_tag: string;
-};
-
-type AiRefusal = {
-  mode: "refusal";
-  refusal_reason: string;
-  message_to_user: string;
-  suggested_resource: string;
-};
-
-type AiOutput = AiNormal | AiRefusal;
-
-// Order = how the cards stack on the result screen. The 6 framing cards (Quick,
-// always present) first, then the original 5 (Deep only) — each falls out of
-// the render when its string is absent/empty (see NormalResultCard filter).
-// classified_primary/_secondary are deliberately NOT here: they drive the
-// stored type, they are not user-facing cards.
-const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
-  { label: "What this really is", key: "conversation_mode" },
-  { label: "The hot layer", key: "hot_layer" },
-  { label: "The goal gap", key: "goal_gap" },
-  { label: "The posture to hold", key: "posture" },
-  { label: "One do, one don't", key: "do_dont" },
-  { label: "Carry this in", key: "carry_in" },
-  { label: "Pressure check", key: "pressure_check" },
-  { label: "A cleaner opener", key: "cleaner_opener" },
-  { label: "Predicted reaction", key: "predicted_reaction" },
-  { label: "Neutral check question", key: "neutral_check_question" },
-  { label: "A deeper read", key: "deeper_read" },
-];
-
 // Reading screen (results/refusal/saved) — scrollable, renders inside the app
 // shell over the body's Storm gradient.
 function ReadingScreen({ children }: { children: React.ReactNode }) {
@@ -224,22 +181,24 @@ function ReadingScreen({ children }: { children: React.ReactNode }) {
 function NormalResultCard({
   output,
   entryId,
+  tier,
   onBack,
+  onRegenerated,
   personName,
   onReviewLater,
 }: {
   output: AiNormal;
   entryId: string | null;
+  tier: AiTier;
   onBack: () => void;
+  // Swap the freshly-regenerated output in place. Keyed below so the
+  // EditableCards remount with the new text instead of keeping stale verdicts.
+  onRegenerated?: (next: AiOutput) => void;
   // Return-loop (Phase 2): after the conversation happens, route into Review
   // pre-attached to this person. Shown only when a person was named.
   personName?: string | null;
   onReviewLater?: () => void;
 }) {
-  const visible = RESULT_FIELDS.filter(({ key }) => {
-    const v = output[key];
-    return typeof v === "string" && v.trim().length > 0;
-  });
   return (
     <ReadingScreen>
       <Kicker className="text-accent-ink">Prepare · Complete</Kicker>
@@ -252,27 +211,12 @@ function NormalResultCard({
       <p className="mt-2 text-[13px] font-medium leading-[1.5] text-ink-soft">
         Keep each card, edit it in your words, or mark it not true.
       </p>
-      <div className="mt-5 space-y-3">
-        {visible.map(({ label, key }) => {
-          const text = output[key] as string;
-          return entryId ? (
-            <EditableCard
-              key={key}
-              label={label}
-              value={text}
-              cardKey={key}
-              entryTable="prepare_entries"
-              entryId={entryId}
-            />
-          ) : (
-            <Card key={key} className="animate-card-in">
-              <Kicker>{label}</Kicker>
-              <p className="mt-1.5 text-[14px] font-medium leading-[1.5] text-ink">
-                {text}
-              </p>
-            </Card>
-          );
-        })}
+      <div className="mt-5">
+        <PrepareResultCards
+          key={output.conversation_mode}
+          output={output}
+          entryId={entryId}
+        />
       </div>
       <PrimaryButton onClick={onBack} className="mt-8">
         Done
@@ -281,6 +225,15 @@ function NormalResultCard({
         <SecondaryButton onClick={onReviewLater} className="mt-3 w-full">
           After it happens, review how it went
         </SecondaryButton>
+      )}
+      {entryId && onRegenerated && (
+        <div className="mt-3">
+          <RegenerateButton
+            entryId={entryId}
+            tier={tier}
+            onRegenerated={onRegenerated}
+          />
+        </div>
       )}
     </ReadingScreen>
   );
@@ -537,7 +490,9 @@ export default function PreparePage() {
         <NormalResultCard
           output={aiOutput}
           entryId={prepareEntryId}
+          tier={tier}
           onBack={() => router.push("/coach")}
+          onRegenerated={(next) => setAiOutput(next)}
           personName={(data.personName as string | undefined) ?? null}
           onReviewLater={async () => {
             await stashReviewPrefill({
