@@ -142,25 +142,56 @@ describe("prepareModuleConfig.buildDerivedInsert — lean column mapping", () =>
   });
 });
 
-describe("prepareModuleConfig.extractDerivedFromAi — Predicted Reaction → column", () => {
+describe("prepareModuleConfig.extractDerivedFromAi — AI type + predicted reaction → columns", () => {
   type AiArg = Parameters<
     NonNullable<typeof prepareModuleConfig.extractDerivedFromAi>
   >[0];
 
-  it("copies the AI predicted_reaction card into the column on normal output", () => {
+  const baseNormal = {
+    mode: "normal" as const,
+    conversation_mode: "Really Align + Connect.",
+    classified_primary: "align" as const,
+    classified_secondary: "connect" as const,
+    hot_layer: "Identity.",
+    goal_gap: "You want a decision; she wants the load shared.",
+    posture: "Curious and steady.",
+    do_dont: "Do: name what you both want.\nDon't: lead with the scorecard.",
+    carry_in: "Question: what does she need?\nCue: if you keep score, pause.",
+    pattern_tag: "withdrew_under_tension" as const,
+  };
+
+  it("overwrites the conversation_type columns from the AI classification (Quick, no predicted_reaction)", () => {
+    const extra = prepareModuleConfig.extractDerivedFromAi?.(baseNormal as AiArg);
+    expect(extra).toEqual({
+      conversation_type_primary: "align",
+      conversation_type_secondary: "connect",
+    });
+  });
+
+  it("also copies predicted_reaction into its column on Deep output", () => {
     const extra = prepareModuleConfig.extractDerivedFromAi?.({
-      mode: "normal",
-      pressure_check: "Don't open with 'we need to talk.'",
-      cleaner_opener: "Hey, got 10 minutes to sort chores?",
+      ...baseNormal,
       predicted_reaction: "They'll likely go quiet at first.",
-      pattern_tag: "withdrew_under_tension",
     } as AiArg);
     expect(extra).toEqual({
+      conversation_type_primary: "align",
+      conversation_type_secondary: "connect",
       predicted_reaction: "They'll likely go quiet at first.",
     });
   });
 
-  it("writes nothing on refusal output", () => {
+  it("nulls a secondary that collapsed onto the primary", () => {
+    const extra = prepareModuleConfig.extractDerivedFromAi?.({
+      ...baseNormal,
+      classified_secondary: "align",
+    } as AiArg);
+    expect(extra).toEqual({
+      conversation_type_primary: "align",
+      conversation_type_secondary: null,
+    });
+  });
+
+  it("writes nothing on refusal output (keeps the user's pick)", () => {
     const extra = prepareModuleConfig.extractDerivedFromAi?.({
       mode: "refusal",
       refusal_reason: "out_of_scope",
@@ -326,8 +357,8 @@ describe("module configs — pinned identity", () => {
     expect(reviewModuleConfig.derivedTable).toBe("review_entries");
   });
 
-  it("prepare.aiVersionValue is 9 (coins lean-tier marker)", () => {
-    expect(prepareModuleConfig.aiVersionValue).toBe(9);
+  it("prepare.aiVersionValue is 10 (output-redesign marker)", () => {
+    expect(prepareModuleConfig.aiVersionValue).toBe(10);
     expect(prepareModuleConfig.moduleName).toBe("prepare");
     expect(prepareModuleConfig.derivedTable).toBe("prepare_entries");
   });

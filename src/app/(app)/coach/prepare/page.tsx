@@ -163,9 +163,20 @@ const PREPARE_PAGES: PageDef[] = [
 
 type AiNormal = {
   mode: "normal";
-  pressure_check: string;
-  cleaner_opener: string;
-  predicted_reaction: string;
+  // Quick (4 coins) — 6 framing cards.
+  conversation_mode: string;
+  // Structured classification — drives the stored type, not rendered as a card.
+  classified_primary: string;
+  classified_secondary: string | null;
+  hot_layer: string;
+  goal_gap: string;
+  posture: string;
+  do_dont: string;
+  carry_in: string;
+  // Deep (6 coins) — the original 5, present only on Deep output.
+  pressure_check?: string;
+  cleaner_opener?: string;
+  predicted_reaction?: string;
   neutral_check_question?: string;
   deeper_read?: string;
   pattern_tag: string;
@@ -180,7 +191,18 @@ type AiRefusal = {
 
 type AiOutput = AiNormal | AiRefusal;
 
+// Order = how the cards stack on the result screen. The 6 framing cards (Quick,
+// always present) first, then the original 5 (Deep only) — each falls out of
+// the render when its string is absent/empty (see NormalResultCard filter).
+// classified_primary/_secondary are deliberately NOT here: they drive the
+// stored type, they are not user-facing cards.
 const RESULT_FIELDS: { label: string; key: keyof AiNormal }[] = [
+  { label: "What this really is", key: "conversation_mode" },
+  { label: "The hot layer", key: "hot_layer" },
+  { label: "The goal gap", key: "goal_gap" },
+  { label: "The posture to hold", key: "posture" },
+  { label: "One do, one don't", key: "do_dont" },
+  { label: "Carry this in", key: "carry_in" },
   { label: "Pressure check", key: "pressure_check" },
   { label: "A cleaner opener", key: "cleaner_opener" },
   { label: "Predicted reaction", key: "predicted_reaction" },

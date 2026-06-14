@@ -124,7 +124,7 @@ export function EditableCard({
       ) : (
         <>
           <p
-            className={`mt-1.5 text-[14px] font-medium leading-[1.5] ${
+            className={`mt-1.5 whitespace-pre-line text-[14px] font-medium leading-[1.5] ${
               rejected ? "text-ink-muted line-through" : "text-ink"
             }`}
           >

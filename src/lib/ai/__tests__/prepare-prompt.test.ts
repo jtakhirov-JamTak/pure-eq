@@ -27,21 +27,23 @@ const baseParams = {
   triggerPlan: "If I feel chest-tightening, I'll pause and ask one question.",
 };
 
-describe("buildPreparePrompt — lean tiered shape", () => {
+describe("buildPreparePrompt — framing-card output (6.5.0 redesign)", () => {
   it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
-    expect(PROMPT_VERSION).toBe("6.4.0");
+    expect(PROMPT_VERSION).toBe("6.5.0");
   });
 
-  it("includes the PREPARE OPENER RULE in the system prompt", () => {
-    const out = buildPreparePrompt(baseParams);
-    expect(out.system).toContain("PREPARE OPENER RULE");
-    expect(out.system).toContain("PRESSURE patterns");
-    expect(out.system).toContain("BLAME patterns");
+  it("Deep-gates the PREPARE OPENER RULE (Quick has no pressure_check card)", () => {
+    const quick = buildPreparePrompt(baseParams);
+    expect(quick.system).not.toContain("PREPARE OPENER RULE");
+    const deep = buildPreparePrompt({ ...baseParams, tier: "deep" });
+    expect(deep.system).toContain("PREPARE OPENER RULE");
+    expect(deep.system).toContain("PRESSURE patterns");
+    expect(deep.system).toContain("BLAME patterns");
   });
 
-  it("renders all redesign fields verbatim in the user block", () => {
+  it("renders all redesign inputs verbatim in the user block", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.user).toContain("Alex (romantic)");
     // Conversation type renders the gloss for primary + secondary.
@@ -74,24 +76,42 @@ describe("buildPreparePrompt — lean tiered shape", () => {
     expect(out.user).not.toContain("secondary:");
   });
 
-  it("Quick tier omits the two Deep card DEFINITIONS from the output schema", () => {
+  it("Quick tier emits the 6 framing cards and omits the original 5", () => {
     const out = buildPreparePrompt(baseParams);
-    expect(out.system).toContain("pressure_check");
-    expect(out.system).toContain("cleaner_opener");
-    expect(out.system).toContain("predicted_reaction");
-    expect(out.system).toContain("Return ONLY the Quick fields");
-    // The "do NOT include …" instruction line names the fields, so match on
-    // the quoted JSON key (the schema definition) — absent in Quick.
+    // 6 framing cards present in both tiers.
+    expect(out.system).toContain('"conversation_mode":');
+    expect(out.system).toContain('"classified_primary":');
+    expect(out.system).toContain('"classified_secondary":');
+    expect(out.system).toContain('"hot_layer":');
+    expect(out.system).toContain('"goal_gap":');
+    expect(out.system).toContain('"posture":');
+    expect(out.system).toContain('"do_dont":');
+    expect(out.system).toContain('"carry_in":');
+    expect(out.system).toContain("Return ONLY the fields above");
+    // The original 5 card DEFINITIONS are absent in Quick.
+    expect(out.system).not.toContain('"pressure_check":');
+    expect(out.system).not.toContain('"cleaner_opener":');
+    expect(out.system).not.toContain('"predicted_reaction":');
     expect(out.system).not.toContain('"neutral_check_question":');
     expect(out.system).not.toContain('"deeper_read":');
   });
 
-  it("Deep tier adds the neutral_check_question + deeper_read definitions", () => {
+  it("Deep tier adds the original 5 card definitions on top of the framing cards", () => {
     const out = buildPreparePrompt({ ...baseParams, tier: "deep" });
+    expect(out.system).toContain('"conversation_mode":');
+    expect(out.system).toContain('"pressure_check":');
+    expect(out.system).toContain('"cleaner_opener":');
+    expect(out.system).toContain('"predicted_reaction":');
     expect(out.system).toContain('"neutral_check_question":');
     expect(out.system).toContain('"deeper_read":');
-    expect(out.system).not.toContain("Return ONLY the Quick fields");
+    expect(out.system).not.toContain("Return ONLY the fields above");
     expect(out.user).toContain("Deep request");
+  });
+
+  it("lists the CONVERSATION_TYPES enum for the classification fields", () => {
+    const out = buildPreparePrompt(baseParams);
+    expect(out.system).toContain("classified_primary and classified_secondary");
+    expect(out.system).toContain("understand, decide, connect, align");
   });
 });
 

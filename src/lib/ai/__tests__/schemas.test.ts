@@ -77,33 +77,57 @@ describe("refusalShape", () => {
 });
 
 // ============================================================
-// prepareOutputSchema (coins redesign 2026-05-29) — tier-aware
+// prepareOutputSchema (OUTPUT redesign 2026-06-14) — tier-aware
 // ============================================================
-// Quick = 3 required cards; Deep adds 2 optional cards. The two Deep fields
-// are .optional() so a Quick output validates without them.
+// Quick = 6 framing cards + the structured type classification (all required);
+// Deep adds the original 5 (.optional() so a Quick output validates without
+// them). classified_secondary is nullable (null = not a blend).
 const validPrepareQuick = {
   mode: "normal",
-  pressure_check: "Don't open with 'we need to talk.'",
-  cleaner_opener: "Hey, got 10 minutes tonight to sort the chore split?",
-  predicted_reaction:
-    "She'll likely go quiet at first, then ask why it matters now.",
+  conversation_mode:
+    "Really Align + Connect. The danger: pushing for agreement before she feels heard → she shuts down.",
+  classified_primary: "align",
+  classified_secondary: "connect",
+  hot_layer:
+    "Identity. You may hear her pushback as 'I'm not pulling my weight.'",
+  goal_gap:
+    "You want a fair split decided tonight; she wants credit for the overtime first.",
+  posture:
+    "Curious and steady, not persuasive — understand the load before proposing a split.",
+  do_dont:
+    "Do: open by naming what you both want.\nDon't: lead with the scorecard of this week.",
+  carry_in:
+    "Question: what does she need from me right now?\nCue: if you hear yourself keeping score, pause and ask.",
   pattern_tag: "assumed_meaning_without_checking",
 };
 
 const validPrepareDeep = {
   ...validPrepareQuick,
+  pressure_check: "Don't open with 'we need to talk.'",
+  cleaner_opener: "Hey, got 10 minutes tonight to sort the chore split?",
+  predicted_reaction:
+    "She'll likely go quiet at first, then ask why it matters now.",
   neutral_check_question: "What's been eating most of your bandwidth this week?",
   deeper_read:
     "The fairest read is she's swamped, not careless — and your hidden ask is to feel the load is shared.",
 };
 
 describe("prepareOutputSchema", () => {
-  it("parses a valid Quick normal-mode Prepare output (3 cards)", () => {
+  it("parses a valid Quick normal-mode Prepare output (6 framing cards)", () => {
     expect(prepareOutputSchema.safeParse(validPrepareQuick).success).toBe(true);
   });
 
-  it("parses a valid Deep normal-mode Prepare output (5 cards)", () => {
+  it("parses a valid Deep normal-mode Prepare output (11 cards)", () => {
     expect(prepareOutputSchema.safeParse(validPrepareDeep).success).toBe(true);
+  });
+
+  it("accepts a null classified_secondary (not a blend)", () => {
+    expect(
+      prepareOutputSchema.safeParse({
+        ...validPrepareQuick,
+        classified_secondary: null,
+      }).success,
+    ).toBe(true);
   });
 
   it("parses a valid refusal-mode Prepare output", () => {
@@ -132,26 +156,50 @@ describe("prepareOutputSchema", () => {
     ).toBe(false);
   });
 
-  it("rejects a normal-mode output missing pressure_check (required Quick card)", () => {
-    const { pressure_check: _omit, ...rest } = validPrepareQuick;
+  it("rejects a normal-mode output missing conversation_mode (required framing card)", () => {
+    const { conversation_mode: _omit, ...rest } = validPrepareQuick;
     void _omit;
     expect(prepareOutputSchema.safeParse(rest).success).toBe(false);
   });
 
-  it("rejects a predicted_reaction over 300 chars", () => {
+  it("rejects a normal-mode output missing classified_primary", () => {
+    const { classified_primary: _omit, ...rest } = validPrepareQuick;
+    void _omit;
+    expect(prepareOutputSchema.safeParse(rest).success).toBe(false);
+  });
+
+  it("rejects an unknown classified_primary (off-taxonomy)", () => {
     expect(
       prepareOutputSchema.safeParse({
         ...validPrepareQuick,
-        predicted_reaction: "a".repeat(301),
+        classified_primary: "vent",
       }).success,
     ).toBe(false);
   });
 
-  it("rejects whitespace-only cleaner_opener after trim", () => {
+  it("rejects a do_dont over 300 chars", () => {
     expect(
       prepareOutputSchema.safeParse({
         ...validPrepareQuick,
-        cleaner_opener: "   ",
+        do_dont: "a".repeat(301),
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a whitespace-only carry_in after trim", () => {
+    expect(
+      prepareOutputSchema.safeParse({
+        ...validPrepareQuick,
+        carry_in: "   ",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("rejects a Deep predicted_reaction over 300 chars", () => {
+    expect(
+      prepareOutputSchema.safeParse({
+        ...validPrepareDeep,
+        predicted_reaction: "a".repeat(301),
       }).success,
     ).toBe(false);
   });

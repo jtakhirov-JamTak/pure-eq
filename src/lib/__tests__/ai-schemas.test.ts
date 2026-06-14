@@ -86,16 +86,20 @@ describe("validateAIOutput — stripGeneric on action fields", () => {
   });
 });
 
-describe("prepareOutputSchema — lean tier shape", () => {
-  // Coins redesign 2026-05-29: the fixed 5-card shape (real_issue,
-  // reality_check_question, thing_not_to_do, they_might_need, best_next_move)
-  // was replaced by the tiered set. The Deep cards are optional, so a Quick
-  // output with only the 3 required cards must validate.
+describe("prepareOutputSchema — framing-card tier shape", () => {
+  // Output redesign 2026-06-14: Quick = 6 framing cards + structured type
+  // classification; the original 5 cards (pressure_check…deeper_read) moved to
+  // Deep and are .optional(), so a Quick output without them must validate.
   const quick = {
     mode: "normal" as const,
-    pressure_check: "Don't open with 'we need to talk.'",
-    cleaner_opener: "Hey, got 10 minutes to sort the split?",
-    predicted_reaction: "She'll likely go quiet at first.",
+    conversation_mode: "Really Align + Connect. The danger: pushing too fast.",
+    classified_primary: "align" as const,
+    classified_secondary: "connect" as const,
+    hot_layer: "Identity. You may hear it as 'I'm not enough.'",
+    goal_gap: "You want a decision; she wants to feel the load is shared.",
+    posture: "Curious and steady, not persuasive.",
+    do_dont: "Do: name what you both want.\nDon't: lead with the scorecard.",
+    carry_in: "Question: what does she need?\nCue: if you keep score, pause.",
     pattern_tag: "withdrew_under_tension" as const,
   };
 

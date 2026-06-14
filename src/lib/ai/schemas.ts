@@ -1,6 +1,6 @@
 import { z } from "zod";
 import * as Sentry from "@sentry/nextjs";
-import { BANNED_PHRASES, OBSERVATION_TAGS } from "@/types";
+import { BANNED_PHRASES, CONVERSATION_TYPES, OBSERVATION_TAGS } from "@/types";
 
 // ============================================================
 // Refusal output (shared across every Coach module + Reflection)
@@ -33,16 +33,31 @@ export const refusalShape = z.object({
 });
 
 // ============================================================
-// Prepare — tier-aware card set (coins redesign, Slice A 2026-05-29)
+// Prepare — tier-aware card set (output redesign 2026-06-14)
 // ============================================================
-// Quick tier = 3 cards (pressure_check, cleaner_opener, predicted_reaction).
-// Deep tier = those 3 + 2 more (neutral_check_question, deeper_read). The two
-// Deep fields are .optional() — the prompt fills them only when tier ===
-// "deep", mirroring Review's optional repair-branch fields. predicted_reaction
-// is copied into prepare_entries.predicted_reaction (route extractDerivedFromAi)
-// so the Review calibration link keeps working — only the writer changed from
-// a user input to this AI card. None of these are action-copy fields, so the
-// Prepare output no longer contributes to ACTION_FIELDS / stripGeneric.
+// Quick tier (4 coins) = 6 NEW framing cards (conversation_mode, hot_layer,
+// goal_gap, posture, do_dont, carry_in). Deep tier (6 coins) = those 6 PLUS
+// the original 5 (pressure_check, cleaner_opener, predicted_reaction,
+// neutral_check_question, deeper_read), which moved OUT of Quick entirely.
+// The original-5 fields are .optional() — the prompt fills them only when
+// tier === "deep". This INVERTS the prior optionality (Quick used to be the
+// original 3 + 2 optional Deep). aiVersionValue bumps 9 → 10 alongside.
+//
+// The mode card carries BOTH the displayed prose (conversation_mode) AND a
+// structured classification (classified_primary/_secondary) that the route
+// writes back over conversation_type_primary/_secondary — the AI is the source
+// of truth for the stored type post-redesign (founder decision 2026-06-14).
+// classified_secondary is nullable (null = not a blend). Constrained to the
+// CONVERSATION_TYPES enum, so the AI picks FROM the controlled taxonomy, never
+// invents one (CLAUDE.md controlled-taxonomy rule).
+//
+// predicted_reaction is still copied into prepare_entries.predicted_reaction
+// (route extractDerivedFromAi) for the Review calibration link — but it is now
+// Deep-only, so Quick Prepares have no forecast anchor (founder decision: the
+// predict-vs-reality comparison is a Deep-tier perk).
+//
+// do_dont / carry_in each hold TWO labelled lines separated by a newline (the
+// prompt specifies the exact format); the renderer uses whitespace-pre-line.
 //
 // All string fields chain `.trim().min(1)` so a model returning "" or "   "
 // fails Zod parse server-side. 300-char cap unified across modules per
@@ -50,11 +65,19 @@ export const refusalShape = z.object({
 
 const prepareNormalShape = z.object({
   mode: z.literal("normal"),
-  // Quick tier (always required).
-  pressure_check: z.string().trim().min(1).max(300),
-  cleaner_opener: z.string().trim().min(1).max(300),
-  predicted_reaction: z.string().trim().min(1).max(300),
-  // Deep tier (populated only when tier === "deep").
+  // --- Quick tier (4 coins) — always required ---
+  conversation_mode: z.string().trim().min(1).max(300),
+  classified_primary: z.enum(CONVERSATION_TYPES),
+  classified_secondary: z.enum(CONVERSATION_TYPES).nullable(),
+  hot_layer: z.string().trim().min(1).max(300),
+  goal_gap: z.string().trim().min(1).max(300),
+  posture: z.string().trim().min(1).max(300),
+  do_dont: z.string().trim().min(1).max(300),
+  carry_in: z.string().trim().min(1).max(300),
+  // --- Deep tier (6 coins) — the original 5, populated only on tier "deep" ---
+  pressure_check: z.string().trim().min(1).max(300).optional(),
+  cleaner_opener: z.string().trim().min(1).max(300).optional(),
+  predicted_reaction: z.string().trim().min(1).max(300).optional(),
   neutral_check_question: z.string().trim().min(1).max(300).optional(),
   deeper_read: z.string().trim().min(1).max(300).optional(),
   pattern_tag: z.enum(OBSERVATION_TAGS),
