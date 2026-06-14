@@ -658,7 +658,7 @@ export default function PreparePage() {
         });
       };
       return (
-        <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
+        <div className="flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto">
           {CONVERSATION_TYPE_OPTIONS.map((opt) => {
             const badge =
               sel.primary === opt.value
@@ -671,16 +671,19 @@ export default function PreparePage() {
                 key={opt.value}
                 selected={badge !== null}
                 onClick={() => onTap(opt.value)}
+                className="py-2"
               >
                 <span className="flex items-center gap-2">
                   {badge && (
-                    <span className="shrink-0 rounded-full border border-current px-2 py-0.5 text-[11px] font-semibold leading-none">
+                    <span className="shrink-0 rounded-full border border-current px-1.5 py-0.5 text-[10px] font-semibold leading-none">
                       {badge}
                     </span>
                   )}
                   <span className="min-w-0">
-                    <span className="block font-medium">{opt.label}</span>
-                    <span className="block text-[12px] font-normal opacity-80">
+                    <span className="block text-[13px] font-medium leading-snug">
+                      {opt.label}
+                    </span>
+                    <span className="block text-[11px] font-normal leading-snug opacity-80">
                       {opt.description}
                     </span>
                   </span>
