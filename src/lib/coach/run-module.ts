@@ -4,7 +4,6 @@
 // was previously copy-pasted across 3 x ~440-line route files.
 
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import * as Sentry from "@sentry/nextjs";
 import { createClient } from "@/lib/supabase/server";
 import { rateLimit } from "@/lib/rate-limit";
@@ -22,13 +21,9 @@ import { isAdmin } from "@/lib/admin";
 import { isAIDisabled } from "@/lib/kill-switch";
 import { recordEvent } from "@/lib/observability";
 import { runBilledGeneration } from "@/lib/coach/billed-generation";
-import { extractHeadline } from "@/lib/coach/conversation-summary";
-import { validateAIOutput } from "@/lib/ai/schemas";
+import { runCoachAiCall, persistCoachAiOutput } from "@/lib/coach/generation";
 import type { AiTier, ProfileType } from "@/types";
 import type { CoachModuleConfig } from "./types";
-
-const MAX_RETRIES = 1;
-const ANTHROPIC_TIMEOUT_MS = 30_000;
 
 // Cooldown-latched Sentry capture for the post-resolution person-context
 // fetch. If RLS misconfigures or the persons table schema drifts, every
@@ -498,102 +493,18 @@ export async function runCoachModule<
     coins: { nextGenerationAttempt, spendCoins, refundCoins, getBalance },
 
     // 12. Call Claude. Reuses the prompt built before the idempotency branch.
-    generate: async () => {
-      const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
-      let aiOutput: TAiOutput | null = null;
-      let failureKind = "none";
-      let lastErr: unknown = null;
-      let attempts = 0;
-      const aiCallStart = Date.now();
-
-      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const message = await anthropic.messages.create({
-            // Sonnet 4.6: thinking off + effort high. Explicit because Sonnet 4.6
-            // defaults have shifted across SDK versions; pinning preserves the
-            // instruction-following behavior our prompts are tuned against.
-            model: "claude-sonnet-4-6",
-            max_tokens: 1024,
-            thinking: { type: "disabled" },
-            output_config: { effort: "high" },
-            system: prompt.system,
-            messages: [{ role: "user", content: prompt.user }],
-          });
-          const textBlock = message.content.find((b) => b.type === "text");
-          if (!textBlock || textBlock.type !== "text") {
-            failureKind = "no_text";
-            throw new Error("no text block");
-          }
-          const raw = textBlock.text.replace(/```json\n?|```/g, "").trim();
-          let jsonOutput: unknown;
-          try {
-            jsonOutput = JSON.parse(raw);
-          } catch {
-            failureKind = "json_parse";
-            throw new Error("bad json");
-          }
-          const validated = config.aiOutputSchema.safeParse(jsonOutput);
-          if (!validated.success) {
-            failureKind = "schema_mismatch";
-            throw new Error("schema mismatch");
-          }
-          try {
-            aiOutput = validateAIOutput(validated.data);
-          } catch {
-            failureKind = "banned_phrase";
-            throw new Error("banned phrase");
-          }
-          failureKind = "none";
-          attempts = attempt + 1;
-          break;
-        } catch (err) {
-          lastErr = err;
-          console.error(`${name}: AI attempt ${attempt + 1} failed kind=${failureKind}`);
-          if (attempt < MAX_RETRIES) {
-            await new Promise((r) => setTimeout(r, 400));
-          }
-        }
-      }
-      return {
-        aiOutput,
-        failureKind,
-        lastErr,
-        attempts,
-        latencyMs: Date.now() - aiCallStart,
-      };
-    },
+    // The model call + retry/validate live in the shared helper so the
+    // regenerate route runs the identical config (generation.ts).
+    generate: () => runCoachAiCall<TAiOutput>(name, prompt, config.aiOutputSchema),
 
     // 13. Update derived row with AI output. extractDerivedFromAi (optional)
     // promotes fields out of the AI output into their own derived columns — e.g.
     // lean Prepare copies the AI Predicted Reaction card into predicted_reaction
     // so Review calibration reads it. The headline stamp denormalizes the one-
     // line summary so the conversations list reads a short string, not the full
-    // AI jsonb (×100 threads). Both merged into one update so they land atomically.
-    persist: async (aiOutput) => {
-      const derivedFromAi = config.extractDerivedFromAi
-        ? config.extractDerivedFromAi(aiOutput)
-        : {};
-      const headlineUpdate = config.headlineColumn
-        ? { [config.headlineColumn]: extractHeadline(name, aiOutput) }
-        : {};
-      const updateResult = await (supabase.from(config.derivedTable) as ReturnType<typeof supabase.from>)
-        .update({
-          [config.aiJsonColumn]: aiOutput,
-          [config.aiVersionColumn]: config.aiVersionValue,
-          ...derivedFromAi,
-          ...headlineUpdate,
-          is_complete: true,
-          completed_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id)
-        .eq(config.derivedIdColumn, derivedEntryId);
-
-      if (updateResult.error) {
-        console.error(`${name}: derived update failed`, updateResult.error.code);
-        return { error: true };
-      }
-      return { error: false };
-    },
+    // AI jsonb (×100 threads). Shared with the regenerate route (generation.ts).
+    persist: (aiOutput) =>
+      persistCoachAiOutput(supabase, config, user.id, derivedEntryId, aiOutput),
   });
 
   // Map the billing outcome to HTTP.

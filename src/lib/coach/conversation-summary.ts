@@ -50,9 +50,19 @@ export function extractHeadline(
       ? j.message_to_user.trim()
       : null;
   }
+  // Prepare's headline field moved with the 6.5.0 output redesign: the old
+  // headline card (pressure_check) is now Deep-only, so Quick Prepares have
+  // none. Use conversation_mode (a Quick card, always present on v10 rows) and
+  // fall back to pressure_check so pre-redesign rows still headline correctly.
+  if (recordType === "prepare") {
+    const v =
+      typeof j.conversation_mode === "string" && j.conversation_mode.trim()
+        ? j.conversation_mode
+        : j.pressure_check;
+    return typeof v === "string" && v.trim() ? v.trim() : null;
+  }
   let field: string | null = null;
-  if (recordType === "prepare") field = "pressure_check";
-  else if (recordType === "review") field = "pattern_data";
+  if (recordType === "review") field = "pattern_data";
   else if (recordType === "pulse_check") field = "signal_vs_noise";
   if (!field) return null;
   const v = j[field];
