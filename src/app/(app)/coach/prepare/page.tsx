@@ -592,8 +592,13 @@ export default function PreparePage() {
   function renderStep(step: StepDef) {
     if (step.kind === "person_with_relationship") {
       const rel = (data.relationship as string | undefined) ?? "";
+      // NOT a scroll container: the PersonPicker's suggestions dropdown is
+      // absolutely positioned (top-full) and manages its own scroll + bottom
+      // spacer. An overflow-y-auto wrapper here would clip that dropdown when
+      // the keyboard shrinks the band. Content (picker + 5 rows) fits the
+      // no-scroll band once the keyboard is dismissed; relationship is tap-only.
       return (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+        <div className="flex flex-col gap-4">
           <PersonPicker
             value={(data.personName as string | undefined) ?? ""}
             onChange={(next) => setFieldValue("personName", next)}
