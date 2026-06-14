@@ -31,7 +31,15 @@ describe("buildPreparePrompt — framing-card output (6.5.0 redesign)", () => {
   it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
-    expect(PROMPT_VERSION).toBe("6.5.0");
+    expect(PROMPT_VERSION).toBe("6.5.1");
+  });
+
+  it("includes the empathic-accuracy rule (other-person read = inference) in both tiers", () => {
+    const quick = buildPreparePrompt(baseParams);
+    const deep = buildPreparePrompt({ ...baseParams, tier: "deep" });
+    expect(quick.system).toContain("READING THE OTHER PERSON");
+    expect(quick.system).toContain("USER'S INFERENCE");
+    expect(deep.system).toContain("READING THE OTHER PERSON");
   });
 
   it("Deep-gates the PREPARE OPENER RULE (Quick has no pressure_check card)", () => {

@@ -118,7 +118,12 @@ const CRISIS_RESOURCE = "988" satisfies (typeof REFUSAL_RESOURCES)[number];
 // overwrites the stored conversation_type columns (AI is source of truth). The
 // PREPARE OPENER RULE is now Deep-gated (pressure_check is Deep-only). Output
 // shape changed → ai_plan_version bumps 9 → 10. Other module prompts unchanged.
-export const PROMPT_VERSION = "6.5.0";
+// 2026-06-14 6.5.1: Prepare empathic-accuracy guard (no output-shape change —
+// patch bump, ai_plan_version stays 10). The user's description of the other
+// person's feelings/wants is their INFERENCE; the model was restating it as fact
+// ("she wants X"). New PREPARE_OTHER_PERSON_RULE + reworded goal_gap make the
+// model attribute/hedge the read instead of cementing it.
+export const PROMPT_VERSION = "6.5.1";
 
 const SHARED_RULES = `
 RULES:
@@ -206,6 +211,23 @@ PREPARE OPENER RULE:
 - If the opener is clean, pressure_check should still name the likely default
   opening move to avoid given the conversation move + situation + the fairest
   read of the other person.
+`;
+
+// PREPARE_OTHER_PERSON_RULE — included in every Prepare prompt (Quick + Deep).
+// The user's read of the other person's feelings/wants is a GUESS; without this
+// the model restates it as established fact and the cards (esp. goal_gap) sound
+// confident about someone whose inner state the user is only inferring — the
+// opposite of empathic accuracy. Added 2026-06-14 (6.5.1) from founder feedback.
+const PREPARE_OTHER_PERSON_RULE = `
+READING THE OTHER PERSON:
+- The user's description of what the other person feels, wants, or is "probably
+  after" is the USER'S INFERENCE, not verified fact. They are guessing.
+- NEVER restate that guess as established truth ("she wants X", "he feels Y").
+  Attribute it to the user instead — "you're reading them as wanting X", "your
+  read is that they feel Y" — so the user hears it as a hypothesis, not a fact.
+- Treat overconfidence about the other person's inner state as a coaching risk to
+  NAME, not a foundation to build on. Surfacing that an assumption is being made
+  is often the most useful move.
 `;
 
 // PULSE_CHECK_RULE — included only in the Pulse Check prompt. Pulse Check is
@@ -304,7 +326,7 @@ NORMAL MODE:
   "classified_primary": "REQUIRED. One of the CONVERSATION_TYPES enum values — your read of the PRIMARY type. Must match what you named in conversation_mode.",
   "classified_secondary": "REQUIRED. One of the CONVERSATION_TYPES enum values, OR null. The SECONDARY type if this is genuinely a blend, else null. Must differ from classified_primary.",
   "hot_layer": "string, max 300 chars — Which layer is most likely to get activated: CONTENT (the facts/logistics), FEELINGS (the emotions in the room), or IDENTITY (what it says about who I am / who we are). Name the ONE most at risk and the story it triggers. e.g. 'Identity. You may hear her pushback as \\"I'm not good enough at this.\\"'",
-  "goal_gap": "string, max 300 chars — The gap between what the USER wants out of this and what the OTHER person most likely wants. Name BOTH specific goals, then the trap the gap creates if they only push their own. Not 'you want different things' — the two concrete goals.",
+  "goal_gap": "string, max 300 chars — The gap between what the USER wants and what they BELIEVE the other person wants. The other-person side is the user's READ (an inference, not fact) — attribute it ('you're reading them as wanting…'), hedge it, and if the read is thin say it's worth checking before the talk. Name both, then the trap the gap creates if they only push their own. Not 'you want different things' — the two concrete goals.",
   "posture": "string, max 300 chars — The stance to hold for THIS type of interaction (curious / decisive / steady / warm…). One or two sentences on how to show up, grounded in the type + the hot layer.",
   "do_dont": "string, max 300 chars — ONE concrete do and ONE concrete don't for this interaction, behavior-level. EXACT format, two lines separated by a single newline character:\\nDo: <one specific move>\\nDon't: <one specific move>",
   "carry_in": "string, max 300 chars — One self-question to hold DURING the talk, plus one in-the-moment cue tied to the trigger/pattern they named (use their own words). EXACT format, two lines separated by a single newline character:\\nQuestion: <a self-question>\\nCue: <if you notice X, do Y>"${deepCards},
@@ -337,6 +359,7 @@ ${OBSERVATION_TAGS.join(", ")}
     prompt_version: PROMPT_VERSION,
     system: `You are a communication coach helping someone prepare for a hard conversation. Read ALL their inputs and give them a clear frame: what kind of conversation this really is, what's emotionally at stake, where their goal diverges from the other person's, the posture to hold, and concrete in-the-moment guidance. Be specific and behavior-level — never a category label.
 ${SHARED_RULES}
+${PREPARE_OTHER_PERSON_RULE}
 ${isDeep ? PREPARE_OPENER_RULE : ""}
 ${SAFETY_FLOOR}
 ${schemaBlock}`,
