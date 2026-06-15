@@ -32,6 +32,11 @@ interface Props {
   // the 7-day window or a bumped generator_version). Used to tailor the CTA
   // copy ("your previous reflection is no longer current").
   hasStaleCached: boolean;
+  // When rendered inside a collapsible InsightsSection, the section header owns
+  // the "Your weekly reflection" title, so suppress the CTA card's own title.
+  // The freshly-generated result card (ready phase) keeps its full header so
+  // the new reflection is self-labelled with its date.
+  hideHeader?: boolean;
 }
 
 type State =
@@ -51,7 +56,7 @@ type State =
  *
  * Mirrors the Coach Save-first / pay-to-generate shape (coin-ui.tsx).
  */
-export function ReflectionKickoff({ hasStaleCached }: Props) {
+export function ReflectionKickoff({ hasStaleCached, hideHeader }: Props) {
   const [state, setState] = useState<State>({ phase: "idle" });
   const { balance, refresh } = useCoinBalance();
   const inFlight = useRef(false);
@@ -184,7 +189,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "generating") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your weekly reflection</Kicker>
+        {!hideHeader && <Kicker as="h2">Your weekly reflection</Kicker>}
         <div className="mt-3 flex items-center gap-3">
           <div
             aria-hidden="true"
@@ -202,7 +207,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "insufficient") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your weekly reflection</Kicker>
+        {!hideHeader && <Kicker as="h2">Your weekly reflection</Kicker>}
         <p className="mt-2 text-[14px] font-semibold leading-[1.5] text-ink">
           You need {state.needed} {state.needed === 1 ? "coin" : "coins"} for
           this — you have {state.balance}.
@@ -221,7 +226,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "error") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your weekly reflection</Kicker>
+        {!hideHeader && <Kicker as="h2">Your weekly reflection</Kicker>}
         {/* The DIFFERENTIATED message (server copy for 503/429/409, network
             copy offline) — state.message was previously computed but never
             rendered, so every error showed the same generic paragraph. */}
@@ -248,7 +253,7 @@ export function ReflectionKickoff({ hasStaleCached }: Props) {
     // idle — the explicit CTA.
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your weekly reflection</Kicker>
+        {!hideHeader && <Kicker as="h2">Your weekly reflection</Kicker>}
         <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
           {hasStaleCached
             ? "Your previous reflection is no longer current. Generate a fresh read of your last 4 weeks."

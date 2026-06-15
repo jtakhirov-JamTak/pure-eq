@@ -38,36 +38,49 @@ const FOCUS_MODULE_LABEL: Record<string, string> = {
 interface Props {
   reflection: ReflectionOutput;
   generatedAt: string; // ISO
+  // When the card is rendered inside a collapsible section (InsightsSection),
+  // the section header already shows the title + generated date, so suppress
+  // the card's own title/byline row to avoid duplication. The section header's
+  // date IS the migration-0018 canary in that layout.
+  hideHeader?: boolean;
 }
 
-export function ReflectionCard({ reflection, generatedAt }: Props) {
+export function ReflectionCard({ reflection, generatedAt, hideHeader }: Props) {
   // Refusal shape — surface the model's message as a low-key card.
   if (reflection.mode === "refusal") {
     return (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your weekly reflection</Kicker>
-        <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
+        {!hideHeader && <Kicker as="h2">Your weekly reflection</Kicker>}
+        <p
+          className={`${hideHeader ? "" : "mt-2 "}text-[13px] font-medium leading-[1.55] text-ink-soft`}
+        >
           {reflection.message_to_user}
         </p>
-        <p className="mt-3 text-[11px] font-medium text-ink-muted">
-          Checked on {formatDate(generatedAt)}
-        </p>
+        {!hideHeader && (
+          <p className="mt-3 text-[11px] font-medium text-ink-muted">
+            Checked on {formatDate(generatedAt)}
+          </p>
+        )}
       </Card>
     );
   }
 
   return (
     <Card className="mt-4 p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <Kicker as="h2">Your weekly reflection</Kicker>
-        {/* Prominent byline — if the writer ever silently breaks, a stale
-            date is the user-visible canary (migration-0018 defense). */}
-        <p className="text-[11px] font-medium text-ink-muted">
-          Generated {formatDate(generatedAt)}
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-baseline justify-between gap-3">
+          <Kicker as="h2">Your weekly reflection</Kicker>
+          {/* Prominent byline — if the writer ever silently breaks, a stale
+              date is the user-visible canary (migration-0018 defense). */}
+          <p className="text-[11px] font-medium text-ink-muted">
+            Generated {formatDate(generatedAt)}
+          </p>
+        </div>
+      )}
 
-      <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink">
+      <p
+        className={`${hideHeader ? "" : "mt-2 "}text-[13px] font-medium leading-[1.55] text-ink`}
+      >
         {reflection.summary}
       </p>
 

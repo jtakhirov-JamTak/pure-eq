@@ -41,6 +41,10 @@ interface Props {
   // True when a report exists but is stale (outside the 28-day window or a
   // bumped generator_version) — tailors the CTA copy.
   hasStaleCached: boolean;
+  // When rendered inside a collapsible InsightsSection, the section header owns
+  // the "Your monthly report" title, so suppress the CTA card's own title. The
+  // freshly-generated result card (ready phase) keeps its full header.
+  hideHeader?: boolean;
 }
 
 type State =
@@ -55,7 +59,7 @@ type State =
   | { phase: "error"; message: string; kind?: string }
   | { phase: "insufficient"; needed: number; balance: number };
 
-export function MonthlyReportKickoff({ hasStaleCached }: Props) {
+export function MonthlyReportKickoff({ hasStaleCached, hideHeader }: Props) {
   const [state, setState] = useState<State>({ phase: "idle" });
   const { balance, refresh } = useCoinBalance();
   const inFlight = useRef(false);
@@ -174,7 +178,7 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "generating") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your monthly report</Kicker>
+        {!hideHeader && <Kicker as="h2">Your monthly report</Kicker>}
         <div className="mt-3 flex items-center gap-3">
           <div
             aria-hidden="true"
@@ -192,7 +196,7 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "insufficient") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your monthly report</Kicker>
+        {!hideHeader && <Kicker as="h2">Your monthly report</Kicker>}
         <p className="mt-2 text-[14px] font-semibold leading-[1.5] text-ink">
           You need {state.needed} {state.needed === 1 ? "coin" : "coins"} for
           this — you have {state.balance}.
@@ -211,7 +215,7 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
   } else if (state.phase === "error") {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your monthly report</Kicker>
+        {!hideHeader && <Kicker as="h2">Your monthly report</Kicker>}
         {/* The DIFFERENTIATED message (server copy for 503/429/409, network
             copy offline) — not a fixed paragraph that claims "we've been
             notified" on errors nothing captured. */}
@@ -237,7 +241,7 @@ export function MonthlyReportKickoff({ hasStaleCached }: Props) {
   } else {
     body = (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your monthly report</Kicker>
+        {!hideHeader && <Kicker as="h2">Your monthly report</Kicker>}
         <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
           {hasStaleCached
             ? "Your previous report is no longer current. Generate a fresh month-level read."

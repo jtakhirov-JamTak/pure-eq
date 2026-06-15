@@ -106,36 +106,52 @@ interface Props {
   report: MonthlyReportOutput;
   snapshot: ReportSnapshot;
   generatedAt: string; // ISO
+  // See ReflectionCard: suppress the title/byline when rendered inside a
+  // collapsible InsightsSection (the section header carries them + the canary).
+  hideHeader?: boolean;
 }
 
-export function MonthlyReportCard({ report, snapshot, generatedAt }: Props) {
+export function MonthlyReportCard({
+  report,
+  snapshot,
+  generatedAt,
+  hideHeader,
+}: Props) {
   // Refusal shape — low-key card, mirrors ReflectionCard.
   if (report.mode === "refusal") {
     return (
       <Card className="mt-4 p-5">
-        <Kicker as="h2">Your monthly report</Kicker>
-        <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink-soft">
+        {!hideHeader && <Kicker as="h2">Your monthly report</Kicker>}
+        <p
+          className={`${hideHeader ? "" : "mt-2 "}text-[13px] font-medium leading-[1.55] text-ink-soft`}
+        >
           {report.message_to_user}
         </p>
-        <p className="mt-3 text-[11px] font-medium text-ink-soft">
-          Checked on {formatDate(generatedAt)}
-        </p>
+        {!hideHeader && (
+          <p className="mt-3 text-[11px] font-medium text-ink-soft">
+            Checked on {formatDate(generatedAt)}
+          </p>
+        )}
       </Card>
     );
   }
 
   return (
     <Card className="mt-4 p-5">
-      <div className="flex items-baseline justify-between gap-3">
-        <Kicker as="h2">Your monthly report</Kicker>
-        {/* Byline canary — same migration-0018 defense as the weekly.
-            ink-soft: a canary the user can't read is a weak canary. */}
-        <p className="text-[11px] font-medium text-ink-soft">
-          Generated {formatDate(generatedAt)}
-        </p>
-      </div>
+      {!hideHeader && (
+        <div className="flex items-baseline justify-between gap-3">
+          <Kicker as="h2">Your monthly report</Kicker>
+          {/* Byline canary — same migration-0018 defense as the weekly.
+              ink-soft: a canary the user can't read is a weak canary. */}
+          <p className="text-[11px] font-medium text-ink-soft">
+            Generated {formatDate(generatedAt)}
+          </p>
+        </div>
+      )}
 
-      <p className="mt-2 text-[13px] font-medium leading-[1.55] text-ink">
+      <p
+        className={`${hideHeader ? "" : "mt-2 "}text-[13px] font-medium leading-[1.55] text-ink`}
+      >
         {report.summary}
       </p>
 

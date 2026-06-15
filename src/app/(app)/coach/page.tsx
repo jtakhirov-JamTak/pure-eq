@@ -24,8 +24,9 @@ export default async function CoachPage() {
     readFirstName(user.user_metadata) || firstNameFromEmail(user.email);
   const greeting = firstName ? `Hi, ${firstName}.` : "Hi there.";
 
-  // Open-loop resume cards on Home too (not just Convos): the reminder that
-  // you prepared for a conversation should hit as soon as the app opens.
+  // Open-loop resume cards on Home (not on Convos): the reminder that you
+  // prepared for a conversation. Rendered at the BOTTOM of Home (founder
+  // direction 2026-06-15) so the entry points lead and the follow-ups trail.
   const { openLoops } = await getConversationsOverview(user.id, 3);
 
   return (
@@ -44,14 +45,6 @@ export default async function CoachPage() {
           Prepare for, review, or pressure-check a conversation.
         </p>
       </div>
-
-      {/* Pick up where you left off — renders nothing when there are no open
-          loops, so the hero stays at the top for everyone else. */}
-      {openLoops.length > 0 && (
-        <div className="mb-6">
-          <OpenConversations loops={openLoops} />
-        </div>
-      )}
 
       {/* Before You Send — hero. Harmonized to Storm: the old yellow/orange
           gradient is recolored to a deep sky->navy so it reads as the hero
@@ -175,6 +168,14 @@ export default async function CoachPage() {
           &rarr;
         </span>
       </Link>
+
+      {/* Pick up where you left off — at the bottom. Renders nothing when there
+          are no open loops. */}
+      {openLoops.length > 0 && (
+        <div className="mt-8">
+          <OpenConversations loops={openLoops} />
+        </div>
+      )}
     </div>
   );
 }
