@@ -3,26 +3,13 @@ import type { ReportSnapshot } from "@/lib/insights/report-snapshot";
 import type { ActivityBucket } from "@/lib/coach/activity-types";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
+// Shared timezone-safe formatter (handles bare YYYY-MM-DD and ISO timestamps).
+import { formatLocalDate as formatDate } from "@/lib/utils";
 
 // Presentational, server-safe (no client JS) — same conventions as
 // ReflectionCard. Every section renders only when its data survived the
 // server's verification pass (silence over garbage): an empty tendencies
 // array, a null key_person, etc. simply don't appear.
-
-function formatDate(input: string): string {
-  // Bare YYYY-MM-DD parses as UTC midnight — rendered client-side west of
-  // UTC that shows the PREVIOUS day. Parse the parts into a local date.
-  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-  const d = ymd
-    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
-    : new Date(input);
-  if (Number.isNaN(d.getTime())) return input;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
 
 // Same tile-palette hues as the old activity dashboard.
 const BUCKET_COLORS: Record<ActivityBucket, string> = {

@@ -1,22 +1,8 @@
 import type { ReflectionOutput } from "@/lib/ai/schemas";
 import { Card } from "@/components/ui/card";
 import { Kicker } from "@/components/ui/kicker";
-
-// Formats "2026-04-20" or ISO timestamp into "Apr 20, 2026".
-function formatDate(input: string): string {
-  // Bare YYYY-MM-DD parses as UTC midnight — rendered client-side west of
-  // UTC that shows the PREVIOUS day. Parse the parts into a local date.
-  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-  const d = ymd
-    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]))
-    : new Date(input);
-  if (Number.isNaN(d.getTime())) return input;
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
+// Shared timezone-safe formatter (handles bare YYYY-MM-DD and ISO timestamps).
+import { formatLocalDate as formatDate } from "@/lib/utils";
 
 // Confidence chip styling per net-evidence level (set server-side in
 // generate.ts deriveConfidence): clear = strongest, emerging = mid, early =

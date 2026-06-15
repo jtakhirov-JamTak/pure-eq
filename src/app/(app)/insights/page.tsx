@@ -75,8 +75,13 @@ export default async function InsightsPage() {
 
   // How many past reports of each type the user can browse left/right. A small
   // cap: this is a personal look-back, not an archive, and the version guard
-  // below already drops pre-redesign rows that would render broken.
-  const HISTORY_LIMIT = 12;
+  // below already drops pre-redesign rows that would render broken. Kept low on
+  // purpose — every card in the history is server-rendered and serialized into
+  // the client payload (InsightsSection is a Client Component), and the page is
+  // collapsed by default, so a large cap ships markup the user may never see.
+  // Upgrade path if look-back depth ever needs to grow: fetch-older-on-expand
+  // via a client request instead of pre-serializing the whole window.
+  const HISTORY_LIMIT = 6;
 
   const [reflectionsRes, entryCountRes, reportsRes, reportCountRes] =
     await Promise.all([
@@ -319,15 +324,17 @@ export default async function InsightsPage() {
       <InsightsSection
         title="Your weekly reflection"
         noun="reflection"
-        items={weeklyHistory}
-        cards={weeklyHistory.map((h, i) => (
-          <ReflectionCard
-            key={i}
-            reflection={h.reflection}
-            generatedAt={h.generatedAt}
-            hideHeader
-          />
-        ))}
+        entries={weeklyHistory.map((h, i) => ({
+          item: h,
+          card: (
+            <ReflectionCard
+              key={i}
+              reflection={h.reflection}
+              generatedAt={h.generatedAt}
+              hideHeader
+            />
+          ),
+        }))}
         generateSlot={weeklyGenerateSlot}
         generateAvailable={!latestReflectionFresh && canGenerate}
         collapsedHint={weeklyCollapsedHint}
@@ -337,16 +344,18 @@ export default async function InsightsPage() {
       <InsightsSection
         title="Your monthly report"
         noun="report"
-        items={reportHistory}
-        cards={reportHistory.map((h, i) => (
-          <MonthlyReportCard
-            key={i}
-            report={h.report}
-            snapshot={h.snapshot}
-            generatedAt={h.generatedAt}
-            hideHeader
-          />
-        ))}
+        entries={reportHistory.map((h, i) => ({
+          item: h,
+          card: (
+            <MonthlyReportCard
+              key={i}
+              report={h.report}
+              snapshot={h.snapshot}
+              generatedAt={h.generatedAt}
+              hideHeader
+            />
+          ),
+        }))}
         generateSlot={monthlyGenerateSlot}
         generateAvailable={!latestReportFresh && canGenerateReport}
         collapsedHint={monthlyCollapsedHint}
