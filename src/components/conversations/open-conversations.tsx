@@ -35,8 +35,8 @@ export function OpenConversations({ loops }: { loops: OpenLoop[] }) {
       <Kicker className="text-accent-ink">Pick up where you left off</Kicker>
       <p className="mt-1.5 text-[13px] font-medium leading-[1.4] text-ink-soft">
         {loops.length === 1
-          ? "You prepared for this — review how it landed."
-          : "You prepared for these — review how they landed."}
+          ? "You prepared for this — see how it landed."
+          : "You prepared for these — see how they landed."}
       </p>
       <div className="mt-3 space-y-2">
         {loops.map((loop) => (
