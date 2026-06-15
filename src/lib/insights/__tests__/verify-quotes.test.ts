@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { verifyQuotes, deriveConfidence, MIN_QUOTE_CHARS } from "../generate";
+import {
+  verifyQuotes,
+  deriveConfidence,
+  selectSurfacedObservation,
+  MIN_QUOTE_CHARS,
+} from "../generate";
 import type {
   ReflectionNormal,
   ReflectionObservation,
@@ -223,5 +228,69 @@ describe("deriveConfidence (net distinct-entry read)", () => {
 
   it("never returns below early even when contradictions exceed support", () => {
     expect(deriveConfidence(mkObs(["r-1"], ["r-2", "r-3"]))).toBe("early");
+  });
+});
+
+describe("selectSurfacedObservation (v6 single-pattern)", () => {
+  function obs(theme: string, supportIds: string[]): ReflectionObservation {
+    return {
+      theme,
+      observation: "An observation about a pattern",
+      evidence: supportIds.map((id, i) => mkEvidence(`support quote ${i}`, id)),
+      counter_evidence: [],
+      confidence: "early",
+    };
+  }
+  function refl(
+    focusTheme: string,
+    ...observations: ReflectionObservation[]
+  ): ReflectionNormal {
+    return {
+      mode: "reflection",
+      summary: "Summary",
+      observations,
+      focus: { theme: focusTheme, practice: "Do the thing next week.", modules: ["review"] },
+      focus_followup: null,
+    };
+  }
+
+  it("collapses to a single surfaced observation", () => {
+    const out = selectSurfacedObservation(
+      refl("A", obs("A", ["r-1"]), obs("B", ["r-2"])),
+    );
+    expect(out.observations).toHaveLength(1);
+  });
+
+  it("surfaces the most-confirmed survivor (clear beats early)", () => {
+    const out = selectSurfacedObservation(
+      refl("A", obs("A", ["r-1"]), obs("B", ["r-1", "r-2", "r-3"])),
+    );
+    expect(out.observations[0].theme).toBe("B");
+    expect(out.observations[0].confidence).toBe("clear");
+  });
+
+  it("re-points focus.theme to the surfaced pattern when they diverge (no orphaned focus)", () => {
+    // focus is tied to A (model's first), but B is more confirmed → surfaced.
+    const out = selectSurfacedObservation(
+      refl("A", obs("A", ["r-1"]), obs("B", ["r-1", "r-2", "r-3"])),
+    );
+    expect(out.observations[0].theme).toBe("B");
+    expect(out.focus.theme).toBe("B");
+  });
+
+  it("leaves the focus untouched when it already names the surfaced pattern", () => {
+    const out = selectSurfacedObservation(
+      refl("B", obs("A", ["r-1"]), obs("B", ["r-1", "r-2", "r-3"])),
+    );
+    expect(out.focus.theme).toBe("B");
+    expect(out.focus.practice).toBe("Do the thing next week.");
+  });
+
+  it("keeps the model's order on a confidence tie (stable sort → first wins)", () => {
+    const out = selectSurfacedObservation(
+      refl("A", obs("A", ["r-1"]), obs("B", ["r-2"])),
+    );
+    expect(out.observations[0].theme).toBe("A");
+    expect(out.focus.theme).toBe("A");
   });
 });

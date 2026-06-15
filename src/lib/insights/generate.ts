@@ -256,6 +256,35 @@ export function deriveConfidence(
   return "early";
 }
 
+/**
+ * v6: the weekly reflection shows ONE pattern. Among the verified survivors,
+ * surface the SINGLE most-confirmed observation (highest server-derived
+ * confidence; ties break toward the model's strongest-first order, relied on via
+ * V8's stable Array.sort). The model ties focus.theme to its OWN first
+ * observation, which the server may not keep (a later candidate can have higher
+ * net confidence, or the model's first can be dropped by quote/banned-phrase
+ * verification) — so re-point focus.theme to the surfaced pattern, keeping the
+ * card's pattern title and its focus title one coherent unit instead of a focus
+ * that names a pattern the user never sees. (focus.practice stays the model's
+ * forward action; in the rare case the server's count disagrees with the model's
+ * ordering it may read slightly off — far better than the orphaned-focus bug.)
+ * Caller MUST pass a post-verifyQuotes reflection with ≥1 observation.
+ * Exported for unit tests.
+ */
+export function selectSurfacedObservation(
+  reflection: ReflectionNormal,
+): ReflectionNormal {
+  const confidenceRank = { clear: 3, emerging: 2, early: 1 } as const;
+  const top = reflection.observations
+    .map((obs) => ({ ...obs, confidence: deriveConfidence(obs) }))
+    .sort((a, b) => confidenceRank[b.confidence] - confidenceRank[a.confidence])[0];
+  const focus =
+    reflection.focus.theme === top.theme
+      ? reflection.focus
+      : { ...reflection.focus, theme: top.theme };
+  return { ...reflection, observations: [top], focus };
+}
+
 // Wire-value → raw_records.record_type for the focus modules that live in
 // raw_records. before_you_send is its own table, handled separately.
 const FOCUS_MODULE_RECORD_TYPE: Record<
@@ -824,7 +853,7 @@ export async function generateReflection(
     // observation, summary, message_to_user, AND evidence[*].quote. The quote
     // walk matters: the model can select a verbatim passage from the user's
     // own text that contains a banned clinical phrase. We drop the observation
-    // (not just the evidence item) so the <2 → refusal path still engages.
+    // (not just the evidence item) so the <1 → refusal path still engages.
     try {
       if (aiOutput.mode === "reflection") {
         // summary + the forward-looking focus prose are top-level leaves the
@@ -888,24 +917,13 @@ export async function generateReflection(
           suggested_resource: "none",
         };
       } else {
-        // Derive each survivor's confidence server-side (net distinct verified
-        // entries, supporting − contradicting — the model's own label is
-        // discarded, the count can't lie), then surface only the SINGLE most-
-        // confirmed pattern: highest confidence wins, ties break toward the
-        // model's ordering (it lists its strongest candidate first, and the
-        // focus is tied to that one). The focus_followup is set server-
-        // authoritatively: present (took_action from real counts, model's note
-        // kept) ONLY when a prior focus existed, forced null otherwise so a
-        // hallucinated look-back can't ship.
-        const confidenceRank = { clear: 3, emerging: 2, early: 1 } as const;
-        const topObservation = filtered.observations
-          .map((obs) => ({ ...obs, confidence: deriveConfidence(obs) }))
-          .sort(
-            (a, b) => confidenceRank[b.confidence] - confidenceRank[a.confidence],
-          )[0];
+        // Surface the single most-confirmed pattern (server-derived confidence)
+        // with the focus re-pointed to it — see selectSurfacedObservation. Then
+        // set focus_followup server-authoritatively: present (took_action from
+        // real counts, model's note kept) ONLY when a prior focus existed, forced
+        // null otherwise so a hallucinated look-back can't ship.
         aiOutput = {
-          ...filtered,
-          observations: [topObservation],
+          ...selectSurfacedObservation(filtered),
           focus_followup:
             prior && priorFocusContext
               ? buildFocusFollowup(

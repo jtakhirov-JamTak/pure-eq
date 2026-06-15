@@ -59,6 +59,35 @@ function validReflectionJson() {
   };
 }
 
+// A v6 single-observation reflection whose one quote substring-matches the
+// entry below — used to exercise the relaxed <1 refusal threshold.
+function singleObsReflectionJson() {
+  return {
+    mode: "reflection",
+    summary: "One pattern stood out this week.",
+    observations: [
+      {
+        theme: "Conflict avoidance",
+        observation: "You tend to circle the same disagreement.",
+        evidence: [
+          {
+            quote: "argued about the dishes",
+            source_record_id: ENTRY_ID,
+            source_date: "2026-05-20",
+          },
+        ],
+        confidence: "early",
+      },
+    ],
+    focus: {
+      theme: "Conflict avoidance",
+      practice:
+        "When you feel the urge to keep arguing, pause and name what you actually want.",
+      modules: ["review"],
+    },
+  };
+}
+
 // A valid stored refusal — used for the cache-hit row (must pass the reader's
 // reflectionOutputSchema.safeParse).
 function refusalRow() {
@@ -252,6 +281,40 @@ describe("generateReflection — coin charge (Slice B3)", () => {
     expect(out.status).toBe("created");
     if (out.status === "created") {
       expect((out.row.ai_json as { mode: string }).mode).toBe("reflection");
+      // v6: both candidates verify, but the server surfaces only the single
+      // top pattern — the persisted row holds exactly one observation.
+      expect(
+        (out.row.ai_json as { observations: unknown[] }).observations,
+      ).toHaveLength(1);
+    }
+    expect(onChargedGenerationFailed).not.toHaveBeenCalled();
+  });
+
+  it("creates (does NOT refuse) when exactly ONE observation verifies — v6 <1 threshold", async () => {
+    // Under the old <2 rule a single survivor downgraded to a refusal; v6
+    // surfaces one pattern, so one verifiable observation is a real reflection.
+    anthropicReturns(singleObsReflectionJson());
+    const reserveCoins = vi.fn().mockResolvedValue({ result: "charged", fresh: true });
+    const onChargedGenerationFailed = vi.fn();
+
+    const supabase = makeFakeSupabase({
+      cached: { data: null, error: null },
+      profile: PROFILE_OK,
+      entries: ENTRIES_OK,
+      insert: INSERT_OK,
+    });
+
+    const out = await generateReflection(supabase, "user-1", {
+      reserveCoins,
+      onChargedGenerationFailed,
+    });
+
+    expect(out.status).toBe("created");
+    if (out.status === "created") {
+      expect((out.row.ai_json as { mode: string }).mode).toBe("reflection");
+      expect(
+        (out.row.ai_json as { observations: unknown[] }).observations,
+      ).toHaveLength(1);
     }
     expect(onChargedGenerationFailed).not.toHaveBeenCalled();
   });

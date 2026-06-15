@@ -800,7 +800,7 @@ OUTPUT SCHEMA (JSON object — one of two modes):
 REFLECTION MODE (normal):
 {
   "mode": "reflection",
-  "summary": "string, max 300 chars — one-sentence framing of what you noticed across the entries",
+  "summary": "string, max 300 chars — one sentence framing the SINGLE strongest pattern you surface (your first observation); the app shows only that one, so do NOT list several patterns here",
   "observations": [
     {
       "theme": "string, max 120 chars — short title, e.g. 'You pull back when contradicted'",
