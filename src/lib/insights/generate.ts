@@ -1,9 +1,9 @@
 // Weekly reflection orchestrator.
 //
-// Reads the user's last ~4 weeks of entries, calls Claude Opus 4.7 to
-// produce 2–3 blind-spot observations with quoted evidence, verifies
-// each quote is a substring of its cited source entry, and persists
-// the result to `weekly_reflections`.
+// Reads the user's last 7 days of entries, calls Claude Opus 4.7 to
+// produce candidate blind-spot observations with quoted evidence, verifies
+// each quote is a substring of its cited source entry, surfaces the SINGLE
+// most-confirmed observation, and persists the result to `weekly_reflections`.
 //
 // MODEL SCOPE (important): this is the ONLY place Opus 4.7 is used.
 // Coach (Prepare/Review/Repair) stays on Sonnet 4.6 via
@@ -42,6 +42,12 @@ import { buildReflectionInput } from "./reflection-input";
 import { COIN_COSTS, type ProfileType } from "@/types";
 import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 
+// v6 (2026-06-15): the weekly reflection now reads only the last 7 days (was
+// 28) and surfaces a SINGLE top pattern (was 2–3). The ai_json shape is
+// unchanged structurally (observations is still an array), but a v5 row holds
+// a 4-week, multi-pattern read that no longer matches what the UI promises, so
+// bump to force a fresh single-pattern recompute via the symmetric guard.
+//
 // v5 (2026-06-09): every reflection now prescribes one "focus" for next week
 // (tied to a surfaced observation) and grades last week's focus via a
 // server-counted "focus_followup" look-back. New required + optional fields in
@@ -66,7 +72,7 @@ import type { WeeklyReflectionRow, WeeklyReflectionInsert } from "./types";
 // Migration 0031 moved generator_version into the weekly_reflections unique
 // index, so a mid-week version bump is handled natively by an INSERT of a
 // new (user_id, date, version) row — no UPDATE fallback needed.
-export const GENERATOR_VERSION = "reflection_v5";
+export const GENERATOR_VERSION = "reflection_v6";
 
 // Allowlist for review.needs_to_happen_next. Gates arbitrary DB strings
 // (legacy rows, schema drift) from leaking into the prompt. Single source
@@ -90,7 +96,11 @@ const AGGREGATE_CAPTURE_COOLDOWN_MS = 5 * 60 * 1000;
 let lastBysAggregateCaptureAt = 0;
 let lastReviewAggregateCaptureAt = 0;
 export const IDEMPOTENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
-export const INPUT_WINDOW_DAYS = 28;
+// The data window the reflection reads. 7 days (a rolling last-168h window
+// ending at generation time, so it includes the current day) — a weekly read of
+// the week just past, not a 4-week look-back. NB: this is on-demand with a
+// 7-day cooldown, not pinned to a calendar week (no user timezone is stored).
+export const INPUT_WINDOW_DAYS = 7;
 
 // Minimum number of completed Coach entries (all-time, across Prepare, Review,
 // Repair, Pulse Check) required before the FIRST weekly reflection can be
@@ -181,7 +191,8 @@ export interface GenerateOptions {
 /**
  * Verify each observation's quotes substring-match their cited source entry.
  * Drops observations with any unverifiable quote. Returns the filtered set.
- * If fewer than 2 observations survive, caller downgrades to refusal.
+ * If NO observation survives, caller downgrades to refusal; otherwise the
+ * caller surfaces the single most-confirmed survivor.
  */
 // True when a single evidence item's quote substring-matches its cited source
 // entry AND clears the degenerate-quote floor. The FIELD GLOSSARY in the prompt
@@ -857,14 +868,15 @@ export async function generateReflection(
     }
 
     // Post-process: verify quotes substring-match their cited sources. If any
-    // observation has an unverifiable quote, drop the whole observation. If
-    // fewer than 2 observations survive (counting banned-phrase drops above),
-    // convert to a refusal — we can't serve a partial reflection.
+    // observation has an unverifiable quote, drop the whole observation. If NO
+    // observation survives (counting banned-phrase drops above), convert to a
+    // refusal — a 7-day window with nothing groundable is a quiet week, not a
+    // reflection. Otherwise surface the SINGLE most-confirmed survivor.
     if (aiOutput.mode === "reflection") {
       const lookup = buildEntryLookup(rawRecords);
       const filtered = verifyQuotes(aiOutput, lookup);
-      if (filtered.observations.length < 2) {
-        // Not enough verifiable observations — downgrade to a refusal. The coin
+      if (filtered.observations.length < 1) {
+        // Nothing verifiable this week — downgrade to a refusal. The coin
         // release happens in the unified refusal-refund just below, which ALSO
         // covers a refusal the model returned directly (mode:"refusal" from the
         // start), which this `mode === "reflection"` block never reaches.
@@ -872,22 +884,28 @@ export async function generateReflection(
           mode: "refusal",
           refusal_reason: "out_of_scope",
           message_to_user:
-            "I could not ground enough patterns in your own words this week. Keep using Coach and Tools for another week or two and come back.",
+            "I could not ground a clear pattern in your own words this week. Keep using Coach and Tools for a few more days and come back.",
           suggested_resource: "none",
         };
       } else {
-        // Overwrite each surviving observation's confidence with the server's
-        // net read of verified distinct entries (supporting − contradicting).
-        // The model's own label is discarded — the count can't lie. And set the
-        // focus_followup server-authoritatively: present (with took_action from
-        // real counts, model's note kept) ONLY when a prior focus existed,
-        // forced null otherwise so a hallucinated look-back can't ship.
+        // Derive each survivor's confidence server-side (net distinct verified
+        // entries, supporting − contradicting — the model's own label is
+        // discarded, the count can't lie), then surface only the SINGLE most-
+        // confirmed pattern: highest confidence wins, ties break toward the
+        // model's ordering (it lists its strongest candidate first, and the
+        // focus is tied to that one). The focus_followup is set server-
+        // authoritatively: present (took_action from real counts, model's note
+        // kept) ONLY when a prior focus existed, forced null otherwise so a
+        // hallucinated look-back can't ship.
+        const confidenceRank = { clear: 3, emerging: 2, early: 1 } as const;
+        const topObservation = filtered.observations
+          .map((obs) => ({ ...obs, confidence: deriveConfidence(obs) }))
+          .sort(
+            (a, b) => confidenceRank[b.confidence] - confidenceRank[a.confidence],
+          )[0];
         aiOutput = {
           ...filtered,
-          observations: filtered.observations.map((obs) => ({
-            ...obs,
-            confidence: deriveConfidence(obs),
-          })),
+          observations: [topObservation],
           focus_followup:
             prior && priorFocusContext
               ? buildFocusFollowup(

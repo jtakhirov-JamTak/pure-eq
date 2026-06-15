@@ -101,7 +101,13 @@ export function ReflectionCard({ reflection, generatedAt, hideHeader }: Props) {
         </div>
       )}
 
-      <div className="mt-4 space-y-5">
+      {/* The single most-confirmed pattern for the week (server surfaces one).
+          space-y-5 + first:border-0 are harmless with a single item and keep
+          the markup resilient if the cap ever changes. */}
+      <p className="mt-5 text-[11px] font-semibold uppercase tracking-[0.5px] text-ink-soft">
+        This week&apos;s pattern
+      </p>
+      <div className="mt-3 space-y-5">
         {reflection.observations.map((obs, i) => (
           <div key={i} className="border-t border-hairline pt-4 first:border-0 first:pt-0">
             <div className="flex items-center gap-2">

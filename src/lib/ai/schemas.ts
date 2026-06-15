@@ -256,7 +256,10 @@ export const focusFollowupShape = z.object({
 export const reflectionNormalShape = z.object({
   mode: z.literal("reflection"),
   summary: z.string().trim().min(1).max(300),
-  observations: z.array(observationShape).min(2).max(3),
+  // 1–3 CANDIDATE patterns. The model may propose up to 3 (a verification
+  // pool), but the server surfaces only the single most-confirmed survivor
+  // (generate.ts). min(1) so a thin 7-day week isn't forced to pad to 2.
+  observations: z.array(observationShape).min(1).max(3),
   // Required: every reflection prescribes exactly one focus for next week.
   focus: reflectionFocusShape,
   // Null on the first reflection (nothing prior to grade). Server forces this

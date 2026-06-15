@@ -18,7 +18,8 @@ import { generateReflection, ReflectionGenerationError } from "../generate";
 const ENTRY_ID = "11111111-1111-4111-8111-111111111111";
 
 // A reflection whose quotes substring-match the entry below (multi-word,
-// ≥ MIN_QUOTE_CHARS) so verifyQuotes keeps both observations → "created".
+// ≥ MIN_QUOTE_CHARS) so verifyQuotes keeps ≥1 observation (the server then
+// surfaces the single top one) → "created".
 function validReflectionJson() {
   return {
     mode: "reflection",
@@ -207,7 +208,7 @@ describe("generateReflection — coin charge (Slice B3)", () => {
   });
 
   it("refunds (onChargedGenerationFailed) when the result downgrades to a refusal", async () => {
-    // No entries → quotes can't verify → < 2 observations survive → refusal.
+    // No entries → quotes can't verify → 0 observations survive → refusal.
     anthropicReturns(validReflectionJson());
     const reserveCoins = vi.fn().mockResolvedValue({ result: "charged", fresh: true });
     const onChargedGenerationFailed = vi.fn().mockResolvedValue(undefined);

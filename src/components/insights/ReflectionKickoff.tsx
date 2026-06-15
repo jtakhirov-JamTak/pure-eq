@@ -196,7 +196,7 @@ export function ReflectionKickoff({ hasStaleCached, hideHeader }: Props) {
             className="h-4 w-4 animate-spin rounded-full border-2 border-accent border-t-transparent"
           />
           <p className="text-[13px] font-medium text-ink-soft">
-            Reading your last 4 weeks…
+            Reading your last 7 days…
           </p>
         </div>
         <p className="mt-2 text-[12px] font-medium text-ink-soft">
@@ -256,8 +256,8 @@ export function ReflectionKickoff({ hasStaleCached, hideHeader }: Props) {
         {!hideHeader && <Kicker as="h2">Your weekly reflection</Kicker>}
         <p className="mt-2 text-[14px] font-medium leading-[1.55] text-ink-soft">
           {hasStaleCached
-            ? "Your previous reflection is no longer current. Generate a fresh read of your last 4 weeks."
-            : "Reading your last 4 weeks for blind spots and patterns, grounded in your own words."}
+            ? "Your previous reflection is no longer current. Generate a fresh read of your last 7 days."
+            : "Reading your last 7 days for the one pattern worth your attention, grounded in your own words."}
         </p>
         {balance !== null && (
           <p className="mt-3 text-[13px] font-semibold text-ink-soft">

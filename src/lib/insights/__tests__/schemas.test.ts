@@ -52,13 +52,14 @@ describe("reflectionOutputSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects a reflection with only 1 observation", () => {
+  it("accepts a reflection with 1 observation (v6: single-pattern week)", () => {
     const result = reflectionOutputSchema.safeParse({
       mode: "reflection",
       summary: "Single theme.",
       observations: [validObservation],
+      focus: validFocus,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("rejects a reflection with 4 observations", () => {

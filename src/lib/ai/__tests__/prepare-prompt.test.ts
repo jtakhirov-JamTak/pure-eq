@@ -31,7 +31,7 @@ describe("buildPreparePrompt — framing-card output (6.5.0 redesign)", () => {
   it("stamps the current PROMPT_VERSION constant", () => {
     const out = buildPreparePrompt(baseParams);
     expect(out.prompt_version).toBe(PROMPT_VERSION);
-    expect(PROMPT_VERSION).toBe("6.5.1");
+    expect(PROMPT_VERSION).toBe("6.6.0");
   });
 
   it("includes the empathic-accuracy rule (other-person read = inference) in both tiers", () => {
