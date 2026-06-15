@@ -804,6 +804,7 @@ export async function generateReflection(
     const anthropic = new Anthropic({ timeout: ANTHROPIC_TIMEOUT_MS });
     const t0 = Date.now();
     let textBlock: string;
+    let stopReason: string | null = null;
     try {
       const message = await anthropic.messages.create({
         model: MODEL,
@@ -816,6 +817,7 @@ export async function generateReflection(
         system: prompt.system,
         messages: [{ role: "user", content: prompt.user }],
       });
+      stopReason = message.stop_reason;
       const block = message.content.find((b) => b.type === "text");
       if (!block || block.type !== "text") {
         throw new ReflectionGenerationError("no text block in response", "no_text");
@@ -830,7 +832,26 @@ export async function generateReflection(
     }
     const aiDurationMs = Date.now() - t0;
 
-    const raw = textBlock.replace(/```json\n?|```/g, "").trim();
+    // A truncated response (hit max_tokens) yields incomplete JSON; surface it
+    // distinctly so it's diagnosable rather than a generic parse failure.
+    if (stopReason === "max_tokens") {
+      throw new ReflectionGenerationError(
+        "AI response was truncated (max_tokens)",
+        "json_parse",
+      );
+    }
+
+    // Extract the JSON object. SHARED_RULES tells the model to emit JSON only,
+    // but if it ever wraps the object in a prose preamble/epilogue or a ```json
+    // fence, slice to the OUTERMOST braces so a stray sentence doesn't fail
+    // JSON.parse and surface to the user as "unexpected AI response".
+    const stripped = textBlock.replace(/```json\n?|```/g, "").trim();
+    const firstBrace = stripped.indexOf("{");
+    const lastBrace = stripped.lastIndexOf("}");
+    const raw =
+      firstBrace >= 0 && lastBrace > firstBrace
+        ? stripped.slice(firstBrace, lastBrace + 1)
+        : stripped;
     let parsedJson: unknown;
     try {
       parsedJson = JSON.parse(raw);

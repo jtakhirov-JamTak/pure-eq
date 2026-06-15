@@ -62,6 +62,40 @@ describe("reflectionOutputSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("keeps a well-formed focus_followup", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "One pattern.",
+      observations: [validObservation],
+      focus: validFocus,
+      focus_followup: {
+        prior_theme: "You pull back when contradicted",
+        took_action: true,
+        note: "You ran two Reviews this week that touched the focus.",
+      },
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.mode === "reflection") {
+      expect(result.data.focus_followup?.took_action).toBe(true);
+    }
+  });
+
+  it("coerces a malformed focus_followup to null instead of rejecting (server rebuilds it)", () => {
+    const result = reflectionOutputSchema.safeParse({
+      mode: "reflection",
+      summary: "One pattern.",
+      observations: [validObservation],
+      focus: validFocus,
+      // took_action stringly-typed — the server overwrites it anyway, so this
+      // must NOT reject the whole reflection.
+      focus_followup: { prior_theme: "X", took_action: "yes", note: "n" },
+    });
+    expect(result.success).toBe(true);
+    if (result.success && result.data.mode === "reflection") {
+      expect(result.data.focus_followup).toBeNull();
+    }
+  });
+
   it("rejects a reflection with 4 observations", () => {
     const result = reflectionOutputSchema.safeParse({
       mode: "reflection",

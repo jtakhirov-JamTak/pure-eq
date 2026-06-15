@@ -262,10 +262,16 @@ export const reflectionNormalShape = z.object({
   observations: z.array(observationShape).min(1).max(3),
   // Required: every reflection prescribes exactly one focus for next week.
   focus: reflectionFocusShape,
-  // Null on the first reflection (nothing prior to grade). Server forces this
-  // to null when no prior focus existed, and overwrites took_action/prior_theme
-  // from authoritative counts when one did.
-  focus_followup: focusFollowupShape.nullable().default(null),
+  // Null on the first reflection (nothing prior to grade). The server REBUILDS
+  // focus_followup entirely (buildFocusFollowup): prior_theme + took_action come
+  // from the prior row + real activity counts, and the note falls back if empty.
+  // The model's values here are advisory (only its note is ever kept). So
+  // validate tolerantly — `.catch(null)` coerces a malformed focus_followup
+  // (e.g. a stringly-typed took_action, an over-long note, a missing field) to
+  // null instead of REJECTING the whole reflection; the server then rebuilds it.
+  // Stored rows are server-built and always satisfy the strict shape, so this
+  // never masks a real persisted-row problem.
+  focus_followup: focusFollowupShape.nullable().catch(null).default(null),
 });
 
 export const reflectionOutputSchema = z.discriminatedUnion("mode", [
