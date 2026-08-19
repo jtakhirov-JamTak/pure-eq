@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import * as Sentry from "@sentry/nextjs";
 import type { ProfileResult } from "@/types";
 import { createClient } from "@/lib/supabase/client";
+import { safeNextPath } from "@/lib/safe-next";
 import { StormBackground } from "@/components/brand/StormBackground";
 import { CloudAvatar } from "@/components/brand/CloudAvatar";
 import { SunBadge } from "@/components/brand/SunBadge";
@@ -66,11 +67,12 @@ function toApiAnswers(answers: (QuizOption | null)[]) {
     );
 }
 
+// Delegates to the canonical validator so this copy can't drift again — the
+// local version was missing the backslash and control-char clauses.
 function safeRedirect(value: unknown): string {
-  if (typeof value !== "string") return "/coach/prepare";
-  if (!value.startsWith("/") || value.startsWith("//"))
-    return "/coach/prepare";
-  return value;
+  return typeof value === "string"
+    ? safeNextPath(value, "/coach/prepare")
+    : "/coach/prepare";
 }
 
 export default function OnboardingClient() {
