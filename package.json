@@ -10,6 +10,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "verify": "npx tsc --noEmit && npm run lint && npm test && npm run build",
     "db:types": "npx -y supabase gen types typescript --project-id ppklkrsotwckcqmsddcs --schema public > src/types/database.ts",
     "eval:arms": "tsx scripts/eval/run-arm-comparison.ts"
   },
