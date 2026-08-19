@@ -1342,8 +1342,7 @@ Rules:
 - This also applies to AI calls, which should be after both raw
   and derived inserts
 
-§16.11 External Service Fallback
----------------------------------
+### 16.11 External Service Fallback
 When wrapping an external service (Upstash, Stripe, etc.):
 
     async function callService(key, opts) {
@@ -1363,8 +1362,7 @@ Rules:
 - "Env var present" does not mean "service is reachable" — always
   handle the unreachable case
 
-§16.12 Shared Route Handler Extraction
----------------------------------------
+### 16.12 Shared Route Handler Extraction
 When N routes share >80% identical logic, extract a shared function
 parameterized by a config object. Each route becomes a thin config
 + one-liner POST handler.
@@ -1389,8 +1387,7 @@ Rules:
 - The extraction threshold is 3+ routes. Two duplicates = copy is
   fine. Three = extract
 
-§16.13 AI Output Length Caps + Prompt Guidance
------------------------------------------------
+### 16.13 AI Output Length Caps + Prompt Guidance
 Problem: A Zod `.max(N)` cap on an AI output string is a strict rejection
 boundary. When N is picked by intuition (not observed p99 output length +
 margin), substantive inputs produce outputs that exceed the cap. Schema
@@ -1475,8 +1472,7 @@ Why this matters:
   fail the same way and the user hits the same dead-end screen. A
   too-tight cap is a 100%-failure bug disguised as a transient.
 
-§16.14 Runtime-narrow enum string columns read from DB
--------------------------------------------------------
+### 16.14 Runtime-narrow enum string columns read from DB
 Problem: A table column with `CHECK (col IN ('a', 'b'))` or
 `col col_enum_type` gives you a narrow union in your generated Row
 types. On the read path, TypeScript trusts that union. In practice:
@@ -1517,8 +1513,7 @@ an unexpected value can silently bucket into the wrong tier, the
 wrong dispatch case, or an empty render. Runtime narrowing re-imposes
 the constraint the type system was promising.
 
-§16.15 Empty-state copy: one state, one render
-----------------------------------------------
+### 16.15 Empty-state copy: one state, one render
 Problem: An empty state that fires conditional copy overrides *and*
 renders a secondary description creates double-stacked text for one
 branch and single-line for the others. Looks like a typo to the user.
@@ -1545,8 +1540,7 @@ trust in the polish of the product. Caught on a 6-surface → 3-box
 refactor where one branch had been designed as "label + explainer"
 and the others had inherited "label only" — visible inconsistency.
 
-§16.16 Selector-tier predicates: explicit at every tier
---------------------------------------------------------
+### 16.16 Selector-tier predicates: explicit at every tier
 Problem: A selector that ranks candidates across confidence tiers
 (established > emerging > nothing) and applies a predicate only
 to the lower tier implicitly assumes higher-tier candidates already
@@ -1598,8 +1592,7 @@ rejection; same bug, untested dimension. Concrete `topNegative`
 example above is from a retired Pure EQ selector; the rule applies
 to any tiered selector.
 
-§16.17 Cache version guards applied uniformly across row types
---------------------------------------------------------------
+### 16.17 Cache version guards applied uniformly across row types
 Problem: A cache table with multiple row types (insight_type,
 event_type, entity_type, etc.) needs the `generator_version` guard
 applied to every type, not just the first one the feature shipped
@@ -1650,7 +1643,7 @@ renderers after a bump. Asymmetric application means the bump
 succeeds for the guarded types and silently fails for the others —
 exactly when you most want the safety net.
 
-§16.18 React.cache() for server helpers: drop client args from the key
+### 16.18 React.cache() for server helpers: drop client args from the key
 
 Pending cross-app validation.
 
@@ -1692,8 +1685,7 @@ trial-expiry UPDATE), `cache()` also dedupes those — a feature, not a
 bug. Previously concurrent callers could race-write the same transition;
 now exactly one fires per request.
 
-§16.19 Access-gate extraction threshold: name helpers after the policy,
-not the mechanism
+### 16.19 Access-gate extraction threshold: name helpers after the policy, not the mechanism
 
 Pending cross-app validation.
 
@@ -1733,7 +1725,7 @@ FINE — helpers should cover the common policies, and the one-off gate
 can keep its bespoke inline block with a comment explaining why it's
 not using the helper.
 
-§16.20 Protect access-anchor columns from user-writable RLS
+### 16.20 Protect access-anchor columns from user-writable RLS
 
 Pending cross-app validation.
 
@@ -1764,7 +1756,7 @@ harmless when no access logic depended on the row's existence. The
 moment you anchor access on a column in that row, they become a cheap
 user-driven bypass.
 
-§16.21 Bind prompt-text enum tokens to Zod enum via `satisfies`
+### 16.21 Bind prompt-text enum tokens to Zod enum via `satisfies`
 
 Pending cross-app validation.
 
@@ -1841,7 +1833,7 @@ Same class as §16.4 (controlled taxonomy: don't let AI invent tags) —
 any time the same string lives in two authored places, link them with
 a type so a rename in one breaks the build of the other.
 
-§16.22 Weekly LLM-backed user reflection pattern
+### 16.22 Weekly LLM-backed user reflection pattern
 
 Pending cross-app validation.
 
@@ -1932,8 +1924,7 @@ Don't apply when:
   per-call pipeline instead.
 - Cost is bounded some other way (tiny user count, bulk batch job).
 
-§16.23 Writer-reader symbol drift: never CHECK an enum that a writer
-        also knows
+### 16.23 Writer-reader symbol drift: never CHECK an enum that a writer also knows
 
 If an enum value lives in application code (Zod schema, TypeScript
 string union, module-level const tuple), DO NOT duplicate it as a
@@ -1982,7 +1973,7 @@ Don't apply to:
   timestamp ordering (`check (end >= start)`), array cardinality.
   Those aren't enum strings; they can't drift by rename.
 
-§16.24 Unique index must encode every component the writer dedups on
+### 16.24 Unique index must encode every component the writer dedups on
 
 Pending cross-app validation.
 
@@ -2065,7 +2056,7 @@ and §16.23 (writer-reader drift). This is the index-side corollary:
 if the writer distinguishes by version, the uniqueness constraint
 must too.
 
-§16.25 Mutation-returning functions signal mutation in their signature
+### 16.25 Mutation-returning functions signal mutation in their signature
 
 Pending cross-app validation.
 
@@ -2120,7 +2111,7 @@ Don't apply to:
 - Functions that return a NEW object (immutable-style). Already
   explicit via the return value.
 
-§16.26 AI-output generic-phrase filter as a schema post-pass
+### 16.26 AI-output generic-phrase filter as a schema post-pass
 
 Pending cross-app validation.
 
@@ -2186,7 +2177,7 @@ Related: §16.13 (length caps), §16.21 (enum-tuple binding), §16.23
 (writer-reader drift). This is the text-quality counterpart to those
 structural guards.
 
-§16.27 PWA standalone + third-party OAuth: detect and degrade
+### 16.27 PWA standalone + third-party OAuth: detect and degrade
 
 Pending cross-app validation.
 
@@ -2233,7 +2224,7 @@ Don't apply when:
 - Web-only product (no standalone install path).
 - Auth is email-only or magic-link (both work in standalone).
 
-§16.28 Reduced-motion overrides must zero animation-delay, not just keyframes
+### 16.28 Reduced-motion overrides must zero animation-delay, not just keyframes
 
 Pending cross-app validation.
 
@@ -2292,7 +2283,7 @@ Don't apply when:
 - Animation is purely decorative and opacity:0 isn't in the keyframe
   (e.g., a shimmer or pulse on an already-visible element).
 
-§16.29 Reset / abandon controls gate on in-flight submit state
+### 16.29 Reset / abandon controls gate on in-flight submit state
 
 Pending cross-app validation.
 
@@ -2331,7 +2322,7 @@ Don't apply when:
 - Reset is inline-only (clears a single field; no navigation). No
   race with submit.
 
-§16.30 Client-side getUser() for personalization needs try/catch + Sentry
+### 16.30 Client-side getUser() for personalization needs try/catch + Sentry
 
 Pending cross-app validation.
 
@@ -2394,7 +2385,7 @@ Don't apply when:
 - Server-component fetch (a thrown error already surfaces as a 500
   page, which is its own signal).
 
-§16.31 Pure lookup tables: placement optimizes for test importability
+### 16.31 Pure lookup tables: placement optimizes for test importability
 
 Pending cross-app validation.
 
@@ -2463,7 +2454,7 @@ Related: §16.21 (enum-tuple binding). This is the runtime-map
 counterpart: §16.21 binds prompt strings to the enum, §16.31 binds
 runtime lookup values to the enum.
 
-§16.32 Don't bump algorithm-version when the algorithm didn't change
+### 16.32 Don't bump algorithm-version when the algorithm didn't change
 
 Pending cross-app validation.
 

@@ -2,10 +2,20 @@
 // sentry.server.config.ts, and sentry.edge.config.ts.
 //
 // Pure EQ stores mental-health-adjacent user content (journal text,
-// emotions, triggers, person names). SDK error messages from Anthropic,
-// OpenAI, and Supabase routinely embed request bodies and column values
-// into Error.message — so the exception-value scrub is load-bearing,
-// not defense-in-depth.
+// emotions, triggers, person names).
+//
+// SDK error messages are built from the RESPONSE body, and response bodies
+// carry data: a Supabase PostgrestError returns the offending column values
+// in .details on conflict ("Key (user_id, name)=(...) already exists"), and
+// Sentry writes that straight into exception.values[*].value. That alone
+// makes the exception-value scrub load-bearing, not defense-in-depth.
+//
+// Do NOT weaken this on the theory that a given provider is safe. An earlier
+// version of this comment claimed Anthropic's APIError echoes the request
+// body / prompt; that is wrong — APIError.makeMessage() reads the response
+// error only (verified against @anthropic-ai/sdk@0.89.0). The blanket
+// ex.value redaction stays correct anyway, because it covers every provider
+// whose error text we do not control.
 
 import type { ErrorEvent, Breadcrumb } from "@sentry/nextjs";
 
