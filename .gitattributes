@@ -1,0 +1,8 @@
+# Git for Windows ships core.autocrlf=true, which materialises every file with
+# CRLF on clone. Prettier's endOfLine default is "lf", so without this a fresh
+# Windows clone fails format:check on every file before a line is edited.
+#
+# Normalise to LF in the index and check out LF on every platform regardless of
+# the user's core.autocrlf. Binaries are auto-detected by text=auto and left
+# untouched.
+* text=auto eol=lf
