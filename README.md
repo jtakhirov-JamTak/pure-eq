@@ -5,7 +5,7 @@ Mobile-first emotional intelligence coaching app (PWA). Helps users handle hard 
 ## Quick Start
 
 ```bash
-cp .env.example .env.local   # Fill in your keys
+cp env.example .env.local   # Fill in your keys
 npm install
 npm run dev                  # http://localhost:3000
 ```

@@ -287,7 +287,7 @@ pattern — see §3 for the escape rule.
 - All credentials come from environment variables — never hardcoded
 - Never log secrets: console.log("key:", process.env.API_KEY) is a security hole
 - Never return secrets to the frontend via API responses
-- Use .env.example to document required variables (without real values)
+- Use env.example to document required variables (without real values)
 
 ### Required secrets checklist
 
@@ -872,7 +872,7 @@ This is the single source of truth for the AI coding agent.
 
 ### Rules
 
-- Never commit .env files — use .env.example as a template
+- Never commit .env files — use env.example as a template
 - .gitignore must include: node_modules, .env, dist, .next, *.log
 - Main branch is production — never push broken code directly
 - Secret rotation: if a key is ever exposed in a commit, rotate it immediately
